@@ -12,7 +12,6 @@ class Flashcard extends GameMode {
         if (action === 'next') this.nav(1);
         else if (action === 'prev') this.nav(-1);
         else if (action === 'up' || action === 'down') {
-            // Use cached DOM reference
             if(this.dom.card) this.dom.card.classList.toggle('[transform:rotateY(180deg)]');
         }
     }
@@ -42,7 +41,6 @@ class Flashcard extends GameMode {
                 </div>
             </div>`;
         
-        // Cache Elements
         this.dom.header = this.root.querySelector('#fc-header');
         this.dom.card = this.root.querySelector('#fc-card');
         this.dom.front = this.root.querySelector('#fc-front');
@@ -58,10 +56,8 @@ class Flashcard extends GameMode {
         const item = this.list[this.i];
         const p = app.store.prefs;
         
-        // Reset Flip
         if(this.dom.card) this.dom.card.classList.remove('[transform:rotateY(180deg)]');
         
-        // Update Content
         const frontText = item[p.flashFront || 'ja'];
         const backs = [item[p.flashBack1], item[p.flashBack2], item[p.flashBack3], item[p.flashBack4]].filter(t => t && t.trim()); 
 
@@ -133,7 +129,6 @@ class Quiz extends GameMode {
         const qKey = p.quizQ || 'ja'; 
         const aKey = p.quizA || 'en';
         
-        // Prepare Question Data
         const qText = c[qKey];
         let qSec="", qEx="", qExSrc="";
         if(typeof LANG_CONFIG !== 'undefined') {
@@ -141,7 +136,6 @@ class Quiz extends GameMode {
             const aConf = LANG_CONFIG.find(l=>l.key===aKey); if(aConf) qExSrc=c[aConf.exKey]||"";
         }
 
-        // Example Text
         let exHtml = '';
         if (p.quizShowEx) {
             const exMain = c[p.quizExMain] || (LANG_CONFIG.find(l=>l.key===p.quizExMain)?.exKey ? c[LANG_CONFIG.find(l=>l.key===p.quizExMain).exKey] : '');
@@ -149,10 +143,9 @@ class Quiz extends GameMode {
             if(exMain || exSub) exHtml = `<div class="mt-4 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-sm font-bold text-indigo-600 dark:text-indigo-400 mb-1">${exMain}</p>`:''}${exSub?`<p class="text-xs text-slate-400 dark:text-neutral-500">${exSub}</p>`:''}</div>`;
         }
         
-        // Update DOM
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
         if(this.dom.qBox) {
-            this.highlightQBox(this.dom.qBox, false); // Reset colors
+            this.highlightQBox(this.dom.qBox, false); 
             this.dom.qBox.classList.remove('bg-emerald-500', 'bg-rose-500', 'border-emerald-500', 'border-rose-500');
             this.dom.qBox.onclick = () => app.game.toggle(this.dom.qBox, qText.replace(/'/g,"\\'"), qSec.replace(/'/g,"\\'"), qEx.replace(/'/g,"\\'"), qExSrc.replace(/'/g,"\\'"), qText.replace(/'/g,"\\'"));
         }
@@ -165,7 +158,6 @@ class Quiz extends GameMode {
         if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
-        // Update Distractors
         const pool = this.getDistractors(c.id, 4);
         this.dom.btns.forEach((btn, idx) => {
             const pData = pool[idx];
@@ -174,13 +166,11 @@ class Quiz extends GameMode {
                 const span = btn.querySelector('span');
                 span.innerText = txt;
                 
-                // Reset Button Styles
                 const wrapper = btn.parentElement;
                 wrapper.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
-                btn.className = "absolute inset-0 w-full h-full fit-box z-10"; // Reset active/ring classes
+                btn.className = "absolute inset-0 w-full h-full fit-box z-10"; 
                 span.className = "fit-target font-bold text-slate-600 dark:text-neutral-400";
                 
-                // Attach Click
                 btn.onclick = () => app.game.handleInput(wrapper, txt.replace(/'/g,"\\'"), aKey, () => app.game.check(btn, pData.id===c.id));
             }
         });
@@ -194,7 +184,6 @@ class Quiz extends GameMode {
         const btnWrap = btn.parentElement;
         
         btn.classList.remove('ring-4', 'ring-indigo-400', 'scale-95');
-        // Reset hover effects
         btnWrap.className = btnWrap.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-indigo-200|dark:hover:border-indigo-500\/50)\b/g, '');
         
         const span = btn.querySelector('span');
@@ -287,7 +276,6 @@ class TF extends GameMode {
             if(exMain||exSub) exHtml = `<div class="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1 leading-tight">${exMain}</p>`:''}${exSub?`<p class="text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">${exSub}</p>`:''}</div>`;
         }
 
-        // Update DOM
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
         if(this.dom.front) { this.dom.front.innerText = c[frontKey]; this.dom.front.innerHTML = c[frontKey]; }
         if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
@@ -298,7 +286,7 @@ class TF extends GameMode {
             this.dom.matchText.className = "fit-target font-bold text-slate-600 dark:text-neutral-400 transition-colors";
         }
         if(this.dom.card) {
-            this.highlightQBox(this.dom.card, false); // Reset colors
+            this.highlightQBox(this.dom.card, false); 
         }
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
@@ -330,10 +318,16 @@ class Match extends GameMode {
     constructor(k) { 
         super(k); 
         this.state = app.store.matchState || { cards: [], pairs: 0, matched: [] };
-        if(this.state.cards.length === 0) { 
+        
+        // Auto-restart if game was completed
+        if (this.state.matched.length > 0 && this.state.matched.length === this.state.cards.length) {
+             this.startNewGame(this.state.pairs);
+        } else if(this.state.cards.length === 0) { 
             const count = (window.innerHeight > 800) ? 8 : 6;
             this.startNewGame(count); 
-        } else { this.handleResize(); }
+        } else { 
+            this.handleResize(); 
+        }
     }
     
     handleResize() {
@@ -420,9 +414,16 @@ class Match extends GameMode {
         const el = document.getElementById(id);
         if(!el) return;
 
-        if(app.store.prefs[`matchAudio_${type}`] !== false) {
-            const { text, key } = this.resolveAudioText(this.list.find(x=>x.id==match), type);
-            app.audio.play(text, key, 'match', 0);
+        // FIXED: Strict boolean check
+        const prefKey = `matchAudio_${type}`;
+        const canPlay = app.store.prefs[prefKey] !== false;
+        
+        if(canPlay) {
+            const item = this.list.find(x => String(x.id) === String(match));
+            if(item) {
+                const { text, key } = this.resolveAudioText(item, type);
+                app.audio.play(text, key, 'match', 0);
+            }
         }
 
         const resetStyle = (element) => {
@@ -458,7 +459,6 @@ class Match extends GameMode {
                 setSuccessStyle(prevEl);
                 this.score(10); app.celebration.play();
                 
-                // FIX: Use this.setTimeout to avoid crash if game destroyed
                 this.setTimeout(() => {
                     this.state.matched.push(id, this.sel.id); 
                     app.store.saveMatch(this.state);
@@ -498,7 +498,6 @@ class Voice extends GameMode {
     }
 
     setup() {
-        // Feature detection check
         const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
         if(!Speech) {
             this.root.innerHTML = `<div class="p-10 text-center font-bold text-slate-400 flex items-center justify-center h-full"><div>Voice Not Supported</div><button onclick="app.goHome()" class="mt-4 px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg">Back</button></div>`;
@@ -542,13 +541,12 @@ class Voice extends GameMode {
     }
 
     update() {
-        if(!this.dom.header) return; // if init failed due to no speech support
+        if(!this.dom.header) return; 
 
         this.busy = false; 
         const c = this.list[this.i]; 
         const p = app.store.prefs;
         const front = c[p.voiceDispFront||'en']; 
-        const back = c[p.voiceDispBack||'ja'];
         
         let fSec="", fEx="", fExSrc="";
         const dispFrontKey = p.voiceDispFront||'en';
@@ -558,11 +556,8 @@ class Voice extends GameMode {
                 if(conf.secondary) fSec = c[conf.secondary] || "";
                 if(conf.exKey) fEx = c[conf.exKey] || "";
             }
-            const bConf = LANG_CONFIG.find(l => l.key === (p.voiceDispBack||'ja'));
-            if(bConf && bConf.exKey) fExSrc = c[bConf.exKey] || "";
         }
         
-        // Update DOM
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
         if(this.dom.front) { this.dom.front.innerText = front; this.dom.front.innerHTML = front; }
         if(this.dom.cardClick) this.dom.cardClick.onclick = () => app.game.toggle(this.dom.cardClick, front.replace(/'/g,"\\'"), '', fEx.replace(/'/g,"\\'"), '', front.replace(/'/g,"\\'"));
@@ -675,9 +670,14 @@ class Sentences extends GameMode {
         const p = app.store.prefs;
         const qKey = p.sentencesQ || 'ja'; 
         const aKey = p.sentencesA || 'ja'; 
-        const transKey = p.sentencesTrans || 'en';
         
-        const createMask = (word, id) => `<span id="${id}" class="inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
+        const bottomKey = p.sentencesBottomLang || 'en';
+        
+        // Multi-blank creation
+        const createMask = (word) => {
+            const id = 'main-blank-' + Math.random().toString(36).substr(2, 5);
+            return `<span id="${id}" data-word="${word}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
+        };
 
         let exKey = '';
         if(typeof LANG_CONFIG !== 'undefined') {
@@ -685,34 +685,48 @@ class Sentences extends GameMode {
             if(conf && conf.exKey) exKey = conf.exKey;
         }
         const sentenceRaw = c[exKey] || "No example available.";
-        const targetWord = c[qKey] || "";
         let maskedSentence = sentenceRaw;
         
-        const separators = /[·・,;、\/|]/g;
-        const variants = targetWord.split(separators).map(s => s.trim()).filter(s => s);
-        variants.sort((a, b) => b.length - a.length);
-        
-        let match = variants.find(v => sentenceRaw.toLowerCase().includes(v.toLowerCase()));
-        
-        const isJa = (qKey === 'ja' || qKey.startsWith('ja_'));
-        if (!match && isJa && typeof sentenceRaw === 'string') {
-            for (const v of variants) {
-                if (v.length > 1 && /[ぁ-ん]$/.test(v)) { 
-                    const stem = v.slice(0, -1); 
-                    const safeStem = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const fuzzyReg = new RegExp(safeStem + '[\\u3040-\\u309F]?', 'i');
-                    const found = sentenceRaw.match(fuzzyReg);
-                    if (found) { match = found[0]; break; }
-                }
-            }
-        }
+        // --- 1. Parentheses Logic ---
+        const parenRegex = /\(([^)]+)\)/g;
+        if (typeof sentenceRaw === 'string' && sentenceRaw.match(parenRegex)) {
+             maskedSentence = sentenceRaw.replace(parenRegex, (match, p1) => createMask(p1));
+             const isAsian = ['ja', 'zh', 'ko'].some(k => qKey.startsWith(k));
+             const pauseChar = isAsian ? '、' : ' ... '; 
+             this.maskedAudioText = sentenceRaw.replace(parenRegex, pauseChar);
+             
+        } else {
+             // --- 2. Scatter/Split Logic ---
+             const targetWord = c[qKey] || "";
+             // Split target phrase into words (e.g. "back of hand" -> ["back", "of", "hand"])
+             const separators = /[·・,;、\/|\s]/g; // Added \s for spaces
+             let tokens = targetWord.split(separators).map(s => s.trim()).filter(s => s);
+             
+             // Sort longest first to avoid partial matches inside longer words
+             tokens.sort((a, b) => b.length - a.length);
+             
+             let tempSentence = sentenceRaw;
+             let foundAny = false;
 
-        this.maskedAudioText = sentenceRaw;
-        if (match) {
-            const reg = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-            maskedSentence = sentenceRaw.replace(reg, createMask(match, 'main-blank'));
-            const pauseChar = (qKey.startsWith('ja') || qKey.startsWith('zh')) ? '，' : ' ... ';
-            this.maskedAudioText = sentenceRaw.replace(reg, pauseChar);
+             tokens.forEach(token => {
+                 if(token.length < 2 && !['a','I'].includes(token)) return; // Skip tiny noise unless common
+                 const reg = new RegExp(`(${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                 if(tempSentence.match(reg)) {
+                     tempSentence = tempSentence.replace(reg, (match) => createMask(match));
+                     foundAny = true;
+                 }
+             });
+
+             if(foundAny) {
+                 maskedSentence = tempSentence;
+                 this.maskedAudioText = sentenceRaw; // Simpler to play full or pause, sticking to full for scattered
+             } else {
+                 // Fallback to strict substring if scattered failed (e.g. Asian languages without spaces)
+                 if(sentenceRaw.includes(targetWord)) {
+                     const reg = new RegExp(targetWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                     maskedSentence = sentenceRaw.replace(reg, createMask(targetWord));
+                 }
+             }
         }
 
         // Bottom Display
@@ -721,43 +735,40 @@ class Sentences extends GameMode {
 
         if (dispMode !== 'none') {
             let bottomText = '';
+            const sourceText = c[bottomKey]; 
+
             if (dispMode === 'sentence') {
-                let tExKey = transKey;
-                const transConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l => l.key === transKey) : null;
-                if (transConf && transConf.exKey) tExKey = transConf.exKey;
+                let bExKey = bottomKey;
+                const bConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l => l.key === bottomKey) : null;
+                if (bConf && bConf.exKey) bExKey = bConf.exKey;
+                const transSent = c[bExKey]; 
                 
-                const transSent = c[tExKey]; 
-                const transWord = c[transKey]; 
-                
-                if (transSent && transWord) {
-                    const tv = transWord.split(separators).map(s => s.trim()).filter(s => s);
+                if (transSent && sourceText) {
+                    const separators = /[·・,;、\/|]/g;
+                    const tv = sourceText.split(separators).map(s => s.trim()).filter(s => s);
                     tv.sort((a,b) => b.length - a.length);
                     const tm = tv.find(v => transSent.toLowerCase().includes(v.toLowerCase()));
                     if (tm) {
                         const tReg = new RegExp(tm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-                        bottomText = transSent.replace(tReg, createMask(tm, 'trans-blank'));
+                        bottomText = transSent.replace(tReg, `<span id="trans-blank" class="inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${tm}</span>`);
                     } else { bottomText = transSent; }
-                } else { bottomText = transSent || transWord || ""; }
+                } else { bottomText = transSent || sourceText || ""; }
             } else {
-                const w = c[transKey];
-                if (w) bottomText = createMask(w, 'trans-blank');
+                if (sourceText) bottomText = `<span id="trans-blank" class="inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${sourceText}</span>`;
             }
             if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-bold text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
         }
 
-        // Apply Updates
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
         if(this.dom.text) this.dom.text.innerHTML = maskedSentence;
         if(this.dom.bottomDisp) this.dom.bottomDisp.innerHTML = bottomHtml;
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
         
-        // Reset Box Styles
         if(this.dom.sBox) {
             this.highlightQBox(this.dom.sBox, false);
             this.dom.sBox.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
         }
 
-        // Distractors
         const distractors = this.getDistractors(c.id, 4);
         this.dom.btns.forEach((btn, idx) => {
              const o = distractors[idx];
@@ -802,18 +813,21 @@ class Sentences extends GameMode {
             btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
             app.celebration.play();
             
-            const reveal = (id, colorClass) => {
-                const el = document.getElementById(id);
+            // REVEAL ALL BLANKS (Main & Bottom)
+            const reveal = (el, colorClass) => {
                 if(el) {
                     el.classList.remove('text-transparent', 'bg-violet-100', 'dark:bg-violet-900/50', 'border-b-2', 'border-violet-400');
                     el.classList.add(colorClass); 
-                    if(id === 'main-blank') el.classList.add('bg-emerald-500', 'px-2', 'rounded');
+                    if(el.classList.contains('main-blank')) el.classList.add('bg-emerald-500', 'px-2', 'rounded');
                     else el.classList.add('text-indigo-500', 'dark:text-indigo-400');
                 }
             };
 
-            reveal('main-blank', 'text-white');
-            reveal('trans-blank', 'text-indigo-500');
+            const mainBlanks = this.root.querySelectorAll('.main-blank');
+            mainBlanks.forEach(el => reveal(el, 'text-white'));
+
+            const transBlank = this.root.querySelector('#trans-blank');
+            if(transBlank) reveal(transBlank, 'text-indigo-500');
 
             let pAudio = null;
             if(app.store.prefs.sentencesPlayCorrect) {

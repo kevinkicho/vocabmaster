@@ -2,14 +2,20 @@
 class Store {
     constructor() {
         const defaults = (typeof GET_DEFAULTS === 'function') ? GET_DEFAULTS() : {};
-        // Bump version to force fresh defaults logic
-        this.STORAGE_KEY = 'vm_prefs_v1140_STABLE'; 
+        this.STORAGE_KEY = 'vm_prefs_v1150_STABLE'; 
+
+        // 1. HARDCODED DEFAULTS (Overriding standard defaults per request)
+        const customDefaults = {
+            ...defaults,
+            flashAudioSrc: 'ja', // Default Auto-Play to Japanese
+            sentencesBottomLang: 'en', // Default Bottom Language to English
+        };
 
         try {
             const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
-            this.prefs = stored ? { ...defaults, ...stored } : defaults;
+            this.prefs = stored ? { ...customDefaults, ...stored } : customDefaults;
         } catch (e) {
-            this.prefs = defaults;
+            this.prefs = customDefaults;
         }
 
         try { this.locs = JSON.parse(localStorage.getItem('vm_locs')) || {}; } catch (e) { this.locs = {}; }
@@ -108,9 +114,8 @@ class Store {
         this.prefs.sentencesQ = getVal('sentences-q', this.prefs.sentencesQ);
         this.prefs.sentencesA = getVal('sentences-a', this.prefs.sentencesA);
         this.prefs.sentencesTrans = getVal('sentences-trans', this.prefs.sentencesTrans);
-        
-        // UPDATED: Get the value from the select, not checkbox
         this.prefs.sentencesBottomDisp = getVal('sentences-bottom-disp', this.prefs.sentencesBottomDisp);
+        this.prefs.sentencesBottomLang = getVal('sentences-bottom-lang', this.prefs.sentencesBottomLang); // NEW
         
         this.prefs.sentencesAuto = getChk('sentences-auto', this.prefs.sentencesAuto);
         this.prefs.sentencesRandom = getChk('sentences-random', this.prefs.sentencesRandom);
@@ -131,6 +136,7 @@ class Store {
         
         if(window.app && window.app.game) {
             if (window.app.game.resizeGame) { window.app.game.startNewGame(window.app.game.state.pairs); } 
+            else if (window.app.game.update) { window.app.game.update(); } // Use update if available
             else { window.app.game.render(); }
         }
         if(window.app && window.app.notes && window.app.notes.currentWordId) {
@@ -150,6 +156,7 @@ class Store {
         if(window.app && window.app.ui) window.app.ui.loadSettings();
         if(window.app && window.app.game) {
             if (window.app.game.resizeGame) { window.app.game.state.matched = []; window.app.game.startNewGame(window.app.game.state.pairs); } 
+            else if (window.app.game.update) { window.app.game.update(); }
             else { window.app.game.render(); }
         }
         this.applyTheme();

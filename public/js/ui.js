@@ -92,7 +92,10 @@ class UIManager {
             
             setVal('sentences-q', p.sentencesQ); setVal('sentences-a', p.sentencesA);
             setVal('sentences-trans', p.sentencesTrans); 
+            
             setVal('sentences-bottom-disp', p.sentencesBottomDisp);
+            setVal('sentences-bottom-lang', p.sentencesBottomLang);
+
             setChk('sentences-auto', p.sentencesAuto); setChk('sentences-random', p.sentencesRandom);
             setVal('sentences-audio-src', p.sentencesAudioSrc); setChk('sentences-play-correct', p.sentencesPlayCorrect);
 
@@ -109,7 +112,6 @@ class UIManager {
         const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); 
         container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`;
         
-        // FIX: Set default selection
         const src = document.getElementById('preset-source');
         const tgt = document.getElementById('preset-target');
         if(src) src.value = 'en';
@@ -134,6 +136,7 @@ class UIManager {
 
         createOpts('sentences-q', p.sentencesQ); createOpts('sentences-a', p.sentencesA); 
         createOpts('sentences-trans', p.sentencesTrans); createOpts('sentences-audio-src', p.sentencesAudioSrc, true);
+        createOpts('sentences-bottom-lang', p.sentencesBottomLang, true);
 
         const matchFilterContainer = document.getElementById('container-match-filters'); if(matchFilterContainer) { matchFilterContainer.innerHTML = LANG_CONFIG.map(l => { const id = `match-show-${l.key}`; const prefKey = `matchShow${this.store.cap(l.key)}`; return `<label class="p-2 bg-white dark:bg-neutral-700/30 rounded border border-slate-200 dark:border-neutral-700 flex flex-col items-center cursor-pointer select-none active:scale-95 transition-transform"><span class="text-[9px] font-bold mb-1 truncate w-full text-center">${l.label}</span><input type="checkbox" id="${id}" class="accent-slate-600 w-3 h-3" ${p[prefKey]?'checked':''}></label>`; }).join(''); } 
         createGrid('container-match-audio', 'matchAudio'); createGrid('container-btn-audio', 'btnAudio'); 
@@ -141,99 +144,6 @@ class UIManager {
         
         const back2 = document.getElementById('flash-back-2'); if (back2 && !document.getElementById('flash-back-3')) { const parent = back2.parentElement.parentElement; if (parent) { const makeSel = (n) => `<div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Back ${n}</span><select id="flash-back-${n}" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>`; parent.insertAdjacentHTML('beforeend', makeSel(3) + makeSel(4)); createOpts('flash-back-3', p.flashBack3); createOpts('flash-back-4', p.flashBack4); } }
         
-        const audioSettingsBox = document.querySelector('#modal-settings .space-y-3 > div:nth-child(2)');
-        if(audioSettingsBox && !document.getElementById('toggle-audio-wait')) {
-             const html = `<label class="flex flex-col items-center justify-center gap-1 cursor-pointer mt-2"><i class="ph-fill ph-timer text-xl text-amber-500"></i><span class="text-[10px] font-black uppercase">Wait Audio</span><input type="checkbox" id="toggle-audio-wait" class="w-4 h-4 accent-amber-600 rounded"></label>`;
-             const grid = audioSettingsBox.querySelector('.grid.grid-cols-2');
-             if(grid) grid.insertAdjacentHTML('beforeend', html);
-        }
-
-        const clickModeHTML = `
-            <div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-2"></div>
-            <p class="text-[9px] uppercase font-bold text-slate-400 text-center mt-2">Input Mode</p>
-            <div class="flex justify-between items-center mt-1 p-1 bg-slate-100 dark:bg-neutral-800 rounded-lg border border-slate-200 dark:border-neutral-700">
-                <label class="flex-1 text-center cursor-pointer">
-                    <input type="radio" name="global-click-mode" value="single" class="peer sr-only">
-                    <span class="block py-1 text-[10px] font-bold uppercase text-slate-400 peer-checked:text-slate-700 dark:peer-checked:text-white peer-checked:bg-white dark:peer-checked:bg-neutral-600 rounded shadow-sm transition-all">Single Click</span>
-                </label>
-                <label class="flex-1 text-center cursor-pointer">
-                    <input type="radio" name="global-click-mode" value="double" class="peer sr-only">
-                    <span class="block py-1 text-[10px] font-bold uppercase text-slate-400 peer-checked:text-slate-700 dark:peer-checked:text-white peer-checked:bg-white dark:peer-checked:bg-neutral-600 rounded shadow-sm transition-all">Double Click</span>
-                </label>
-            </div>`;
-        const mainSettingsBox = document.querySelector('#modal-settings .space-y-3 > div:nth-child(2)');
-        if(mainSettingsBox && !document.querySelector('input[name="global-click-mode"]')) {
-            mainSettingsBox.insertAdjacentHTML('beforeend', clickModeHTML);
-        }
-
-        const injectExOpts = (mode, detailsIndex) => {
-            try {
-                const details = document.querySelector(`#modal-settings details:nth-of-type(${detailsIndex})`);
-                if(!details) return;
-                const contentDiv = details.querySelector('div.p-4');
-                if(contentDiv && !document.getElementById(`${mode}-show-ex`)) {
-                    const html = `
-                    <div class="h-px bg-slate-200 dark:bg-neutral-700 my-2"></div>
-                    <label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Show Example Sentences</span><input type="checkbox" id="${mode}-show-ex" class="w-4 h-4 accent-indigo-600 rounded"></label>
-                    <div class="grid grid-cols-2 gap-2 mt-2">
-                        <div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Main (Big)</span><select id="${mode}-ex-main" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>
-                        <div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Sub (Small)</span><select id="${mode}-ex-sub" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>
-                    </div>
-                    <label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Auto-Play Example on Toggle</span><input type="checkbox" id="${mode}-play-ex" class="w-4 h-4 accent-indigo-600 rounded"></label>
-                    ${mode === 'quiz' ? `<label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Auto-Play on Correct</span><input type="checkbox" id="${mode}-play-correct" class="w-4 h-4 accent-indigo-600 rounded"></label>` : ''}`;
-                    
-                    contentDiv.insertAdjacentHTML('beforeend', html);
-                    createOpts(`${mode}-ex-main`, p[`${mode}ExMain`], true); 
-                    createOpts(`${mode}-ex-sub`, p[`${mode}ExSub`], true);
-                }
-            } catch(e) { console.error("Inject Ex Opts Fail", e); }
-        };
-        injectExOpts('quiz', 4); 
-        injectExOpts('tf', 5); 
-
-        const injectVoiceOpts = () => {
-            try {
-                const details = document.querySelector(`#modal-settings details:nth-of-type(7)`); 
-                if(!details) return;
-                const contentDiv = details.querySelector('div.p-4');
-                if(contentDiv && !document.getElementById('voice-play-ex')) {
-                    const html = `
-                    <div class="h-px bg-slate-200 dark:bg-neutral-700 my-2"></div>
-                    <label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Auto-Play Example on Toggle</span><input type="checkbox" id="voice-play-ex" class="w-4 h-4 accent-sky-600 rounded"></label>
-                    <div class="flex flex-col mt-2"><span class="text-[9px] uppercase font-bold mb-1">Example Audio Language</span><select id="voice-ex-main" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>
-                    <label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Auto-Play on Correct</span><input type="checkbox" id="voice-play-correct" class="w-4 h-4 accent-sky-600 rounded"></label>`;
-                    contentDiv.insertAdjacentHTML('beforeend', html);
-                    createOpts('voice-ex-main', p.voiceExMain, true);
-                    setChk('voice-play-correct', p.voicePlayCorrect);
-                }
-            } catch(e) { console.error("Inject Voice Opts Fail", e); }
-        };
-        injectVoiceOpts();
-
-        const injectSentencesOpts = () => {
-            try {
-                const details = document.querySelector(`#modal-settings details:nth-of-type(8)`); 
-                if(!details) return;
-                const contentDiv = details.querySelector('div.p-4');
-                if(contentDiv && !document.getElementById('sentences-bottom-disp')) {
-                    const html = `
-                    <div class="flex justify-between items-center mt-2">
-                        <span class="text-xs font-bold">Bottom Display</span>
-                        <select id="sentences-bottom-disp" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none">
-                            <option value="sentence">Sentence (Masked)</option>
-                            <option value="word">Word (Masked)</option>
-                            <option value="none">None</option>
-                        </select>
-                    </div>
-                    <label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Auto-Play on Correct</span><input type="checkbox" id="sentences-play-correct" class="w-4 h-4 accent-violet-600 rounded"></label>`;
-                    contentDiv.insertAdjacentHTML('beforeend', html);
-                    setVal('sentences-bottom-disp', p.sentencesBottomDisp);
-                    setChk('sentences-play-correct', p.sentencesPlayCorrect);
-                }
-            } catch(e) { console.error("Inject Sentences Opts Fail", e); }
-        };
-        injectSentencesOpts();
-
         const devDetails = document.getElementById('details-developer'); if (devDetails && !document.getElementById('debug-log-area')) { const container = devDetails.querySelector('.p-4'); if(container) { const debugHTML = `<div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-2"></div><div class="flex flex-col gap-2 mt-2"><div class="flex justify-between items-center"><span class="text-[9px] uppercase font-bold text-slate-400">System Logs</span><button onclick="app.ui.copyLogs()" class="px-2 py-1 bg-slate-200 dark:bg-neutral-700 rounded text-[10px] font-bold text-slate-600 dark:text-neutral-300 active:scale-95 transition-transform flex items-center gap-1"><i class="ph-bold ph-copy"></i> Copy</button></div><textarea id="debug-log-area" readonly class="w-full h-32 bg-black text-green-400 text-[10px] font-mono p-2 rounded-xl border border-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"></textarea></div>`; container.insertAdjacentHTML('beforeend', debugHTML); } } const logArea = document.getElementById('debug-log-area'); if(logArea && window.logBuffer) logArea.value = window.logBuffer.join('\n');
     }
     

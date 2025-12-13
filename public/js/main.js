@@ -24,6 +24,8 @@ class App {
         try {
             this.store = new Store();
             this.ui = new UIManager(this.store);
+            // Initialize Auth first
+            this.auth = new AuthManager();
             this.audio = new AudioService();
             this.data = new DataService();
             this.notes = new NoteService(); 
@@ -58,11 +60,18 @@ class App {
             auth.onAuthStateChanged(user => { if(this.notes) this.notes.setUser(user); });
         }
         
-        btn.innerText = "Loading Data..."; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.innerText = "Connecting..."; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');
         
         try {
+            // FIX: Wait for Auth (Anon or Real) to settle before loading data
+            // This ensures Realtime DB rules don't reject the read request.
+            await this.auth.waitForAuth();
+            console.log("Auth Settled. Loading Data...");
+
+            btn.innerText = "Loading Data...";
             const count = await this.data.load();
             console.log("Data Loaded:", count);
+
             btn.innerText = "Preparing Assets...";
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
@@ -102,8 +111,13 @@ class App {
 
     handleAuthClick() {
         if (!auth || !provider) return;
-        if (auth.currentUser) { app.ui.openProfileModal(); } 
-        else { auth.signInWithPopup(provider).catch(e => alert(e.message)); }
+        // FIX: Treat Anonymous users as "Not Logged In" for UI purposes
+        if (auth.currentUser && !auth.currentUser.isAnonymous) { 
+            app.ui.openProfileModal(); 
+        } else { 
+            // If anon or null, trigger Google Sign In
+            auth.signInWithPopup(provider).catch(e => alert(e.message)); 
+        }
     }
 
     async goHome(pushState = true) {

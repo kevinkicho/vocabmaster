@@ -24,6 +24,7 @@ class DataService {
         if (typeof db !== 'undefined' && db) {
             try {
                 console.log("[Data] Fetching from Realtime Database...");
+                // Note: This relies on Auth being "ready" (Anon or Real) which Main.js now waits for.
                 const dbPromise = db.ref('vocab').once('value');
                 const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject("Timeout"), 3000));
                 const snap = await Promise.race([dbPromise, timeoutPromise]);
@@ -60,6 +61,13 @@ class DataService {
         this.localDailyScore += points; 
 
         if (!auth || !auth.currentUser || !db) return;
+        
+        // FIX: Do NOT record stats for Anonymous users
+        if (auth.currentUser.isAnonymous) {
+            console.log("[Data] Score not saved (Anonymous User)");
+            return;
+        }
+
         const uid = auth.currentUser.uid;
         const todayKey = this.getTodayKey(); 
         
@@ -75,6 +83,8 @@ class DataService {
 
     async getStats() {
         if (!auth || !auth.currentUser || !db) return null;
+        if (auth.currentUser.isAnonymous) return null; // No stats for anon
+
         const uid = auth.currentUser.uid;
         try {
             const snap = await db.ref(`users/${uid}/weekly`).once('value');
@@ -86,6 +96,7 @@ class DataService {
         if (this.dailyScoreLoaded) return this.localDailyScore;
 
         if (!auth || !auth.currentUser || !db) return 0;
+        if (auth.currentUser.isAnonymous) return 0; // No stats for anon
 
         const uid = auth.currentUser.uid;
         const todayKey = this.getTodayKey();

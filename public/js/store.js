@@ -2,13 +2,15 @@
 class Store {
     constructor() {
         const defaults = (typeof GET_DEFAULTS === 'function') ? GET_DEFAULTS() : {};
-        this.STORAGE_KEY = 'vm_prefs_v1150_STABLE'; 
+        this.STORAGE_KEY = 'vm_prefs_v1175_STABLE'; 
 
-        // 1. HARDCODED DEFAULTS (Overriding standard defaults per request)
         const customDefaults = {
             ...defaults,
-            flashAudioSrc: 'ja', // Default Auto-Play to Japanese
-            sentencesBottomLang: 'en', // Default Bottom Language to English
+            flashAudioSrc: 'ja', 
+            sentencesBottomLang: 'en',
+            sentencesBottomDisp: 'sentence',
+            font: 'sans',
+            quizPlayAnswer: true // NEW DEFAULT
         };
 
         try {
@@ -21,7 +23,7 @@ class Store {
         try { this.locs = JSON.parse(localStorage.getItem('vm_locs')) || {}; } catch (e) { this.locs = {}; }
         try { this.matchState = JSON.parse(localStorage.getItem('vm_match_state_final')) || null; } catch (e) { this.matchState = null; }
 
-        this.applyTheme();
+        setTimeout(() => this.applyTheme(), 0);
     }
     
     cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -73,6 +75,7 @@ class Store {
         this.prefs.quizExSub = getVal('quiz-ex-sub', this.prefs.quizExSub);
         this.prefs.quizPlayEx = getChk('quiz-play-ex', this.prefs.quizPlayEx); 
         this.prefs.quizPlayCorrect = getChk('quiz-play-correct', this.prefs.quizPlayCorrect);
+        this.prefs.quizPlayAnswer = getChk('quiz-play-answer', this.prefs.quizPlayAnswer);
 
         // TF
         this.prefs.tfRandom = getChk('tf-random', this.prefs.tfRandom);
@@ -115,7 +118,7 @@ class Store {
         this.prefs.sentencesA = getVal('sentences-a', this.prefs.sentencesA);
         this.prefs.sentencesTrans = getVal('sentences-trans', this.prefs.sentencesTrans);
         this.prefs.sentencesBottomDisp = getVal('sentences-bottom-disp', this.prefs.sentencesBottomDisp);
-        this.prefs.sentencesBottomLang = getVal('sentences-bottom-lang', this.prefs.sentencesBottomLang); // NEW
+        this.prefs.sentencesBottomLang = getVal('sentences-bottom-lang', this.prefs.sentencesBottomLang);
         
         this.prefs.sentencesAuto = getChk('sentences-auto', this.prefs.sentencesAuto);
         this.prefs.sentencesRandom = getChk('sentences-random', this.prefs.sentencesRandom);
@@ -136,7 +139,7 @@ class Store {
         
         if(window.app && window.app.game) {
             if (window.app.game.resizeGame) { window.app.game.startNewGame(window.app.game.state.pairs); } 
-            else if (window.app.game.update) { window.app.game.update(); } // Use update if available
+            else if (window.app.game.update) { window.app.game.update(); }
             else { window.app.game.render(); }
         }
         if(window.app && window.app.notes && window.app.notes.currentWordId) {
@@ -162,13 +165,24 @@ class Store {
         this.applyTheme();
     }
 
-    setTheme(name) { this.prefs.theme = name; this.saveSettings(); this.applyTheme(); }
+    setTheme(name) { this.prefs.theme = name; this.saveSettings(); }
+    
     applyTheme() { 
         document.documentElement.classList.toggle('dark', this.prefs.dark); 
         document.body.classList.toggle('no-anim', !this.prefs.anim);
         document.documentElement.setAttribute('data-theme', this.prefs.theme || 'classic');
-        document.documentElement.setAttribute('data-font', this.prefs.font || 'sans');
+        
+        const fontMode = this.prefs.font || 'sans';
+        document.documentElement.setAttribute('data-font', fontMode);
+        if (fontMode === 'serif') {
+            document.body.classList.remove('font-sans');
+            document.body.classList.add('font-serif');
+        } else {
+            document.body.classList.remove('font-serif');
+            document.body.classList.add('font-sans');
+        }
     }
+    
     getLoc(mode) { return this.locs[mode] || 0; }
     setLoc(mode, idx) { this.locs[mode] = idx; localStorage.setItem('vm_locs', JSON.stringify(this.locs)); }
     saveMatch(state) { this.matchState = state; localStorage.setItem('vm_match_state_final', JSON.stringify(state)); }

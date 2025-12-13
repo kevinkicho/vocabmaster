@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- THEME ENGINE --- */
+:root {
+    /* DEFAULT (Classic) - Indigo & Slate */
+    --p-50: #eef2ff; --p-100: #e0e7ff; --p-200: #c7d2fe; --p-300: #a5b4fc; --p-400: #818cf8;
+    --p-500: #6366f1; --p-600: #4f46e5; --p-700: #4338ca; --p-800: #3730a3; --p-900: #312e81;
+
+    --n-50: #f8fafc; --n-100: #f1f5f9; --n-200: #e2e8f0; --n-300: #cbd5e1; --n-400: #94a3b8;
+    --n-500: #64748b; --n-600: #475569; --n-700: #334155; --n-800: #1e293b; --n-900: #0f172a;
+
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius-2xl: 2rem;
+    --radius-3xl: 3rem;
+    --font-main: 'Nunito', sans-serif;
+}
+
+/* SAKURA THEME (Pink/Stone) */
+[data-theme="sakura"] {
+    --p-50: #fdf2f8; --p-100: #fce7f3; --p-200: #fbcfe8; --p-300: #f9a8d4; --p-400: #f472b6;
+    --p-500: #ec4899; --p-600: #db2777; --p-700: #be185d; --p-800: #9d174d; --p-900: #831843;
+    
+    --n-50: #fafaf9; --n-100: #f5f5f4; --n-200: #e7e5e4; --n-300: #d6d3d1; --n-400: #a8a29e;
+    --n-500: #78716c; --n-600: #57534e; --n-700: #44403c; --n-800: #292524; --n-900: #1c1917;
+    
+    --radius-sm: 0.5rem; --radius-md: 1rem; --radius-lg: 1.5rem; --radius-xl: 2rem; --radius-2xl: 2.5rem;
+}
+
+/* CYBER THEME (Cyan/Zinc/Sharp) */
+[data-theme="cyber"] {
+    --p-50: #ecfeff; --p-100: #cffafe; --p-200: #a5f3fc; --p-300: #67e8f9; --p-400: #22d3ee;
+    --p-500: #06b6d4; --p-600: #0891b2; --p-700: #0e7490; --p-800: #155e75; --p-900: #164e63;
+    
+    --n-50: #fafafa; --n-100: #f4f4f5; --n-200: #e4e4e7; --n-300: #d4d4d8; --n-400: #a1a1aa;
+    --n-500: #71717a; --n-600: #52525b; --n-700: #3f3f46; --n-800: #27272a; --n-900: #18181b;
+
+    --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px; --radius-xl: 0px; --radius-2xl: 0px; --radius-3xl: 2px;
+    --font-main: 'Courier New', monospace; 
+}
+
+/* COFFEE THEME (Amber/Orange) */
+[data-theme="coffee"] {
+    --p-50: #fffbeb; --p-100: #fef3c7; --p-200: #fde68a; --p-300: #fcd34d; --p-400: #fbbf24;
+    --p-500: #f59e0b; --p-600: #d97706; --p-700: #b45309; --p-800: #92400e; --p-900: #78350f;
+    
+    --n-50: #fff7ed; --n-100: #ffedd5; --n-200: #fed7aa; --n-300: #fdba74; --n-400: #fb923c;
+    --n-500: #f97316; --n-600: #ea580c; --n-700: #c2410c; --n-800: #9a3412; --n-900: #7c2d12;
+
+    --radius-sm: 0.2rem; --radius-md: 0.4rem; --radius-lg: 0.6rem; --radius-xl: 0.8rem; --radius-2xl: 1rem;
+}
+
+/* OCEAN THEME (Teal/Sky) */
+[data-theme="ocean"] {
+    --p-50: #f0fdfa; --p-100: #ccfbf1; --p-200: #99f6e4; --p-300: #5eead4; --p-400: #2dd4bf;
+    --p-500: #14b8a6; --p-600: #0d9488; --p-700: #0f766e; --p-800: #115e59; --p-900: #134e4a;
+    
+    --n-50: #f0f9ff; --n-100: #e0f2fe; --n-200: #bae6fd; --n-300: #7dd3fc; --n-400: #38bdf8;
+    --n-500: #0ea5e9; --n-600: #0284c7; --n-700: #0369a1; --n-800: #075985; --n-900: #0c4a6e;
+
+    --radius-sm: 0.75rem; --radius-md: 1.25rem; --radius-lg: 1.75rem; --radius-xl: 2.25rem; --radius-2xl: 3rem;
+}
+
+/* --- FONT ENGINE --- */
+/* Default / Modern (Sans) */
+[data-font="sans"] {
+    --font-main: 'Nunito', 'Noto Sans SC', 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR', sans-serif;
+}
+
+/* Book (Serif) */
+[data-font="serif"] {
+    --font-main: 'Noto Serif SC', 'Noto Serif TC', 'Noto Serif JP', 'Noto Serif KR', serif;
+}
+
+/* --- ANIMATIONS --- */
+
+/* Pulse Ring (Mic) */
+@keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1.3); opacity: 0; }
+}
+.animate-pulse-ring { animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+
+/* Pulse Green (Success) */
+.anim-pulse-green { animation: pulse-green 0.5s ease-in-out; }
+@keyframes pulse-green { 
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } 
+    50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.2); } 
+}
+
+/* Pulse Red (Error) */
+.anim-pulse-red { animation: pulse-red 0.5s ease-in-out; }
+@keyframes pulse-red { 
+    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); } 
+    50% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0.2); } 
+}
+
+/* --- UTILITIES & HELPERS --- */
+
+/* GPU Fix for smooth 3D flips (Prevents flickering on mobile) */
+.gpu-fix { 
+    -webkit-backface-visibility: hidden; 
+    backface-visibility: hidden; 
+    transform: translate3d(0,0,0); 
+}
+
+.perspective-\[1000px\] { perspective: 1000px; }
+.transform-style-3d { transform-style: preserve-3d; }
+
+/* No Tap Highlight (Mobile) */
+.no-tap { -webkit-tap-highlight-color: transparent; }
+
+/* Landscape Visibility Helper */
+.landscape-hide { display: block; }
+@media (orientation: landscape) {
+    .landscape-hide { display: none; }
+}
+
+/* Animation Override (Settings Toggle) */
+.no-anim *, .no-anim *::before, .no-anim *::after {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Custom Scrollbar */
+.thin-scroll::-webkit-scrollbar { width: 6px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+.thin-scroll::-webkit-scrollbar-thumb { 
+    background-color: rgba(156, 163, 175, 0.5); 
+    border-radius: 20px; 
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Text Fitter Layouts */
+.fit-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    padding: 0.5rem; 
+}
+
+/* CRITICAL FIX: Hide text by default so resizing is invisible */
+.fit-target {
+    white-space: nowrap;
+    line-height: 1;
+    text-align: center;
+    opacity: 0; /* START HIDDEN */
+    transition: opacity 0.2s ease-out; /* Smooth fade in when ready */
+}
+
+/* --- LOADING TRANSITIONS --- */
+#app-view {
+    opacity: 0;
+    transition: none; /* Instant Hide */
+    will-change: opacity;
+}
+
+#app-view.visible {
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out; /* Slow Reveal */
+}
+
+/* Hanzi Tooltip Custom Styles */
+#hanzi-tooltip {
+    will-change: transform, opacity;
+    transition: opacity 0.15s ease-out;
+}

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Vocab Master V1129</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Noto+Serif+KR:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&family=Noto+Serif+TC:wght@400;700;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            indigo: { 50: 'var(--p-50)', 100: 'var(--p-100)', 200: 'var(--p-200)', 300: 'var(--p-300)', 400: 'var(--p-400)', 500: 'var(--p-500)', 600: 'var(--p-600)', 700: 'var(--p-700)', 800: 'var(--p-800)', 900: 'var(--p-900)' },
+            slate: { 50: 'var(--n-50)', 100: 'var(--n-100)', 200: 'var(--n-200)', 300: 'var(--n-300)', 400: 'var(--n-400)', 500: 'var(--n-500)', 600: 'var(--n-600)', 700: 'var(--n-700)', 800: 'var(--n-800)', 900: 'var(--n-900)' },
+          },
+          borderRadius: { 'sm': 'var(--radius-sm)', 'md': 'var(--radius-md)', 'lg': 'var(--radius-lg)', 'xl': 'var(--radius-xl)', '2xl': 'var(--radius-2xl)', '3xl': 'var(--radius-3xl)' },
+          fontFamily: { sans: ['var(--font-main)', 'sans-serif'] },
+          boxShadow: { 'soft': '0 10px 40px -10px rgba(0,0,0,0.08)' },
+          screens: { 'landscape': {'raw': '(orientation: landscape)'} }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 dark:bg-black text-slate-600 dark:text-neutral-300 font-sans antialiased h-[100dvh] flex flex-col overflow-hidden selection:bg-indigo-100 selection:text-indigo-700 no-scrollbar touch-manipulation transition-colors duration-300 no-tap select-none">
+
+  <header class="px-4 py-2 flex justify-between items-center z-40 shrink-0 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm border-b border-slate-200 dark:border-neutral-800 h-[60px] transition-colors duration-300">
+      <div class="flex items-center gap-3 cursor-pointer group active:opacity-70" onclick="app.goHome()">
+          <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-md transition-transform">
+              <i class="ph-bold ph-translate text-xl"></i>
+          </div>
+          <div class="flex flex-col">
+              <h1 class="font-black text-lg text-slate-800 dark:text-white leading-none tracking-tight landscape-hide">VocabMaster</h1>
+              <span id="status-bar" class="text-[10px] font-extrabold text-slate-400 dark:text-neutral-500 uppercase tracking-wider mt-0.5">Ready</span>
+          </div>
+      </div>
+      <div class="flex gap-2">
+          <button id="btn-login" onclick="app.handleAuthClick()" class="w-10 h-10 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-300 rounded-full flex items-center justify-center transition-all active:scale-90 border border-slate-200 dark:border-neutral-700 shadow-sm"><i class="ph-bold ph-user text-xl"></i></button>
+          <button onclick="app.toggleFull()" class="w-10 h-10 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-300 rounded-full flex items-center justify-center transition-all active:scale-90 border border-slate-200 dark:border-neutral-700 shadow-sm"><i class="ph-bold ph-arrows-out text-xl"></i></button>
+          <button onclick="app.modal(true)" class="w-10 h-10 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-300 rounded-full flex items-center justify-center transition-all active:scale-90 border border-slate-200 dark:border-neutral-700 shadow-sm"><i class="ph-bold ph-gear text-xl"></i></button>
+      </div>
+  </header>
+
+  <main id="app-view" class="flex-1 overflow-hidden relative w-full max-w-7xl mx-auto p-2 sm:p-4 flex flex-col"></main>
+
+  <div id="fab-container" class="fixed bottom-6 right-6 z-30 pointer-events-none"></div>
+  <div id="hanzi-tooltip" class="fixed z-[9999] hidden transition-opacity duration-200 opacity-0"></div>
+
+  <div id="modal-profile" class="fixed inset-0 bg-black/60 z-[80] hidden flex items-center justify-center backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-neutral-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col border border-slate-200 dark:border-neutral-800"><div id="profile-content"></div></div>
+  </div>
+
+  <div id="modal-stats" class="fixed inset-0 bg-black/60 z-[80] hidden flex items-center justify-center backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-neutral-900 w-full max-w-2xl rounded-3xl p-6 shadow-2xl flex flex-col border border-slate-200 dark:border-neutral-800 max-h-[80vh]">
+          <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-black text-slate-800 dark:text-white">Activity Stats</h2><button onclick="document.getElementById('modal-stats').classList.add('hidden')" class="w-8 h-8 bg-slate-100 dark:bg-neutral-800 rounded-full flex items-center justify-center"><i class="ph-bold ph-x"></i></button></div>
+          <div class="flex-1 relative min-h-[300px]"><canvas id="stats-chart"></canvas></div>
+      </div>
+  </div>
+
+  <div id="modal-note" class="fixed inset-0 bg-black/80 z-[70] hidden flex items-center justify-center backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-neutral-900 w-full max-w-6xl rounded-3xl shadow-2xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-neutral-800 relative overflow-hidden">
+          <div class="flex justify-between items-center p-4 border-b border-slate-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-900/50 backdrop-blur shrink-0"><h2 class="text-sm font-black text-slate-500 dark:text-neutral-400 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-notebook text-indigo-500"></i> Study Notes</h2><button onclick="app.notes.closeModal()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 text-slate-600 dark:text-neutral-300 rounded-full flex items-center justify-center transition-colors"><i class="ph-bold ph-x"></i></button></div>
+          <div id="note-toolbar" class="flex gap-1 p-2 bg-slate-100 dark:bg-neutral-800 border-b border-slate-200 dark:border-neutral-700 overflow-x-auto thin-scroll shrink-0 hidden">
+              <button data-cmd="bold" class="p-2 rounded hover:bg-white dark:hover:bg-neutral-700"><i class="ph-bold ph-text-b"></i></button><button data-cmd="italic" class="p-2 rounded hover:bg-white dark:hover:bg-neutral-700"><i class="ph-bold ph-text-italic"></i></button><button data-cmd="underline" class="p-2 rounded hover:bg-white dark:hover:bg-neutral-700"><i class="ph-bold ph-text-underline"></i></button><div class="w-px bg-slate-300 dark:bg-neutral-600 mx-1"></div><button data-cmd="insertUnorderedList" class="p-2 rounded hover:bg-white dark:hover:bg-neutral-700"><i class="ph-bold ph-list-bullets"></i></button><button data-cmd="formatBlock" data-val="H3" class="p-2 rounded hover:bg-white dark:hover:bg-neutral-700 font-bold text-xs">H3</button>
+          </div>
+          <div class="flex flex-col lg:flex-row flex-1 overflow-hidden relative bg-slate-50 dark:bg-black/20">
+              <div id="hanzi-container" class="flex flex-col border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-neutral-800 bg-slate-100/50 dark:bg-neutral-900/50 overflow-y-auto w-full lg:w-1/2 transition-all"><div class="p-4 space-y-3"><div id="hanzi-rows" class="space-y-4"></div><button id="btn-add-row" onclick="app.notes.addHanziRow()" class="w-full py-3 border-2 border-dashed border-slate-200 dark:border-neutral-700 rounded-xl text-slate-400 font-bold text-xs uppercase tracking-wider hover:border-indigo-400 hover:text-indigo-500 transition-colors hidden"><i class="ph-bold ph-plus"></i> Add Row</button></div></div>
+              <div id="rich-container" class="flex flex-col overflow-y-auto bg-white dark:bg-neutral-900 w-full lg:w-1/2 transition-all"><div id="note-body" class="p-6 prose dark:prose-invert prose-sm max-w-none focus:outline-none min-h-[200px] flex-1"></div></div>
+          </div>
+          <div id="note-footer" class="hidden p-4 border-t border-slate-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 z-10"><button onclick="app.notes.saveCurrent()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><i class="ph-bold ph-floppy-disk"></i> Save All</button></div>
+      </div>
+  </div>
+
+  <div id="modal-settings" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-neutral-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-neutral-800">
+        <div class="flex justify-between items-center mb-4 shrink-0"><h2 class="text-2xl font-black text-slate-800 dark:text-white">Settings</h2><button onclick="app.modal(false)" class="w-10 h-10 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-600 dark:text-neutral-300 rounded-full flex items-center justify-center transition-colors"><i class="ph-bold ph-x"></i></button></div>
+        <div class="overflow-y-auto thin-scroll pb-2 flex-1">
+            <div class="space-y-3">
+               <div id="preset-container" class="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/30"></div>
+               <div class="bg-slate-100 dark:bg-neutral-800/50 p-4 rounded-2xl border border-slate-200 dark:border-neutral-700 flex flex-col gap-3">
+                  <p class="text-[9px] uppercase font-bold text-slate-400 text-center">Visual Theme</p><div id="theme-grid" class="grid grid-cols-5 gap-2 mb-2"></div><div class="h-px bg-slate-200 dark:bg-neutral-700 w-full"></div>
+                  <div class="flex items-center justify-between px-1"><span class="text-[10px] font-bold text-slate-500 dark:text-neutral-400 uppercase">App Font</span><select id="app-font" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 text-xs font-bold outline-none"><option value="sans">Modern (Sans)</option><option value="serif">Book (Serif)</option></select></div><div class="h-px bg-slate-200 dark:bg-neutral-700 w-full"></div>
+                  <div class="grid grid-cols-2 gap-3"><label class="flex flex-col items-center justify-center gap-1 cursor-pointer"><i class="ph-fill ph-moon text-xl text-indigo-500"></i><span class="text-[10px] font-black uppercase">Dark Mode</span><input type="checkbox" id="toggle-dark" class="w-4 h-4 accent-indigo-600 rounded"></label><label class="flex flex-col items-center justify-center gap-1 cursor-pointer"><i class="ph-fill ph-magic-wand text-xl text-emerald-500"></i><span class="text-[10px] font-black uppercase">Animations</span><input type="checkbox" id="toggle-anim" class="w-4 h-4 accent-emerald-600 rounded"></label><label class="flex flex-col items-center justify-center gap-1 cursor-pointer"><i class="ph-fill ph-speaker-high text-xl text-pink-500"></i><span class="text-[10px] font-black uppercase">Master Audio</span><input type="checkbox" id="toggle-master-audio" class="w-4 h-4 accent-pink-600 rounded"></label><label class="flex flex-col items-center justify-center gap-1 cursor-pointer"><i class="ph-fill ph-list-numbers text-xl text-slate-500"></i><span class="text-[10px] font-black uppercase">Show Btns</span><input type="checkbox" id="toggle-show-audio-btns" class="w-4 h-4 accent-slate-600 rounded"></label></div><div class="h-px bg-slate-200 dark:bg-neutral-700 w-full"></div>
+                  <p class="text-[9px] uppercase font-bold text-slate-400 text-center">Enable Audio Buttons</p><div id="container-btn-audio" class="grid grid-cols-4 gap-2"></div>
+               </div>
+
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-cursor-click"></i> Mouse & Tooltips</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><label class="flex justify-between items-center cursor-pointer mt-3"><span class="text-xs font-bold">Enable Hanzi Tooltip</span><input type="checkbox" id="hanzi-enable-tooltip" class="w-4 h-4 accent-indigo-600 rounded"></label><div class="flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Auto-Close After</span><select id="hanzi-tooltip-timer" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 text-xs font-bold outline-none"><option value="0">None</option><option value="1000">1 Sec</option><option value="2000">2 Sec</option><option value="3000">3 Sec</option><option value="4000">4 Sec</option><option value="5000">5 Sec</option></select></div><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><div class="grid grid-cols-2 gap-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="hanzi-show-trad" class="w-3 h-3 accent-indigo-600 rounded"><span class="text-[10px] font-bold">Trad</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="hanzi-show-simp" class="w-3 h-3 accent-indigo-600 rounded"><span class="text-[10px] font-bold">Simp</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="hanzi-show-pinyin" class="w-3 h-3 accent-indigo-600 rounded"><span class="text-[10px] font-bold">Pinyin</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="hanzi-show-kr" class="w-3 h-3 accent-indigo-600 rounded"><span class="text-[10px] font-bold">Korean</span></label><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="hanzi-show-en" class="w-3 h-3 accent-indigo-600 rounded"><span class="text-[10px] font-bold">English</span></label></div></div></details>
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-keyboard"></i> Keyboard</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 text-[10px] text-slate-500 dark:text-neutral-400 space-y-2 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="flex justify-between mt-2"><span>Next Card</span> <span class="font-bold text-slate-700 dark:text-neutral-200">Right / Enter / Space / D</span></div><div class="flex justify-between"><span>Prev Card</span> <span class="font-bold text-slate-700 dark:text-neutral-200">Left / Backspace / A</span></div><div class="flex justify-between"><span>Flip / Play Audio</span> <span class="font-bold text-slate-700 dark:text-neutral-200">Space / Up / Down</span></div></div></details>
+
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-cards"></i> Flashcards</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="flex justify-between items-center mt-3"><span class="text-xs font-bold">Flip Speed</span><select id="flash-speed" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"><option value="700">Normal</option><option value="200">Fast</option><option value="0">Instant</option></select></div><div class="grid grid-cols-3 gap-2"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Front</span><select id="flash-front" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Back 1</span><select id="flash-back-1" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Back 2</span><select id="flash-back-2" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div></div><label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Randomize Order</span><input type="checkbox" id="flash-random" class="w-4 h-4 accent-indigo-600 rounded"></label><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Auto-Play Audio</span><input type="checkbox" id="flash-auto" class="w-4 h-4 accent-indigo-600 rounded"></label><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Auto-Play Language</span><select id="flash-audio-src" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div></div></details>
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-pink-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-question"></i> Quiz</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="flex justify-between items-center mt-3"><span class="text-xs font-bold">Question</span><select id="quiz-q-type" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"></select></div><div class="flex justify-between items-center"><span class="text-xs font-bold">Answers</span><select id="quiz-a-type" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"></select></div><label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Randomize Order</span><input type="checkbox" id="quiz-random" class="w-4 h-4 accent-pink-600 rounded"></label><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Auto-Play Audio</span><input type="checkbox" id="quiz-auto" class="w-4 h-4 accent-pink-600 rounded"></label><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Auto-Play Language</span><select id="quiz-audio-src" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div></div></details>
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-check-circle"></i> True / False</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="grid grid-cols-2 gap-2 mt-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Front</span><select id="tf-front" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Back</span><select id="tf-back" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div></div><label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Randomize Order</span><input type="checkbox" id="tf-random" class="w-4 h-4 accent-emerald-600 rounded"></label><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Auto-Play Audio</span><input type="checkbox" id="tf-auto" class="w-4 h-4 accent-emerald-600 rounded"></label><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Auto-Play Language</span><select id="tf-audio-src" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div></div></details>
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-squares-four"></i> Matching</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><label class="flex justify-between items-center cursor-pointer mt-3"><span class="text-xs font-bold">Flash Correct Hint</span><input type="checkbox" id="match-hint" class="w-4 h-4 accent-slate-600 rounded"></label><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><p class="text-[10px] uppercase font-bold text-slate-400">Card Content Pool</p><div id="container-match-filters" class="grid grid-cols-3 gap-2"></div><div class="h-px bg-slate-200 dark:bg-neutral-700"></div><p class="text-[10px] uppercase font-bold text-slate-400">Enable Audio By Language</p><div id="container-match-audio" class="grid grid-cols-4 gap-2"></div></div></details>
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-sky-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-microphone"></i> Voice</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="grid grid-cols-2 gap-2 mt-2"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Display Front</span><select id="voice-disp-front" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none w-full"></select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Display Back</span><select id="voice-disp-back" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none w-full"></select></div></div><div class="flex flex-col mt-2"><span class="text-[9px] uppercase font-bold mb-1">Auto-Play Audio & Recognition</span><select id="voice-audio-target" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none w-full"></select></div><label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Randomize Order</span><input type="checkbox" id="voice-random" class="w-4 h-4 accent-sky-600 rounded"></label><label class="flex justify-between items-center cursor-pointer mt-2"><span class="text-xs font-bold">Auto-Play Prompt</span><input type="checkbox" id="voice-auto" class="w-4 h-4 accent-sky-600 rounded"></label></div></details>
+
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden">
+                   <summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors">
+                       <h3 class="text-xs font-black text-violet-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-text-t"></i> Sentences</h3>
+                       <i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i>
+                   </summary>
+                   <div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2">
+                       <div class="flex justify-between items-center mt-3"><span class="text-xs font-bold">Question (Source)</span><select id="sentences-q" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"></select></div>
+                       <div class="flex justify-between items-center"><span class="text-xs font-bold">Answer (Options)</span><select id="sentences-a" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"></select></div>
+                       <div class="h-px bg-slate-200 dark:bg-neutral-700"></div>
+                       <label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Show Translation</span><input type="checkbox" id="sentences-show-trans" class="w-4 h-4 accent-violet-600 rounded"></label>
+                       <div class="flex justify-between items-center"><span class="text-xs font-bold">Translation Lang</span><select id="sentences-trans" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1 outline-none"></select></div>
+                       <div class="h-px bg-slate-200 dark:bg-neutral-700"></div>
+                       <label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Randomize Order</span><input type="checkbox" id="sentences-random" class="w-4 h-4 accent-violet-600 rounded"></label>
+                       <label class="flex justify-between items-center cursor-pointer"><span class="text-xs font-bold">Auto-Play Audio</span><input type="checkbox" id="sentences-auto" class="w-4 h-4 accent-violet-600 rounded"></label>
+                       <div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Auto-Play Language</span><select id="sentences-audio-src" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>
+                   </div>
+               </details>
+
+               <details class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden"><summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-slate-400 dark:text-neutral-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-confetti"></i> Celebrations</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary><div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2"><div class="flex justify-between items-center mt-2"><span class="text-xs font-bold">Selection</span><div class="flex gap-2"><button onclick="app.store.setAllCelebs(false)" class="text-[10px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-neutral-700 px-2 py-1 rounded-md text-slate-500 dark:text-neutral-400 hover:bg-slate-300 dark:hover:bg-neutral-600">None</button><button onclick="app.store.setAllCelebs(true)" class="text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/30 px-2 py-1 rounded-md text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-900/50">All</button></div></div><div id="celeb-grid" class="grid grid-cols-3 gap-2"></div></div></details>
+               
+               <details id="details-developer" class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden hidden">
+                  <summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors">
+                      <h3 class="text-xs font-black text-amber-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ph-code"></i> Developer</h3>
+                      <i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i>
+                  </summary>
+                  <div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2">
+                      <div class="flex flex-col gap-2 mt-2">
+                          <span class="text-[9px] uppercase font-bold text-slate-400">System Logs</span>
+                          <button onclick="app.ui.copyLogs()" class="px-2 py-1 bg-slate-200 dark:bg-neutral-700 rounded text-[10px] font-bold text-slate-600 dark:text-neutral-300 active:scale-95 transition-transform flex items-center gap-1 w-fit"><i class="ph-bold ph-copy"></i> Copy</button>
+                          <textarea id="debug-log-area" readonly class="w-full h-32 bg-black text-green-400 text-[10px] font-mono p-2 rounded-xl border border-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-green-500" onclick="this.select(); document.execCommand('copy'); alert('Logs Copied!');"></textarea>
+                      </div>
+                  </div>
+               </details>
+               </div>
+        </div>
+    </div>
+  </div>
+
+  <div id="overlay-init" class="fixed inset-0 z-[100] bg-slate-900 dark:bg-black flex flex-col items-center justify-center text-white p-6 text-center">
+      <div class="w-24 h-24 bg-indigo-500 rounded-3xl flex items-center justify-center mb-8 shadow-2xl shadow-indigo-500/40 animate-pulse"><i class="ph-fill ph-student text-6xl text-white"></i></div>
+      <h2 class="text-4xl font-black mb-2 tracking-tight">VocabMaster</h2>
+      <button id="btn-init" class="bg-white text-slate-900 px-12 py-4 rounded-full font-black text-xl shadow-xl active:scale-95 transition-all mt-8">Start</button>
+  </div>
+
+  <div id="modal-edit" class="fixed inset-0 bg-black/60 z-[90] hidden flex items-center justify-center backdrop-blur-sm p-4">
+      <div class="bg-white dark:bg-neutral-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl flex flex-col border border-slate-200 dark:border-neutral-800 max-h-[90vh]">
+          <div class="flex justify-between items-center mb-4 shrink-0">
+              <div class="flex items-center gap-2">
+                  <h2 class="text-xl font-black text-slate-800 dark:text-white">Edit Word</h2>
+                  <span id="edit-id" class="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-neutral-800 px-2 py-1 rounded">#0</span>
+              </div>
+              <button onclick="app.ui.closeEditModal()" class="w-8 h-8 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 rounded-full flex items-center justify-center transition-colors">
+                  <i class="ph-bold ph-x"></i>
+              </button>
+          </div>
+          <div id="edit-form-body" class="flex-1 overflow-y-auto thin-scroll space-y-3 p-1"></div>
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 shrink-0">
+              <button onclick="app.ui.saveEdit()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                  <i class="ph-bold ph-floppy-disk"></i> Save Changes
+              </button>
+          </div>
+      </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database-compat.js"></script>
+
+  <script src="js/config.js"></script>
+  <script src="js/firebase.js"></script> 
+  <script src="js/data.js"></script>
+  <script src="js/notes.js"></script> 
+  <script src="js/services.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game_core.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>

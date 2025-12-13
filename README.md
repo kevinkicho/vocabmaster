@@ -1,85 +1,49 @@
 # VocabMaster
 
-**VocabMaster** is a comprehensive, web-based language learning application designed to help users master vocabulary through various interactive game modes. It supports multiple languages (including Japanese, Korean, Chinese, and European languages) and features a spaced-repetition style learning environment. The app includes customizable settings for audio, visual themes, and input methods, catering to different learning styles.
+**VocabMaster** is a modular, PWA-ready language learning application built with Vanilla JavaScript, Tailwind CSS, and Firebase. It features multiple game modes, context-aware audio, and a robust settings system.
 
 ---
 
-## File Structure & Descriptions
+## File Structure & Functions
 
-| File Name | Description |
-| :--- | :--- |
-| **`public/index.html`** | The main entry point containing the app's HTML structure, including modals for settings, profile, and the dynamic game view container. |
-| **`public/style.css`** | Contains custom CSS styles and Tailwind CSS configuration for the application's visual design and animations. |
-| **`public/js/main.js`** | The central controller that initializes the app, manages the main menu, and handles navigation between the home screen and game modes. |
-| **`public/js/config.js`** | Defines supported languages (`LANG_CONFIG`), default application settings (`GET_DEFAULTS`), and game-specific configurations. |
-| **`public/js/store.js`** | Manages the application's state, persisting user preferences, themes, and game progress to `localStorage`. |
-| **`public/js/ui.js`** | Handles all User Interface logic, including rendering headers, populating settings menus dynamically, and managing modals. |
-| **`public/js/game_core.js`** | The base class (`GameMode`) for all games, providing shared logic for navigation, audio playback, input handling, and scoring. |
-| **`public/js/games.js`** | Contains the specific logic and rendering methods for each game mode: Flashcards, Quiz, True/False, Matching, Voice, and Sentences. |
-| **`public/js/data.js`** | Manages data fetching, parsing the vocabulary list (likely from JSON/CSV), and providing data subsets to games. |
-| **`public/js/services.js`** | Handles auxiliary services such as Text-to-Speech (Audio) management and visual effects (Confetti). |
-| **`public/sw.js`** | The Service Worker file that enables offline functionality and caches core assets for faster loading. |
-
----
-
-## Key Functions & Responsibilities
-
-### `public/js/main.js`
-* **`App.init()`**: Initializes the application, loads data, and sets up event listeners.
-* **`App.goHome()`**: Renders the main dashboard with statistics and game mode buttons.
-* **`App.launchGameMode(mode)`**: Instantiates and starts a specific game mode (e.g., `new Quiz('quiz')`).
-
-### `public/js/config.js`
-* **`GET_DEFAULTS()`**: Returns an object containing the default values for all system settings (e.g., `globalClickMode`, `quizPlayEx`).
-
-### `public/js/store.js`
-* **`Store.saveSettings()`**: Reads values from UI inputs (checkboxes, radios) and saves them to `localStorage`.
-* **`Store.loadSettings()`**: Retrieves settings from storage to populate the UI.
-* **`Store.setLoc(mode, index)`**: Saves the user's current progress (index) for a specific game mode.
-
-### `public/js/ui.js`
-* **`UIManager.loadSettings()`**: Populates the settings modal inputs with values from the Store.
-* **`UIManager.renderSettingsUI()`**: Dynamically injects HTML for settings options (like language dropdowns) based on `LANG_CONFIG`.
-* **`UIManager.header(curr, total, score)`**: Generates the standard top navigation bar used in all games.
-* **`UIManager.openEditModal()`**: Opens the admin interface to edit vocabulary data.
-
-### `public/js/game_core.js`
-* **`GameMode.nav(direction)`**: Handles navigation to the next or previous card, including randomization logic.
-* **`GameMode.playSmartAudio(langKey)`**: intelligently plays audio, masking specific words in example sentences if necessary.
-* **`GameMode.handleInput(el, text, lang, onConfirm)`**: Manages user interaction, distinguishing between "Single Click" (instant submit) and "Double Click" (select then confirm).
-
-### `public/js/games.js`
-* **`Flashcard.render()`**: Displays the front and back of a card with 3D flip animations.
-* **`Quiz.render()`**: Displays a question and multiple-choice answers, handling distractions.
-* **`TF.render()`**: Generates a "True/False" scenario by checking if a random definition matches the displayed word.
-* **`Sentences.render()`**: Generates a fill-in-the-blank question by masking the target word within an example sentence.
-* **`Sentences.runCustomAutoPlay()`**: Handles the specific audio logic for Sentences, playing the sentence with a pause where the blank is.
+| File Name | Key Functions | Description |
+| :--- | :--- | :--- |
+| **`public/index.html`** | N/A | Main entry point containing the HTML skeleton, Tailwind config, settings modals, and script loaders. |
+| **`public/js/main.js`** | `App.init()`, `App.goHome()` | The central controller that initializes services, handles routing, and renders the home dashboard. |
+| **`public/js/store.js`** | `saveSettings()`, `applyTheme()` | Manages `localStorage` persistence for user preferences, game states, and dark mode toggling. |
+| **`public/js/ui.js`** | `header()`, `loadSettings()` | Generates dynamic UI components (headers, audio bars) and binds logic to the HTML settings menu. |
+| **`public/js/game_core.js`** | `nav()`, `autoPlay()` | The base class providing shared logic for navigation, keyboard inputs, and audio handling. |
+| **`public/js/game_flashcard.js`** | `update()`, `playSmartAudio()` | Implements flip-card logic with context-aware audio (plays word on front, example on back). |
+| **`public/js/game_quiz.js`** | `check()`, `update()` | Manages multiple-choice logic and a multi-state question box (Front → Back 1 → Back 2). |
+| **`public/js/game_tf.js`** | `check()`, `update()` | Implements True/False logic with specific visual feedback (green/red highlights) and audio context. |
+| **`public/js/game_match.js`** | `tap()`, `restorePrev()` | Grid matching game that saves progress state or resets the level on back navigation. |
+| **`public/js/game_sentences.js`** | `update()`, `runCustomAutoPlay()` | Implements fill-in-the-blank logic with smart masking for parentheses and multi-word phrases. |
+| **`public/js/game_voice.js`** | `listen()`, `runCustomAutoPlay()` | Integrates Web Speech API for pronunciation challenges and auto-plays prompt audio. |
+| **`public/js/data.js`** | `load()`, `getStats()` | Fetches and parses vocabulary datasets and user statistics from Firebase Realtime Database. |
+| **`public/js/auth.js`** | `initAuth()`, `logout()` | Handles Firebase user authentication, anonymous sign-ins, and session management. |
+| **`public/js/services.js`** | `play()`, `fitAll()` | Helper classes for Text-to-Speech generation and dynamic text resizing (TextFitter). |
 
 ---
 
-## Critical App Components
+## Technical Details
 
-### 1. Game Modes
-* **Flashcards**: Standard study tool with customizable front/back faces and flip speed.
-* **Quiz**: Multiple-choice testing with configurable question/answer languages.
-* **True / False**: Rapid-fire verification of word pairs.
-* **Matching**: A grid-based game to pair words (e.g., Kanji to English).
-* **Voice**: Speech recognition game requiring users to pronounce words correctly.
-* **Sentences**: Context-based learning where users fill in missing words in example sentences.
+### 1. Modular Architecture
+* **Split Logic**: The monolithic `games.js` was refactored into six separate files (`game_*.js`) to isolate game logic, reduce code bloat, and improve maintainability.
+* **HTML Loading**: `index.html` explicitly loads these modules in order to ensure classes are available before `main.js` initializes the App.
 
-### 2. Audio Engine
-* **Smart Masking**: The app can "read" a sentence but silence specific target words (replacing them with natural pauses) to prevent giving away answers during audio-only study.
-* **Auto-Play**: Configurable per game mode. Can trigger on card load, on answer selection, or on correct answers.
+### 2. Context-Aware Audio
+* **Smart Detection**: Functions like `playSmartAudio` inspect the DOM to see what text is currently visible (e.g., Front Word vs. Back Example).
+* **Targeted Playback**: If the card is flipped to show an example sentence, the audio engine switches to play that specific sentence rather than the original word.
 
-### 3. Input Modes
-* **Single Click**: Selection immediately submits the answer (faster).
-* **Double Click**: First click selects/plays audio; second click submits (prevents mistakes).
-* **Global Setting**: Users can toggle this preference globally across all supported game modes.
+### 3. Sentence Masking Engine
+* **Parentheses Logic**: Automatically detects text inside `( )` and converts it into interactive blanks.
+* **Phrase Matching**: Can split multi-word vocabulary (e.g., "back of hand") and mask scattered occurrences across a sentence.
+* **Audio Pausing**: When auto-playing sentences, the masked portions are replaced with silence/pauses (`...` or `、`) to avoid revealing the answer.
 
-### 4. Data Management
-* **Vocabulary Data**: Structured JSON/Object data containing multiple fields per entry (e.g., `ja`, `ja_furi`, `en`, `en_ex`).
-* **Separators**: Supports multiple spellings/variations using separators like `·` (middle dot), ensuring matching logic works even if only one variant is present in a sentence.
+### 4. State Persistence & Restoration
+* **Matching Game**: Automatically saves the state of the grid. If a user navigates away and returns, the game resumes.
+* **Fresh Start**: Pressing the "Back" button (restore previous) explicitly forces a fresh shuffle and restart of the previous level configuration.
 
-### 5. Customization
-* **Theme Engine**: Supports Dark/Light modes and distinct color themes (Classic, Sakura, Ocean, etc.).
-* **Language Config**: Highly extensible `LANG_CONFIG` allows adding new languages or fields (like Pinyin or Romaji) by simply updating the configuration array.
+### 5. Visual & Font Optimization
+* **CJK Support**: The CSS font stack prioritizes `Noto Sans JP/KR/SC` to ensure Asian characters render with correct weights (using `font-black` for maximum legibility).
+* **Feedback Loops**: Quiz and True/False modes utilize specific CSS classes (`ring-emerald-400`, `bg-rose-500`) to provide immediate visual feedback on answer selection.

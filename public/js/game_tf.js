@@ -1,3 +1,4 @@
+/* js/game_tf.js */
 class TF extends GameMode {
     constructor(k) { 
         super(k); 
@@ -6,31 +7,51 @@ class TF extends GameMode {
     }
 
     playSmartAudio(langKey) {
-        if (!app.store.prefs.tfAuto) return;
-
         const item = this.list[this.i];
+        
+        // 1. Determine Context (Example vs Word) based on VISIBLE text in DOM
         const p = app.store.prefs;
         const frontKey = p.tfFront || 'ja'; 
         
-        let isExampleVisible = false;
         const conf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===frontKey) : null;
-        let exText = "";
-        if (conf && conf.exKey) exText = item[conf.exKey];
+        let mainExample = (conf && conf.exKey) ? item[conf.exKey] : "";
+        const isShowingExample = this.dom.front && mainExample && this.dom.front.innerText.includes(mainExample);
 
-        if (this.dom.front && exText && this.dom.front.innerText.includes(exText)) {
-            isExampleVisible = true;
+        let targetKey = langKey || frontKey;
+        let textToPlay = "";
+
+        if (isShowingExample) {
+            // Context: Example
+            if (langKey) {
+                // Button Click: Try to play Example in requested language
+                const btnConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===langKey) : null;
+                if (btnConf && btnConf.exKey && item[btnConf.exKey]) {
+                    textToPlay = item[btnConf.exKey];
+                } else {
+                    textToPlay = item[langKey]; // Fallback to word
+                }
+            } else {
+                // Auto/Toggle: Play main example
+                textToPlay = mainExample;
+            }
+        } else {
+            // Context: Word
+            targetKey = langKey || frontKey;
+            // Handle Visual Only cols
+            const tConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===targetKey) : null;
+            if(tConf && tConf.visualOnly && tConf.audioSrc) {
+                textToPlay = item[tConf.audioSrc];
+                targetKey = tConf.audioSrc;
+            } else {
+                textToPlay = item[targetKey];
+            }
         }
 
-        if (isExampleVisible) {
-            app.audio.play(exText, frontKey, 'tf', 0);
-        } else {
-            let text = item[frontKey];
-            let audioLang = frontKey;
-            if(conf && conf.visualOnly && conf.audioSrc) {
-                text = item[conf.audioSrc];
-                audioLang = conf.audioSrc;
+        if (textToPlay) {
+            // Only auto-play if enabled or if explicit click (langKey exists)
+            if (langKey || p.tfAuto) {
+                app.audio.play(textToPlay, targetKey, 'tf', 0);
             }
-            app.audio.play(text, audioLang, 'tf', 0);
         }
     }
 
@@ -100,7 +121,11 @@ class TF extends GameMode {
         
         if(this.dom.topClick) this.dom.topClick.onclick = () => {
             app.game.toggle(this.dom.topClick, c[frontKey].replace(/'/g,"\\'"), fSec.replace(/'/g,"\\'"), fEx.replace(/'/g,"\\'"), fExSrc.replace(/'/g,"\\'"), c[frontKey].replace(/'/g,"\\'"));
-            this.playSmartAudio(frontKey);
+            
+            // Check setting for toggle-play
+            if(p.tfPlayEx) {
+                this.playSmartAudio();
+            }
         };
         
         if(this.dom.lbl) this.dom.lbl.innerText = "Matches?";
@@ -109,15 +134,30 @@ class TF extends GameMode {
             this.dom.matchText.className = "fit-target font-black text-slate-600 dark:text-neutral-400 transition-colors";
         }
         
+        // FIX: Clean slate
         if(this.dom.card) {
             this.dom.card.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
             this.dom.card.classList.add('bg-white', 'dark:bg-neutral-900', 'border-transparent');
         }
         
+        // FIX: Reset Button Styles (Green/Red)
+        const btns = this.root.querySelectorAll('button.rounded-2xl');
+        btns.forEach(b => {
+            b.classList.remove('bg-emerald-500', 'hover:bg-emerald-600', 'bg-rose-500', 'hover:bg-rose-600', 'text-white', 'border-transparent');
+            // Revert to default logic handled in setup? 
+            // Since we hardcoded classes in setup, we can just reset className, but that's messy.
+            // Better to remove the specific success/fail classes and let original classes show?
+            // Actually, setup uses specific classes. Let's just re-render setup or be careful.
+            // EASIEST: Just reset their specific "active" classes if added.
+            // But check() adds bg-emerald-500 which overrides. 
+            // So we need to strip those specific overrides.
+            b.classList.remove('bg-emerald-500', 'bg-rose-500', '!text-white', '!border-emerald-600', '!border-rose-600');
+        });
+
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
         this.afterRender();
-        this.playSmartAudio(frontKey);
+        this.playSmartAudio(); 
     }
     
     check(btn, userChoice) {
@@ -127,6 +167,11 @@ class TF extends GameMode {
         this.busy = true; const win = (userChoice === this.truth);
         
         this.highlightQBox(this.dom.card, win);
+        
+        // FIX: Highlight Button
+        if(btn) {
+            btn.classList.add(win ? 'bg-emerald-500' : 'bg-rose-500', '!text-white', win ? '!border-emerald-600' : '!border-rose-600');
+        }
         
         if(this.dom.lbl) this.dom.lbl.innerText = ""; 
         

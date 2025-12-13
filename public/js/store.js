@@ -2,7 +2,7 @@
 class Store {
     constructor() {
         const defaults = (typeof GET_DEFAULTS === 'function') ? GET_DEFAULTS() : {};
-        this.STORAGE_KEY = 'vm_prefs_v1175_STABLE'; 
+        this.STORAGE_KEY = 'vm_prefs_v1195_STABLE'; 
 
         const customDefaults = {
             ...defaults,
@@ -10,7 +10,9 @@ class Store {
             sentencesBottomLang: 'en',
             sentencesBottomDisp: 'sentence',
             font: 'sans',
-            quizPlayAnswer: true // NEW DEFAULT
+            quizPlayAnswer: true,
+            showAudioBtns: true,
+            quizShowEx: false // FIX: Default Off
         };
 
         try {

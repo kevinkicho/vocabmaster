@@ -24,7 +24,6 @@ class App {
         try {
             this.store = new Store();
             this.ui = new UIManager(this.store);
-            // Initialize Auth first
             this.auth = new AuthManager();
             this.audio = new AudioService();
             this.data = new DataService();
@@ -55,35 +54,29 @@ class App {
             } else { this.goHome(false); }
         };
 
-        // Auth handling is in auth.js, but we set listener for notes here too
         if(typeof firebase !== 'undefined' && typeof auth !== 'undefined') {
             auth.onAuthStateChanged(user => { if(this.notes) this.notes.setUser(user); });
         }
         
-        btn.innerText = "Connecting..."; btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');
+        // FIX: REMOVED TEXT ANIMATIONS ("Connecting...", "Loading Data...")
+        // Just disable button while loading
+        btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed');
         
         try {
-            // FIX: Wait for Auth (Anon or Real) to settle before loading data
-            // This ensures Realtime DB rules don't reject the read request.
             await this.auth.waitForAuth();
-            console.log("Auth Settled. Loading Data...");
-
-            btn.innerText = "Loading Data...";
             const count = await this.data.load();
-            console.log("Data Loaded:", count);
-
-            btn.innerText = "Preparing Assets...";
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
             
             const isMock = this.data.list.length > 0 && this.data.list[0].id === 0 && this.data.list[0].ja === "Test 1";
-            if (isMock) { statusBar.innerText = "Data Error (Using Mock)"; statusBar.classList.add('text-rose-500'); console.warn("Using Mock Data"); } 
+            if (isMock) { statusBar.innerText = "Data Error (Using Mock)"; statusBar.classList.add('text-rose-500'); } 
             else { statusBar.innerText = `${count} Words Ready`; statusBar.classList.remove('text-rose-500'); }
 
             btn.innerText = "Start"; btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed');
             
+            // Auto-start if user is already familiar? Or just wait for click.
             btn.onclick = () => { 
-                try { if(this.audio) this.audio.unlock(); } catch(e) { console.warn("Audio unlock failed:", e); }
+                try { if(this.audio) this.audio.unlock(); } catch(e) { }
                 const overlay = document.getElementById('overlay-init');
                 if(overlay) {
                     overlay.classList.add('opacity-0', 'pointer-events-none', 'transition-opacity', 'duration-500');
@@ -91,6 +84,7 @@ class App {
                 }
             };
             
+            // Bind Modal Closes
             const modalSettings = document.getElementById('modal-settings');
             if(modalSettings) modalSettings.onclick = (e) => { if (e.target === modalSettings) this.modal(false); };
             const modalNote = document.getElementById('modal-note');
@@ -100,22 +94,20 @@ class App {
             const modalStats = document.getElementById('modal-stats');
             if(modalStats) modalStats.onclick = (e) => { if(e.target === modalStats) modalStats.classList.add('hidden'); };
 
+            // Ensure we are at Home
             this.goHome(false); 
         } catch (e) {
             console.error("Init failed:", e);
-            btn.innerText = "Start (Debug)"; btn.disabled = false; btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerText = "Start (Debug)"; btn.disabled = false;
             btn.onclick = () => document.getElementById('overlay-init').remove();
-            alert("Init Error: " + e.message + "\nCheck Developer Tab > Debug Logs");
         }
     }
 
     handleAuthClick() {
         if (!auth || !provider) return;
-        // FIX: Treat Anonymous users as "Not Logged In" for UI purposes
         if (auth.currentUser && !auth.currentUser.isAnonymous) { 
             app.ui.openProfileModal(); 
         } else { 
-            // If anon or null, trigger Google Sign In
             auth.signInWithPopup(provider).catch(e => alert(e.message)); 
         }
     }
@@ -208,8 +200,6 @@ window.app = new App();
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('SW Registered'))
-            .catch(err => console.log('SW Failed', err));
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW Failed', err));
     });
 }

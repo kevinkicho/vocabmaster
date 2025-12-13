@@ -1,3 +1,4 @@
+/* js/game_quiz.js */
 class Quiz extends GameMode {
     constructor(k) { 
         super(k); 
@@ -6,31 +7,53 @@ class Quiz extends GameMode {
     }
 
     playSmartAudio(langKey) {
-        if (!app.store.prefs.quizAuto) return; 
-
         const item = this.list[this.i];
-        const qKey = langKey || app.store.prefs.quizQ || 'ja'; 
         
-        let isExampleVisible = false;
+        // 1. Determine which language/text to play based on visibility context
+        let targetKey = langKey || app.store.prefs.quizQ || 'ja'; 
+        let textToPlay = "";
         
+        // Is the question box currently showing an example sentence?
+        const qKey = app.store.prefs.quizQ || 'ja';
         const qConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===qKey) : null;
-        let exText = "";
-        if (qConf && qConf.exKey) exText = item[qConf.exKey];
+        let mainExample = (qConf && qConf.exKey) ? item[qConf.exKey] : "";
+        const isShowingExample = this.dom.qText && mainExample && this.dom.qText.innerText.includes(mainExample);
 
-        if (this.dom.qText && exText && this.dom.qText.innerText.includes(exText)) {
-            isExampleVisible = true;
+        if (isShowingExample) {
+            // Context: Example is visible.
+            // If user clicked a specific button (langKey present), play THAT language's example
+            if (langKey) {
+                const btnConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===langKey) : null;
+                if (btnConf && btnConf.exKey && item[btnConf.exKey]) {
+                    textToPlay = item[btnConf.exKey];
+                    targetKey = langKey; // Play in the requested language
+                } else {
+                    // Fallback to word if no example for that language
+                    textToPlay = item[langKey];
+                }
+            } else {
+                // Auto-play / Toggle: Play the main example
+                textToPlay = mainExample;
+                targetKey = qKey;
+            }
+        } else {
+            // Context: Word is visible.
+            // If user clicked a button, play that word. If auto-play, play main word.
+            targetKey = langKey || qKey;
+            
+            // Handle visual-only columns (like Pinyin)
+            const tConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===targetKey) : null;
+            if(tConf && tConf.visualOnly && tConf.audioSrc) {
+                textToPlay = item[tConf.audioSrc];
+                targetKey = tConf.audioSrc;
+            } else {
+                textToPlay = item[targetKey];
+            }
         }
 
-        if (isExampleVisible) {
-            app.audio.play(exText, qKey, 'quiz', 0);
-        } else {
-            let text = item[qKey];
-            let audioLang = qKey;
-            if(qConf && qConf.visualOnly && qConf.audioSrc) {
-                text = item[qConf.audioSrc];
-                audioLang = qConf.audioSrc;
-            }
-            app.audio.play(text, audioLang, 'quiz', 0);
+        // 2. Play it
+        if (textToPlay) {
+            app.audio.play(textToPlay, targetKey, 'quiz', 0);
         }
     }
 
@@ -93,15 +116,22 @@ class Quiz extends GameMode {
         }
         
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        
         if(this.dom.qBox) {
             this.highlightQBox(this.dom.qBox, false); 
             this.dom.qBox.classList.remove('bg-emerald-500', 'bg-rose-500', 'border-emerald-500', 'border-rose-500');
             
+            // FIX: Toggle Logic
             this.dom.qBox.onclick = () => {
+                // Perform visual toggle
                 app.game.toggle(this.dom.qBox, qText.replace(/'/g,"\\'"), qSec.replace(/'/g,"\\'"), qEx.replace(/'/g,"\\'"), qExSrc.replace(/'/g,"\\'"), qText.replace(/'/g,"\\'"));
-                this.playSmartAudio(qKey);
+                // Play audio for NEW state if setting enabled
+                if(p.quizPlayEx) {
+                    this.playSmartAudio(); // No args = auto/toggle behavior
+                }
             };
         }
+        
         if(this.dom.qText) {
              this.dom.qText.innerText = qText; 
              this.dom.qText.innerHTML = qText; 
@@ -127,13 +157,14 @@ class Quiz extends GameMode {
                 
                 btn.onclick = () => {
                     const doPlay = app.store.prefs.quizPlayAnswer !== false; 
+                    // Pass null audio text if setting disabled to mute it
                     app.game.handleInput(wrapper, doPlay ? txt.replace(/'/g,"\\'") : null, doPlay ? aKey : null, () => app.game.check(btn, pData.id===c.id));
                 }
             }
         });
 
         this.afterRender();
-        this.playSmartAudio(qKey);
+        if(p.quizAuto) this.playSmartAudio(); 
     }
     
     async check(btn, isCorrect) {
@@ -149,18 +180,27 @@ class Quiz extends GameMode {
         
         this.highlightQBox(this.dom.qBox, isCorrect);
         
+        // FIX: VISUAL FEEDBACK FOR BUTTON
+        btnWrap.classList.remove('bg-white', 'dark:bg-neutral-900', 'border-slate-100', 'dark:border-neutral-800');
+        if (isCorrect) {
+            btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
+        } else {
+            btnWrap.classList.add('bg-rose-500', 'border-rose-500');
+        }
+        
         if(isCorrect) {
             this.answered = true; this.busy = true; this.score(10);
-            btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
             app.celebration.play();
             
             let pAudio = null;
             if (app.store.prefs.quizPlayCorrect) {
-                pAudio = this.playSmartAudio(app.store.prefs.quizQ || 'ja');
+                // Play Question Audio on Correct
+                const qKey = app.store.prefs.quizQ || 'ja';
+                pAudio = app.audio.play(this.list[this.i][qKey], qKey, 'quiz', 0);
             }
             this.waitAndNav(pAudio, 2500); 
         } else {
-            btnWrap.classList.add('bg-rose-500', 'border-rose-500');
+            // Optional: shake effect or just stay
         }
     }
 }

@@ -1,3 +1,4 @@
+/* js/game_voice.js */
 class Voice extends GameMode {
     constructor(k) { 
         super('voice'); 
@@ -68,7 +69,14 @@ class Voice extends GameMode {
         
         if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
         if(this.dom.front) { this.dom.front.innerText = front; this.dom.front.innerHTML = front; }
-        if(this.dom.cardClick) this.dom.cardClick.onclick = () => app.game.toggle(this.dom.cardClick, front.replace(/'/g,"\\'"), '', fEx.replace(/'/g,"\\'"), '', front.replace(/'/g,"\\'"));
+        
+        if(this.dom.cardClick) this.dom.cardClick.onclick = () => {
+            app.game.toggle(this.dom.cardClick, front.replace(/'/g,"\\'"), '', fEx.replace(/'/g,"\\'"), '', front.replace(/'/g,"\\'"));
+            if(p.voicePlayEx) {
+                this.playSmartAudio();
+            }
+        };
+
         if(this.dom.res) {
              this.dom.res.innerText = "Listening..."; 
              this.dom.res.className = "absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-400 transition-all opacity-0 scale-90";
@@ -82,15 +90,54 @@ class Voice extends GameMode {
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
         this.afterRender();
-        this.runCustomAutoPlay();
+        
+        // Auto-play only if no explicit user interaction triggered this update
+        if(p.voiceAuto) this.playSmartAudio(); 
     }
 
-    runCustomAutoPlay() {
+    // FIX: Context-Aware Audio Player (Same as TF)
+    playSmartAudio(langKey) {
+        const item = this.list[this.i];
+        
+        // 1. Determine Context (Example vs Word) based on VISIBLE text in DOM
         const p = app.store.prefs;
-        if(p.voiceAuto) {
-            const c = this.list[this.i];
-            const frontKey = p.voiceDispFront || 'en';
-            app.audio.play(c[frontKey], frontKey, 'voice', 0);
+        const frontKey = p.voiceDispFront || 'en'; 
+        
+        const conf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===frontKey) : null;
+        let mainExample = (conf && conf.exKey) ? item[conf.exKey] : "";
+        const isShowingExample = this.dom.front && mainExample && this.dom.front.innerText.includes(mainExample);
+
+        let targetKey = langKey || frontKey;
+        let textToPlay = "";
+
+        if (isShowingExample) {
+            // Context: Example
+            if (langKey) {
+                const btnConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===langKey) : null;
+                if (btnConf && btnConf.exKey && item[btnConf.exKey]) {
+                    textToPlay = item[btnConf.exKey];
+                } else {
+                    textToPlay = item[langKey]; 
+                }
+            } else {
+                textToPlay = mainExample;
+            }
+        } else {
+            // Context: Word
+            targetKey = langKey || frontKey;
+            const tConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l=>l.key===targetKey) : null;
+            if(tConf && tConf.visualOnly && tConf.audioSrc) {
+                textToPlay = item[tConf.audioSrc];
+                targetKey = tConf.audioSrc;
+            } else {
+                textToPlay = item[targetKey];
+            }
+        }
+
+        if (textToPlay) {
+            if (langKey || p.voiceAuto) {
+                app.audio.play(textToPlay, targetKey, 'voice', 0);
+            }
         }
     }
 

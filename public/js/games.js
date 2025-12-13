@@ -1,23 +1,67 @@
 /* js/games.js */
 
+/* --- FLASHCARD MODE --- */
 class Flashcard extends GameMode {
-    constructor(k) { super(k); this.render(); }
+    constructor(k) { 
+        super(k); 
+        this.setup(); 
+        this.update(); 
+    }
     
     triggerAction(action) {
         if (action === 'next') this.nav(1);
         else if (action === 'prev') this.nav(-1);
         else if (action === 'up' || action === 'down') {
-            const card = this.root.querySelector('.perspective-\\[1000px\\]');
-            if(card && card.firstElementChild) card.firstElementChild.classList.toggle('[transform:rotateY(180deg)]');
+            // Use cached DOM reference
+            if(this.dom.card) this.dom.card.classList.toggle('[transform:rotateY(180deg)]');
         }
     }
 
-    render() {
-        this.busy = false;
-        const item = this.list[this.i];
+    setup() {
         const p = app.store.prefs;
         const dur = p.flashSpeed || "700";
         
+        this.root.innerHTML = `
+            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
+                <div class="flex-1 landscape:flex-1 flex flex-col min-h-0 relative z-10">
+                    <div id="fc-header"></div>
+                    <div class="perspective-[1000px] w-full flex-1 min-h-0 cursor-pointer group select-none relative pb-2" onclick="if(!event.target.closest('button')) this.firstElementChild.classList.toggle('[transform:rotateY(180deg)]')">
+                        <div id="fc-card" class="[transform-style:preserve-3d] w-full h-full relative rounded-[2rem] shadow-soft transition-transform" style="transition-duration: ${dur}ms">
+                            <div class="absolute inset-0 [backface-visibility:hidden] [transform:translateZ(1px)] bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 flex flex-col shadow-sm z-10 overflow-hidden gpu-fix">
+                                <div class="flex-1 w-full h-full fit-box"><span id="fc-front" class="fit-target font-black text-slate-800 dark:text-neutral-200 tracking-tight"></span></div>
+                                <div class="h-10 shrink-0 w-full text-center text-slate-300 dark:text-neutral-600 text-sm font-bold uppercase tracking-widest flex items-center justify-center">Tap to Flip</div>
+                            </div>
+                            <div id="fc-back-container" class="absolute inset-0 [backface-visibility:hidden] bg-slate-800 dark:bg-black text-white rounded-[2rem] [transform:rotateY(180deg)_translateZ(1px)] flex flex-col border border-slate-700 dark:border-neutral-800 shadow-2xl z-10 overflow-hidden gpu-fix">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="shrink-0 landscape:w-1/2 flex flex-col justify-center landscape:justify-center landscape:pt-2">
+                    <div id="fc-audio"></div>
+                    <div id="fc-nav"></div>
+                </div>
+            </div>`;
+        
+        // Cache Elements
+        this.dom.header = this.root.querySelector('#fc-header');
+        this.dom.card = this.root.querySelector('#fc-card');
+        this.dom.front = this.root.querySelector('#fc-front');
+        this.dom.backContainer = this.root.querySelector('#fc-back-container');
+        this.dom.audio = this.root.querySelector('#fc-audio');
+        this.dom.nav = this.root.querySelector('#fc-nav');
+        
+        this.dom.nav.innerHTML = app.ui.nav();
+    }
+
+    update() {
+        this.busy = false;
+        const item = this.list[this.i];
+        const p = app.store.prefs;
+        
+        // Reset Flip
+        if(this.dom.card) this.dom.card.classList.remove('[transform:rotateY(180deg)]');
+        
+        // Update Content
         const frontText = item[p.flashFront || 'ja'];
         const backs = [item[p.flashBack1], item[p.flashBack2], item[p.flashBack3], item[p.flashBack4]].filter(t => t && t.trim()); 
 
@@ -27,83 +71,141 @@ class Flashcard extends GameMode {
         
         if(backs.length <= 2) backHtml = `<div class="flex flex-col landscape:flex-row w-full h-full">${backHtml}</div>`;
 
-        this.root.innerHTML = `
-            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-1 landscape:flex-1 flex flex-col min-h-0 relative z-10">
-                    ${app.ui.header(this.i, this.list.length, app.score, {showDice:true})}
-                    <div class="perspective-[1000px] w-full flex-1 min-h-0 cursor-pointer group select-none relative pb-2" onclick="if(!event.target.closest('button')) this.firstElementChild.classList.toggle('[transform:rotateY(180deg)]')">
-                        <div class="[transform-style:preserve-3d] w-full h-full relative rounded-[2rem] shadow-soft transition-transform" style="transition-duration: ${dur}ms">
-                            <div class="absolute inset-0 [backface-visibility:hidden] [transform:translateZ(1px)] bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 flex flex-col shadow-sm z-10 overflow-hidden gpu-fix">
-                                <div class="flex-1 w-full h-full fit-box"><span class="fit-target font-black text-slate-800 dark:text-neutral-200 tracking-tight">${frontText}</span></div>
-                                <div class="h-10 shrink-0 w-full text-center text-slate-300 dark:text-neutral-600 text-sm font-bold uppercase tracking-widest flex items-center justify-center">Tap to Flip</div>
-                            </div>
-                            <div class="absolute inset-0 [backface-visibility:hidden] bg-slate-800 dark:bg-black text-white rounded-[2rem] [transform:rotateY(180deg)_translateZ(1px)] flex flex-col border border-slate-700 dark:border-neutral-800 shadow-2xl z-10 overflow-hidden gpu-fix">${backHtml}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="shrink-0 landscape:w-1/2 flex flex-col justify-center landscape:justify-center landscape:pt-2">${app.ui.audioBar(item)}${app.ui.nav()}</div>
-            </div>`;
+        if(this.dom.front) { this.dom.front.innerText = frontText; this.dom.front.innerHTML = frontText; }
+        if(this.dom.backContainer) this.dom.backContainer.innerHTML = backHtml;
+        if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(item);
+
         this.afterRender();
         this.autoPlay('flash');
     }
 }
 
+/* --- QUIZ MODE --- */
 class Quiz extends GameMode {
-    constructor(k) { super(k); this.render(); }
-    render() {
-        this.busy = false; this.answered = false;
+    constructor(k) { 
+        super(k); 
+        this.setup(); 
+        this.update(); 
+    }
+
+    setup() {
+        this.root.innerHTML = `
+            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
+                <div class="flex-none h-[30%] landscape:h-full landscape:flex-1 flex flex-col">
+                    <div id="qz-header"></div>
+                    <div id="q-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col relative mb-2 landscape:mb-2 overflow-hidden cursor-pointer select-none gpu-fix">
+                         <div class="fit-box flex-col">
+                            <span id="qz-q-text" class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300"></span>
+                            <div id="qz-ex-container" class="w-full text-center"></div>
+                         </div>
+                    </div>
+                </div>
+                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
+                    <div id="qz-audio" class="mt-auto landscape:mt-0"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
+                        ${[0,1,2,3].map(i => `
+                            <div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix">
+                                <button id="qz-btn-${i}" class="absolute inset-0 w-full h-full fit-box z-10">
+                                    <span class="fit-target font-bold text-slate-600 dark:text-neutral-400"></span>
+                                </button>
+                            </div>`).join('')}
+                    </div>
+                    <div id="qz-nav"></div>
+                </div>
+            </div>`;
+        
+        this.dom.header = this.root.querySelector('#qz-header');
+        this.dom.qBox = this.root.querySelector('#q-box');
+        this.dom.qText = this.root.querySelector('#qz-q-text');
+        this.dom.exContainer = this.root.querySelector('#qz-ex-container');
+        this.dom.audio = this.root.querySelector('#qz-audio');
+        this.dom.btns = [0,1,2,3].map(i => this.root.querySelector(`#qz-btn-${i}`));
+        
+        this.root.querySelector('#qz-nav').innerHTML = app.ui.nav();
+    }
+
+    update() {
+        this.busy = false; 
+        this.answered = false;
         const c = this.list[this.i];
         const p = app.store.prefs;
-        const qKey = p.quizQ || 'ja'; const aKey = p.quizA || 'en';
-        const qText = c[qKey];
+        const qKey = p.quizQ || 'ja'; 
+        const aKey = p.quizA || 'en';
         
+        // Prepare Question Data
+        const qText = c[qKey];
         let qSec="", qEx="", qExSrc="";
         if(typeof LANG_CONFIG !== 'undefined') {
             const qConf = LANG_CONFIG.find(l=>l.key===qKey); if(qConf) { qSec=c[qConf.secondary]||""; qEx=c[qConf.exKey]||""; }
             const aConf = LANG_CONFIG.find(l=>l.key===aKey); if(aConf) qExSrc=c[aConf.exKey]||"";
         }
 
+        // Example Text
         let exHtml = '';
         if (p.quizShowEx) {
             const exMain = c[p.quizExMain] || (LANG_CONFIG.find(l=>l.key===p.quizExMain)?.exKey ? c[LANG_CONFIG.find(l=>l.key===p.quizExMain).exKey] : '');
             const exSub = c[p.quizExSub] || (LANG_CONFIG.find(l=>l.key===p.quizExSub)?.exKey ? c[LANG_CONFIG.find(l=>l.key===p.quizExSub).exKey] : '');
             if(exMain || exSub) exHtml = `<div class="mt-4 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-sm font-bold text-indigo-600 dark:text-indigo-400 mb-1">${exMain}</p>`:''}${exSub?`<p class="text-xs text-slate-400 dark:text-neutral-500">${exSub}</p>`:''}</div>`;
         }
+        
+        // Update DOM
+        if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        if(this.dom.qBox) {
+            this.highlightQBox(this.dom.qBox, false); // Reset colors
+            this.dom.qBox.classList.remove('bg-emerald-500', 'bg-rose-500', 'border-emerald-500', 'border-rose-500');
+            this.dom.qBox.onclick = () => app.game.toggle(this.dom.qBox, qText.replace(/'/g,"\\'"), qSec.replace(/'/g,"\\'"), qEx.replace(/'/g,"\\'"), qExSrc.replace(/'/g,"\\'"), qText.replace(/'/g,"\\'"));
+        }
+        if(this.dom.qText) {
+             this.dom.qText.innerText = qText; 
+             this.dom.qText.innerHTML = qText; 
+             this.dom.qText.classList.remove('text-white');
+             this.dom.qText.classList.add('text-slate-800', 'dark:text-neutral-200');
+        }
+        if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
-        this.root.innerHTML = `
-            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-none h-[30%] landscape:h-full landscape:flex-1 flex flex-col">
-                    ${app.ui.header(this.i, this.list.length, app.score, {showDice:true})}
-                    <div id="q-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col relative mb-2 landscape:mb-2 overflow-hidden cursor-pointer select-none gpu-fix" onclick="app.game.toggle(this, '${qText.replace(/'/g,"\\'")}', '${qSec.replace(/'/g,"\\'")}', '${qEx.replace(/'/g,"\\'")}', '${qExSrc.replace(/'/g,"\\'")}', '${qText.replace(/'/g,"\\'")}')">
-                         <div class="fit-box flex-col"><span class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300">${qText}</span>${exHtml}</div>
-                    </div>
-                </div>
-                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
-                    <div class="mt-auto landscape:mt-0">${app.ui.audioBar(c)}</div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
-                        ${this.getDistractors(c.id, 4).map(p => `<div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix"><button onclick="app.game.handleInput(this.parentElement, '${p[aKey].replace(/'/g,"\\'")}', '${aKey}', () => app.game.check(this, ${p.id===c.id}))" class="absolute inset-0 w-full h-full fit-box z-10"><span class="fit-target font-bold text-slate-600 dark:text-neutral-400">${p[aKey]}</span></button></div>`).join('')}
-                    </div>
-                    ${app.ui.nav()}
-                </div>
-            </div>`;
+        // Update Distractors
+        const pool = this.getDistractors(c.id, 4);
+        this.dom.btns.forEach((btn, idx) => {
+            const pData = pool[idx];
+            if(pData) {
+                const txt = pData[aKey];
+                const span = btn.querySelector('span');
+                span.innerText = txt;
+                
+                // Reset Button Styles
+                const wrapper = btn.parentElement;
+                wrapper.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
+                btn.className = "absolute inset-0 w-full h-full fit-box z-10"; // Reset active/ring classes
+                span.className = "fit-target font-bold text-slate-600 dark:text-neutral-400";
+                
+                // Attach Click
+                btn.onclick = () => app.game.handleInput(wrapper, txt.replace(/'/g,"\\'"), aKey, () => app.game.check(btn, pData.id===c.id));
+            }
+        });
+
         this.afterRender();
         this.autoPlay('quiz');
     }
     
-    async check(btnWrap, isCorrect) {
+    async check(btn, isCorrect) {
         if(this.busy || this.answered) return;
-        const btn = btnWrap.closest('div');
-        const qBox = document.getElementById('q-box');
+        const btnWrap = btn.parentElement;
         
         btn.classList.remove('ring-4', 'ring-indigo-400', 'scale-95');
-        btn.className = btn.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-indigo-200|dark:hover:border-indigo-500\/50)\b/g, '');
-        btn.querySelector('span').classList.replace('text-slate-600', 'text-white');
-        btn.querySelector('span').classList.replace('dark:text-neutral-400', 'text-white');
-        this.highlightQBox(qBox, isCorrect);
+        // Reset hover effects
+        btnWrap.className = btnWrap.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-indigo-200|dark:hover:border-indigo-500\/50)\b/g, '');
+        
+        const span = btn.querySelector('span');
+        span.classList.replace('text-slate-600', 'text-white');
+        span.classList.replace('dark:text-neutral-400', 'text-white');
+        
+        this.highlightQBox(this.dom.qBox, isCorrect);
         
         if(isCorrect) {
             this.answered = true; this.busy = true; this.score(10);
-            btn.classList.add('bg-emerald-500', 'border-emerald-500');
+            btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
             app.celebration.play();
             
             let pAudio = null;
@@ -112,18 +214,62 @@ class Quiz extends GameMode {
             }
             this.waitAndNav(pAudio, 2500); 
         } else {
-            btn.classList.add('bg-rose-500', 'border-rose-500');
+            btnWrap.classList.add('bg-rose-500', 'border-rose-500');
         }
     }
 }
 
+/* --- TRUE/FALSE MODE --- */
 class TF extends GameMode {
-    constructor(k) { super(k); this.render(); }
-    render() {
-        this.busy = false; this.answered = false;
+    constructor(k) { 
+        super(k); 
+        this.setup(); 
+        this.update(); 
+    }
+
+    setup() {
+        this.root.innerHTML = `
+            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
+                <div class="flex-none h-[55%] landscape:h-full landscape:flex-1 flex flex-col">
+                    <div id="tf-header"></div>
+                    <div id="tf-c" class="bg-white dark:bg-neutral-900 rounded-[2rem] shadow-sm border-4 border-transparent flex-1 flex flex-col items-center justify-center p-2 text-center transition-all duration-300 relative overflow-hidden mb-2 landscape:mb-2 gpu-fix">
+                        <div id="tf-top-click" class="h-[45%] w-full fit-box cursor-pointer select-none flex-col">
+                            <span id="tf-front" class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300"></span>
+                            <div id="tf-ex-container"></div>
+                        </div>
+                        <div class="h-[10%] w-full flex flex-col items-center justify-center shrink-0"><div class="w-12 h-1 bg-slate-100 dark:bg-neutral-800 rounded-full mb-1"></div><p id="tf-lbl" class="text-slate-400 text-[10px] uppercase tracking-widest font-bold">Matches?</p></div>
+                        <div class="h-[45%] w-full fit-box"><span id="tf-m" class="fit-target font-bold text-slate-600 dark:text-neutral-400 transition-colors"></span></div>
+                    </div>
+                </div>
+                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:pt-2">
+                    <div id="tf-audio" class="mt-auto landscape:mt-0"></div>
+                    <div class="grid grid-cols-2 gap-2 mb-2 mt-2 flex-1 min-h-[100px]">
+                        <button onclick="app.game.check(this, false)" class="bg-rose-100 dark:bg-rose-900/20 hover:bg-rose-200 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-2xl font-black text-2xl border-b-4 border-rose-200 dark:border-rose-800 active:scale-95 active:border-b-0 transition-all h-full shadow-sm flex items-center justify-center">NO</button>
+                        <button onclick="app.game.check(this, true)" class="bg-emerald-100 dark:bg-emerald-900/20 hover:bg-emerald-200 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-2xl font-black text-2xl border-b-4 border-emerald-200 dark:border-emerald-800 active:scale-95 active:border-b-0 transition-all h-full shadow-sm flex items-center justify-center">YES</button>
+                    </div>
+                    <div id="tf-nav"></div>
+                </div>
+            </div>`;
+            
+        this.dom.header = this.root.querySelector('#tf-header');
+        this.dom.card = this.root.querySelector('#tf-c');
+        this.dom.topClick = this.root.querySelector('#tf-top-click');
+        this.dom.front = this.root.querySelector('#tf-front');
+        this.dom.exContainer = this.root.querySelector('#tf-ex-container');
+        this.dom.lbl = this.root.querySelector('#tf-lbl');
+        this.dom.matchText = this.root.querySelector('#tf-m');
+        this.dom.audio = this.root.querySelector('#tf-audio');
+        
+        this.root.querySelector('#tf-nav').innerHTML = app.ui.nav();
+    }
+
+    update() {
+        this.busy = false; 
+        this.answered = false;
         const c = this.list[this.i];
         const p = app.store.prefs;
-        const frontKey = p.tfFront || 'ja'; const backKey = p.tfBack || 'en';
+        const frontKey = p.tfFront || 'ja'; 
+        const backKey = p.tfBack || 'en';
         
         this.truth = Math.random() > 0.5;
         this.dispBack = this.truth ? c[backKey] : (() => { let w; do{w=app.data.rand()}while(w.id===c.id); return w[backKey]; })();
@@ -141,38 +287,32 @@ class TF extends GameMode {
             if(exMain||exSub) exHtml = `<div class="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1 leading-tight">${exMain}</p>`:''}${exSub?`<p class="text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">${exSub}</p>`:''}</div>`;
         }
 
-        this.root.innerHTML = `
-            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-none h-[55%] landscape:h-full landscape:flex-1 flex flex-col">
-                    ${app.ui.header(this.i, this.list.length, app.score, {showDice:true})}
-                    <div id="tf-c" class="bg-white dark:bg-neutral-900 rounded-[2rem] shadow-sm border-4 border-transparent flex-1 flex flex-col items-center justify-center p-2 text-center transition-all duration-300 relative overflow-hidden mb-2 landscape:mb-2 gpu-fix">
-                        <div class="h-[45%] w-full fit-box cursor-pointer select-none flex-col" onclick="app.game.toggle(this, '${c[frontKey].replace(/'/g,"\\'")}', '${fSec.replace(/'/g,"\\'")}', '${fEx.replace(/'/g,"\\'")}', '${fExSrc.replace(/'/g,"\\'")}', '${c[frontKey].replace(/'/g,"\\'")}')">
-                            <span class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300">${c[frontKey]}</span>${exHtml}
-                        </div>
-                        <div class="h-[10%] w-full flex flex-col items-center justify-center shrink-0"><div class="w-12 h-1 bg-slate-100 dark:bg-neutral-800 rounded-full mb-1"></div><p id="tf-lbl" class="text-slate-400 text-[10px] uppercase tracking-widest font-bold">Matches?</p></div>
-                        <div class="h-[45%] w-full fit-box"><span id="tf-m" class="fit-target font-bold text-slate-600 dark:text-neutral-400 transition-colors">${this.dispBack}</span></div>
-                    </div>
-                </div>
-                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:pt-2">
-                    <div class="mt-auto landscape:mt-0">${app.ui.audioBar(c)}</div>
-                    <div class="grid grid-cols-2 gap-2 mb-2 mt-2 flex-1 min-h-[100px]">
-                        <button onclick="app.game.check(this, false)" class="bg-rose-100 dark:bg-rose-900/20 hover:bg-rose-200 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-2xl font-black text-2xl border-b-4 border-rose-200 dark:border-rose-800 active:scale-95 active:border-b-0 transition-all h-full shadow-sm flex items-center justify-center">NO</button>
-                        <button onclick="app.game.check(this, true)" class="bg-emerald-100 dark:bg-emerald-900/20 hover:bg-emerald-200 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-2xl font-black text-2xl border-b-4 border-emerald-200 dark:border-emerald-800 active:scale-95 active:border-b-0 transition-all h-full shadow-sm flex items-center justify-center">YES</button>
-                    </div>
-                    ${app.ui.nav()}
-                </div>
-            </div>`;
+        // Update DOM
+        if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        if(this.dom.front) { this.dom.front.innerText = c[frontKey]; this.dom.front.innerHTML = c[frontKey]; }
+        if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
+        if(this.dom.topClick) this.dom.topClick.onclick = () => app.game.toggle(this.dom.topClick, c[frontKey].replace(/'/g,"\\'"), fSec.replace(/'/g,"\\'"), fEx.replace(/'/g,"\\'"), fExSrc.replace(/'/g,"\\'"), c[frontKey].replace(/'/g,"\\'"));
+        if(this.dom.lbl) this.dom.lbl.innerText = "Matches?";
+        if(this.dom.matchText) {
+            this.dom.matchText.innerText = this.dispBack;
+            this.dom.matchText.className = "fit-target font-bold text-slate-600 dark:text-neutral-400 transition-colors";
+        }
+        if(this.dom.card) {
+            this.highlightQBox(this.dom.card, false); // Reset colors
+        }
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
+
         this.afterRender();
         this.autoPlay('tf');
     }
     
     check(btn, userChoice) {
         if(this.busy) return; this.answered = true;
-        const mText = document.getElementById('tf-m');
+        const mText = this.dom.matchText;
         if (!this.truth) { mText.innerText = this.list[this.i][app.store.prefs.tfBack || 'en']; app.fitter.fit(mText); }
         this.busy = true; const win = (userChoice === this.truth);
-        this.highlightQBox(document.getElementById('tf-c'), win);
-        document.getElementById('tf-lbl').innerText = ""; 
+        this.highlightQBox(this.dom.card, win);
+        if(this.dom.lbl) this.dom.lbl.innerText = ""; 
         
         mText.classList.remove('text-slate-600', 'dark:text-neutral-400');
         mText.classList.add(win ? 'text-emerald-100' : 'text-rose-100', 'font-black');
@@ -185,6 +325,7 @@ class TF extends GameMode {
     }
 }
 
+/* --- MATCH MODE (Grid) --- */
 class Match extends GameMode {
     constructor(k) { 
         super(k); 
@@ -317,6 +458,7 @@ class Match extends GameMode {
                 setSuccessStyle(prevEl);
                 this.score(10); app.celebration.play();
                 
+                // FIX: Use this.setTimeout to avoid crash if game destroyed
                 this.setTimeout(() => {
                     this.state.matched.push(id, this.sel.id); 
                     app.store.saveMatch(this.state);
@@ -324,7 +466,7 @@ class Match extends GameMode {
                     prevEl.classList.add('invisible', 'pointer-events-none');
                     this.sel = null; this.busy = false;
                     if(this.state.matched.length === this.state.cards.length) {
-                        setTimeout(() => this.startNewGame(this.state.pairs), 300);
+                        this.setTimeout(() => this.startNewGame(this.state.pairs), 300);
                     }
                 }, 250);
             } else {
@@ -347,14 +489,66 @@ class Match extends GameMode {
     }
 }
 
+/* --- VOICE MODE --- */
 class Voice extends GameMode {
-    constructor(k) { super('voice'); this.render(); }
-    render() {
-        this.busy = false; const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if(!Speech) return (this.root.innerHTML = `<div class="p-10 text-center font-bold text-slate-400 flex items-center justify-center h-full"><div>Voice Not Supported</div><button onclick="app.goHome()" class="mt-4 px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg">Back</button></div>`);
+    constructor(k) { 
+        super('voice'); 
+        this.setup(); 
+        this.update(); 
+    }
+
+    setup() {
+        // Feature detection check
+        const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if(!Speech) {
+            this.root.innerHTML = `<div class="p-10 text-center font-bold text-slate-400 flex items-center justify-center h-full"><div>Voice Not Supported</div><button onclick="app.goHome()" class="mt-4 px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg">Back</button></div>`;
+            return;
+        }
+
+        this.root.innerHTML = `
+            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
+                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col">
+                    <div id="v-header"></div>
+                    <div id="v-c" class="bg-white dark:bg-neutral-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-neutral-800 flex-1 mb-2 landscape:mb-2 flex flex-col items-center justify-center p-2 text-center relative overflow-hidden group hover:border-sky-200 transition-colors gpu-fix">
+                        <div class="absolute top-0 left-0 w-full h-1 bg-sky-400"></div>
+                        <div id="v-card-click" class="flex-1 w-full fit-box cursor-pointer select-none">
+                            <span id="v-front" class="fit-target font-black text-slate-800 dark:text-neutral-200"></span>
+                        </div>
+                        <div id="v-res" class="absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-400 transition-all opacity-0 scale-90">Listening...</div>
+                    </div>
+                </div>
+                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:pt-2">
+                    <div id="v-audio" class="mt-auto landscape:mt-0"></div>
+                    <div class="flex justify-center h-32 items-center relative mb-4 shrink-0 mt-2">
+                        <div id="mic-ring" class="absolute w-24 h-24 rounded-full bg-sky-500 opacity-0"></div>
+                        <button id="v-mic-btn" class="w-24 h-24 bg-white dark:bg-neutral-800 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-all border-4 border-white dark:border-neutral-700 ring-4 ring-sky-100 dark:ring-sky-900/30 z-10 hover:shadow-2xl hover:scale-105">
+                            <i class="ph-bold ph-microphone text-4xl text-sky-500"></i>
+                        </button>
+                    </div>
+                    <div id="v-nav"></div>
+                </div>
+            </div>`;
+
+        this.dom.header = this.root.querySelector('#v-header');
+        this.dom.card = this.root.querySelector('#v-c');
+        this.dom.front = this.root.querySelector('#v-front');
+        this.dom.cardClick = this.root.querySelector('#v-card-click');
+        this.dom.res = this.root.querySelector('#v-res');
+        this.dom.ring = this.root.querySelector('#mic-ring');
+        this.dom.micBtn = this.root.querySelector('#v-mic-btn');
+        this.dom.audio = this.root.querySelector('#v-audio');
         
-        const c = this.list[this.i]; const p = app.store.prefs;
-        const front = c[p.voiceDispFront||'en']; const back = c[p.voiceDispBack||'ja'];
+        this.root.querySelector('#v-nav').innerHTML = app.ui.nav();
+    }
+
+    update() {
+        if(!this.dom.header) return; // if init failed due to no speech support
+
+        this.busy = false; 
+        const c = this.list[this.i]; 
+        const p = app.store.prefs;
+        const front = c[p.voiceDispFront||'en']; 
+        const back = c[p.voiceDispBack||'ja'];
         
         let fSec="", fEx="", fExSrc="";
         const dispFrontKey = p.voiceDispFront||'en';
@@ -367,31 +561,27 @@ class Voice extends GameMode {
             const bConf = LANG_CONFIG.find(l => l.key === (p.voiceDispBack||'ja'));
             if(bConf && bConf.exKey) fExSrc = c[bConf.exKey] || "";
         }
+        
+        // Update DOM
+        if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        if(this.dom.front) { this.dom.front.innerText = front; this.dom.front.innerHTML = front; }
+        if(this.dom.cardClick) this.dom.cardClick.onclick = () => app.game.toggle(this.dom.cardClick, front.replace(/'/g,"\\'"), '', fEx.replace(/'/g,"\\'"), '', front.replace(/'/g,"\\'"));
+        if(this.dom.res) {
+             this.dom.res.innerText = "Listening..."; 
+             this.dom.res.className = "absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-400 transition-all opacity-0 scale-90";
+        }
+        if(this.dom.card) {
+            this.dom.card.classList.remove('border-emerald-400', 'ring-2', 'ring-emerald-100', 'border-rose-400');
+        }
+        if(this.dom.micBtn) {
+            this.dom.micBtn.onclick = () => app.game.handleInput(this.dom.micBtn, null, null, () => app.game.listen());
+        }
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
 
-        this.root.innerHTML = `
-            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col">
-                    ${app.ui.header(this.i, this.list.length, app.score, {showDice:true})}
-                    <div id="v-c" class="bg-white dark:bg-neutral-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-neutral-800 flex-1 mb-2 landscape:mb-2 flex flex-col items-center justify-center p-2 text-center relative overflow-hidden group hover:border-sky-200 transition-colors gpu-fix">
-                        <div class="absolute top-0 left-0 w-full h-1 bg-sky-400"></div>
-                        <div class="flex-1 w-full fit-box cursor-pointer select-none" onclick="app.game.toggle(this, '${front.replace(/'/g,"\\'")}', '', '${fEx.replace(/'/g,"\\'")}', '', '${front.replace(/'/g,"\\'")}')">
-                            <span class="fit-target font-black text-slate-800 dark:text-neutral-200">${front}</span>
-                        </div>
-                        <div id="v-res" class="absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-400 transition-all opacity-0 scale-90">Listening...</div>
-                    </div>
-                </div>
-                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:pt-2">
-                    <div class="mt-auto landscape:mt-0">${app.ui.audioBar(c)}</div>
-                    <div class="flex justify-center h-32 items-center relative mb-4 shrink-0 mt-2">
-                        <div id="mic-ring" class="absolute w-24 h-24 rounded-full bg-sky-500 opacity-0"></div>
-                        <button onclick="app.game.handleInput(this, null, null, () => app.game.listen())" class="w-24 h-24 bg-white dark:bg-neutral-800 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-all border-4 border-white dark:border-neutral-700 ring-4 ring-sky-100 dark:ring-sky-900/30 z-10 hover:shadow-2xl hover:scale-105"><i class="ph-bold ph-microphone text-4xl text-sky-500"></i></button>
-                    </div>
-                    ${app.ui.nav()}
-                </div>
-            </div>`;
         this.afterRender();
         this.autoPlay('voice');
     }
+
     listen() {
         const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
         const rec = new Speech();
@@ -399,7 +589,9 @@ class Voice extends GameMode {
         const langConf = LANG_CONFIG.find(l=>l.key===targetKey);
         rec.lang = langConf ? langConf.tts : 'ja-JP'; rec.maxAlternatives = 1;
         
-        const ring = document.getElementById('mic-ring'); const res = document.getElementById('v-res');
+        const ring = this.dom.ring; 
+        const res = this.dom.res;
+        
         ring.classList.add('animate-pulse-ring', 'opacity-100');
         res.innerText = "Listening..."; res.className = "absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-slate-800 dark:bg-neutral-600 text-white shadow-lg opacity-100 scale-100";
         
@@ -411,7 +603,7 @@ class Voice extends GameMode {
             if(txt.includes(text.toLowerCase().replace(/\s/g, ''))) {
                 this.score(30); res.innerHTML = `<i class="ph-bold ph-check"></i> "${txt}"`;
                 res.className = "absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-emerald-500 text-white shadow-lg transform scale-110";
-                document.getElementById('v-c').classList.add('border-emerald-400', 'ring-2', 'ring-emerald-100');
+                this.dom.card.classList.add('border-emerald-400', 'ring-2', 'ring-emerald-100');
                 app.celebration.play(); 
                 
                 let pAudio = null;
@@ -424,7 +616,7 @@ class Voice extends GameMode {
             } else {
                 res.innerText = `Heard: "${txt}"`;
                 res.className = "absolute bottom-6 px-6 py-2 rounded-full font-bold text-sm bg-rose-500 text-white shadow-lg";
-                document.getElementById('v-c').classList.add('border-rose-400');
+                this.dom.card.classList.add('border-rose-400');
             }
         };
         rec.onerror = () => { ring.classList.remove('animate-pulse-ring'); res.innerText = "Error"; };
@@ -432,14 +624,58 @@ class Voice extends GameMode {
     }
 }
 
+/* --- SENTENCES MODE --- */
 class Sentences extends GameMode {
-    constructor(k) { super(k); this.render(); }
+    constructor(k) { 
+        super(k); 
+        this.setup(); 
+        this.update(); 
+    }
     
-    render() {
-        this.busy = false; this.answered = false;
+    setup() {
+        this.root.innerHTML = `
+            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
+                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col">
+                    <div id="sn-header"></div>
+                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center justify-center p-6 text-center relative mb-2 landscape:mb-2 overflow-hidden">
+                         <div class="flex-1 w-full flex items-center justify-center overflow-y-auto thin-scroll">
+                            <p id="sn-text" class="text-xl sm:text-2xl font-black text-slate-800 dark:text-neutral-100 leading-relaxed"></p>
+                         </div>
+                         <div id="sn-bottom-disp"></div>
+                    </div>
+                </div>
+                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
+                    <div id="sn-audio" class="mt-auto landscape:mt-0"></div>
+                    <div class="grid grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
+                        ${[0,1,2,3].map(i => `
+                            <div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix">
+                                <button id="sn-btn-${i}" class="absolute inset-0 w-full h-full fit-box z-10">
+                                    <span class="fit-target font-bold text-slate-600 dark:text-neutral-400"></span>
+                                </button>
+                            </div>`).join('')}
+                    </div>
+                    <div id="sn-nav"></div>
+                </div>
+            </div>`;
+
+        this.dom.header = this.root.querySelector('#sn-header');
+        this.dom.sBox = this.root.querySelector('#s-box');
+        this.dom.text = this.root.querySelector('#sn-text');
+        this.dom.bottomDisp = this.root.querySelector('#sn-bottom-disp');
+        this.dom.audio = this.root.querySelector('#sn-audio');
+        this.dom.btns = [0,1,2,3].map(i => this.root.querySelector(`#sn-btn-${i}`));
+        
+        this.root.querySelector('#sn-nav').innerHTML = app.ui.nav();
+    }
+
+    update() {
+        this.busy = false; 
+        this.answered = false;
         const c = this.list[this.i];
         const p = app.store.prefs;
-        const qKey = p.sentencesQ || 'ja'; const aKey = p.sentencesA || 'ja'; const transKey = p.sentencesTrans || 'en';
+        const qKey = p.sentencesQ || 'ja'; 
+        const aKey = p.sentencesA || 'ja'; 
+        const transKey = p.sentencesTrans || 'en';
         
         const createMask = (word, id) => `<span id="${id}" class="inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
 
@@ -466,31 +702,25 @@ class Sentences extends GameMode {
                     const safeStem = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const fuzzyReg = new RegExp(safeStem + '[\\u3040-\\u309F]?', 'i');
                     const found = sentenceRaw.match(fuzzyReg);
-                    if (found) {
-                        match = found[0]; 
-                        break;
-                    }
+                    if (found) { match = found[0]; break; }
                 }
             }
         }
 
-        // FIX: Create audio version with pause instead of answer
         this.maskedAudioText = sentenceRaw;
         if (match) {
             const reg = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
             maskedSentence = sentenceRaw.replace(reg, createMask(match, 'main-blank'));
-            
-            // For audio, replace matched word with a comma or pause
             const pauseChar = (qKey.startsWith('ja') || qKey.startsWith('zh')) ? '，' : ' ... ';
             this.maskedAudioText = sentenceRaw.replace(reg, pauseChar);
         }
 
+        // Bottom Display
         let bottomHtml = '';
         const dispMode = p.sentencesBottomDisp || 'sentence'; 
 
         if (dispMode !== 'none') {
             let bottomText = '';
-            
             if (dispMode === 'sentence') {
                 let tExKey = transKey;
                 const transConf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l => l.key === transKey) : null;
@@ -503,71 +733,73 @@ class Sentences extends GameMode {
                     const tv = transWord.split(separators).map(s => s.trim()).filter(s => s);
                     tv.sort((a,b) => b.length - a.length);
                     const tm = tv.find(v => transSent.toLowerCase().includes(v.toLowerCase()));
-                    
                     if (tm) {
                         const tReg = new RegExp(tm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
                         bottomText = transSent.replace(tReg, createMask(tm, 'trans-blank'));
-                    } else {
-                        bottomText = transSent;
-                    }
-                } else {
-                    bottomText = transSent || transWord || "";
-                }
+                    } else { bottomText = transSent; }
+                } else { bottomText = transSent || transWord || ""; }
             } else {
                 const w = c[transKey];
                 if (w) bottomText = createMask(w, 'trans-blank');
             }
-            
-            if(bottomText) {
-                bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-bold text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
-            }
+            if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-bold text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
         }
 
-        this.root.innerHTML = `
-            <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col">
-                    ${app.ui.header(this.i, this.list.length, app.score, {showDice:true})}
-                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center justify-center p-6 text-center relative mb-2 landscape:mb-2 overflow-hidden">
-                         <div class="flex-1 w-full flex items-center justify-center overflow-y-auto thin-scroll">
-                            <p class="text-xl sm:text-2xl font-black text-slate-800 dark:text-neutral-100 leading-relaxed">${maskedSentence}</p>
-                         </div>
-                         ${bottomHtml}
-                    </div>
-                </div>
-                <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
-                    <div class="mt-auto landscape:mt-0">${app.ui.audioBar(c)}</div>
-                    <div class="grid grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
-                        ${this.getDistractors(c.id, 4).map(o => `<div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix"><button onclick="app.game.handleInput(this.parentElement, '${o[aKey].replace(/'/g,"\\'")}', '${aKey}', () => app.game.check(this, ${o.id===c.id}))" class="absolute inset-0 w-full h-full fit-box z-10"><span class="fit-target font-bold text-slate-600 dark:text-neutral-400">${o[aKey]}</span></button></div>`).join('')}
-                    </div>
-                    ${app.ui.nav()}
-                </div>
-            </div>`;
+        // Apply Updates
+        if(this.dom.header) this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, {showDice:true});
+        if(this.dom.text) this.dom.text.innerHTML = maskedSentence;
+        if(this.dom.bottomDisp) this.dom.bottomDisp.innerHTML = bottomHtml;
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
+        
+        // Reset Box Styles
+        if(this.dom.sBox) {
+            this.highlightQBox(this.dom.sBox, false);
+            this.dom.sBox.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
+        }
+
+        // Distractors
+        const distractors = this.getDistractors(c.id, 4);
+        this.dom.btns.forEach((btn, idx) => {
+             const o = distractors[idx];
+             if(o) {
+                 const span = btn.querySelector('span');
+                 span.innerText = o[aKey];
+                 const wrap = btn.parentElement;
+                 wrap.className = "w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix";
+                 btn.className = "absolute inset-0 w-full h-full fit-box z-10";
+                 span.className = "fit-target font-bold text-slate-600 dark:text-neutral-400";
+                 
+                 btn.onclick = () => app.game.handleInput(wrap, o[aKey].replace(/'/g,"\\'"), aKey, () => app.game.check(btn, o.id===c.id));
+             }
+        });
+
         this.afterRender();
         this.runCustomAutoPlay(c);
     }
 
     runCustomAutoPlay(c) {
         if(!app.store.prefs.sentencesAuto) return;
-        // FIX: Play the masked text instead of the full text
         const qKey = app.store.prefs.sentencesQ || 'ja';
         let audioLang = (LANG_CONFIG.find(l=>l.key===qKey)||{}).audioSrc || qKey;
         app.audio.play(this.maskedAudioText, audioLang, 'sentences', 0);
     }
 
-    async check(btnWrap, isCorrect) {
+    async check(btn, isCorrect) {
         if(this.busy || this.answered) return;
-        const btn = btnWrap.closest('div');
-        const sBox = document.getElementById('s-box');
+        const btnWrap = btn.parentElement;
         
         btn.classList.remove('ring-4', 'ring-indigo-400', 'scale-95');
-        btn.className = btn.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-violet-200|dark:hover:border-violet-500\/50)\b/g, '');
-        btn.querySelector('span').classList.replace('text-slate-600', 'text-white');
-        btn.querySelector('span').classList.replace('dark:text-neutral-400', 'text-white');
-        this.highlightQBox(sBox, isCorrect);
+        btnWrap.className = btnWrap.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-violet-200|dark:hover:border-violet-500\/50)\b/g, '');
+        
+        const span = btn.querySelector('span');
+        span.classList.replace('text-slate-600', 'text-white');
+        span.classList.replace('dark:text-neutral-400', 'text-white');
+        
+        this.highlightQBox(this.dom.sBox, isCorrect);
         
         if(isCorrect) {
             this.answered = true; this.busy = true; this.score(20);
-            btn.classList.add('bg-emerald-500', 'border-emerald-500');
+            btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
             app.celebration.play();
             
             const reveal = (id, colorClass) => {
@@ -598,7 +830,7 @@ class Sentences extends GameMode {
             this.waitAndNav(pAudio, 2500);
 
         } else {
-            btn.classList.add('bg-rose-500', 'border-rose-500');
+            btnWrap.classList.add('bg-rose-500', 'border-rose-500');
         }
     }
 }

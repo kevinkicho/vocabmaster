@@ -12,6 +12,9 @@ class GameMode {
         this.uiTimer = null; 
         this.selectedEl = null; 
         
+        // Caching DOM elements to avoid querySelector re-runs
+        this.dom = {}; 
+
         this.historyStack = [];
         this.historyPtr = -1;
         if (this.list && this.list.length > 0) {
@@ -104,7 +107,13 @@ class GameMode {
         
         this.save(); 
         history.pushState({ view: 'game', mode: this.key, index: this.i }, ''); 
-        this.render(); 
+        
+        // OPTIMIZATION: If update() exists, use it. Otherwise fallback to full render().
+        if (typeof this.update === 'function') {
+            this.update();
+        } else {
+            this.render(); 
+        }
     }
     
     jump(val) { 
@@ -112,18 +121,22 @@ class GameMode {
         if(n>0 && n<=this.list.length) { 
             this.i = n-1; this.save(); 
             history.pushState({ view: 'game', mode: this.key, index: this.i }, '');
-            this.render(); 
+            if (typeof this.update === 'function') this.update(); else this.render();
         } 
     }
     rand() { 
         this.i = Math.floor(Math.random() * this.list.length); 
         this.historyStack.push(this.i);
         this.historyPtr = this.historyStack.length - 1;
-        this.save(); this.render(); 
+        this.save(); 
+        if (typeof this.update === 'function') this.update(); else this.render();
     }
     
     save() { app.store.setLoc(this.key, this.i); }
-    restoreState(index) { this.i = index; this.save(); this.render(); }
+    restoreState(index) { 
+        this.i = index; this.save(); 
+        if (typeof this.update === 'function') this.update(); else this.render();
+    }
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
     score(pts=10) { 
@@ -133,7 +146,6 @@ class GameMode {
         if(app.data) app.data.recordScore(pts, this.key);
     }
 
-    // --- HELPER: Wait for Audio & Nav (Fixes Freeze) ---
     async waitAndNav(audioPromise, fallbackDelay = 1500) {
         const wait = app.store.prefs.audioWait;
         if (wait && audioPromise) {
@@ -241,6 +253,7 @@ class GameMode {
         let conf = typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG.find(l => l.key === langKey) : null;
         if (conf && conf.exKey) exText = item[conf.exKey];
 
+        // Specific logic for Sentences mode
         if (mode === 'sentences') {
             if (exText) {
                  const targetWord = item[langKey] || ""; 
@@ -265,6 +278,7 @@ class GameMode {
         const showExTF = (mode === 'tf' && p.tfShowEx);
         
         let isExampleVisible = false;
+        // Optimization: Only look in this.root
         const targets = this.root.querySelectorAll('.fit-target');
         targets.forEach(t => { if(exText && exText.trim().length > 0 && t.innerText.includes(exText.trim())) { isExampleVisible = true; } });
 
@@ -317,7 +331,6 @@ class GameMode {
     destroy() {
         this.timeouts.forEach(id => clearTimeout(id));
         if(this.uiTimer) clearTimeout(this.uiTimer);
-        if(this.longPressTimer) clearTimeout(this.longPressTimer);
         this.timeouts = [];
         window.removeEventListener('resize', this.onWindowResize);
         this.unbindKeys();
@@ -327,14 +340,16 @@ class GameMode {
     async afterRender() { 
         await app.fitter.fitAll();
         if(this.list && this.list[this.i] && app.notes) { 
-            // FIX: Don't show notes FAB on matching or if no ID
             if (this.key !== 'match') {
                 app.notes.check(this.list[this.i].id); 
             }
         }
+        // Optimization: scope querySelector to this.root
         const targets = this.root.querySelectorAll('.fit-target');
         targets.forEach(el => { if (el.innerHTML.indexOf('<span class="hanzi-char') === -1) { el.innerHTML = this.wrapHanzi(el.innerText); } });
         if(app.notes) app.notes.attachTooltipListeners();
-        setTimeout(() => { if(this.root) this.root.classList.add('visible'); }, 50);
+        
+        // Use requestAnimationFrame for smoother visibility toggle
+        requestAnimationFrame(() => { if(this.root) this.root.classList.add('visible'); });
     }
 }

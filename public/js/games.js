@@ -194,6 +194,7 @@ class Match extends GameMode {
             this.startNewGame(count); 
         } else { this.handleResize(); }
     }
+    
     handleResize() {
         const layout = this.calcLayout();
         this.allowedPairs = layout.allowedPairs;
@@ -201,6 +202,7 @@ class Match extends GameMode {
         if(!this.allowedPairs.includes(this.state.pairs)) this.startNewGame(this.allowedPairs.reduce((prev, curr) => Math.abs(curr - this.state.pairs) < Math.abs(prev - this.state.pairs) ? curr : prev));
         else this.render();
     }
+    
     calcLayout() {
         const el = document.getElementById('app-view'); if(!el) return { allowedPairs:[2,4,6], map:{} };
         const h = Math.max(el.clientHeight, window.innerHeight - 80) - 70; 
@@ -224,8 +226,8 @@ class Match extends GameMode {
         }
         return { allowedPairs: Array.from(validPairs).sort((a,b)=>a-b), map: configMap };
     }
+    
     startNewGame(count) {
-        // console.log("Starting new matching game with", count);
         if(this.state.cards.length>0) this.lastState = {...this.state};
         const pool = []; const indices = new Set();
         while(indices.size < count) indices.add(Math.floor(Math.random() * this.list.length));
@@ -243,52 +245,103 @@ class Match extends GameMode {
         app.store.saveMatch(this.state); this.sel = null;
         this.handleResize();
     }
+    
     restorePrev() { if(this.lastState) { this.state = this.lastState; app.store.saveMatch(this.state); this.sel=null; this.render(); } }
     setPairs(v) { this.startNewGame(v); }
     shuffleGrid() { this.state.cards.sort(()=>Math.random()-0.5); app.store.saveMatch(this.state); this.render(); }
-    
-    // Explicitly expose newGame for UI button
     newGame() { this.startNewGame(this.state.pairs); }
 
     render() {
         this.busy = false; const c = (this.configMap && this.configMap[this.state.pairs])?.cols || 3;
-        this.root.innerHTML = `<div class="flex flex-col h-full w-full">${app.ui.header(null, this.list.length, app.score, {mode:'match', pairs:this.state.pairs, allowedPairs:this.allowedPairs, hasPrev:!!this.lastState})}<div class="grid gap-2 flex-1 w-full pb-2" style="grid-template-columns: repeat(${c}, minmax(0, 1fr));">${this.state.cards.map(c => {
-            const isM = this.state.matched.includes(c.id); const isS = this.sel && this.sel.id===c.id;
-            return `<div id="${c.id}" onclick="app.game.tap('${c.id}','${c.match}','${c.type}')" class="${isM?'invisible pointer-events-none':''} border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center cursor-pointer transition-all select-none active:scale-95 gpu-fix overflow-hidden ${isS ? "bg-slate-700 border-slate-700 text-white ring-2 ring-indigo-400" : "bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 text-slate-700 dark:text-neutral-300 hover:border-indigo-400 shadow-sm"}"><div class="fit-box w-full h-full"><span class="fit-target font-bold">${c.txt}</span></div></div>`;
-        }).join('')}</div></div>`;
+        
+        const baseClass = "border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center cursor-pointer transition-all select-none active:scale-95 gpu-fix overflow-hidden";
+        const defaultClass = "bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 text-slate-700 dark:text-neutral-300 hover:border-indigo-400 shadow-sm";
+        const selectedClass = "bg-slate-700 border-slate-700 text-white ring-2 ring-indigo-400";
+        const matchedClass = "invisible pointer-events-none";
+
+        this.root.innerHTML = `
+        <div class="flex flex-col h-full w-full">
+            ${app.ui.header(null, this.list.length, app.score, {mode:'match', pairs:this.state.pairs, allowedPairs:this.allowedPairs, hasPrev:!!this.lastState})}
+            <div class="grid gap-2 flex-1 w-full pb-2" style="grid-template-columns: repeat(${c}, minmax(0, 1fr));">
+                ${this.state.cards.map(c => {
+                    const isM = this.state.matched.includes(c.id); 
+                    const isS = this.sel && this.sel.id === c.id;
+                    const className = `${baseClass} ${isM ? matchedClass : (isS ? selectedClass : defaultClass)}`;
+                    return `<div id="${c.id}" onclick="app.game.tap('${c.id}','${c.match}','${c.type}')" class="${className}"><div class="fit-box w-full h-full"><span class="fit-target font-bold">${c.txt}</span></div></div>`;
+                }).join('')}
+            </div>
+        </div>`;
         this.afterRender();
     }
     
     tap(id, match, type) {
-        if(this.busy) return;
+        if(this.busy || this.state.matched.includes(id)) return;
         const el = document.getElementById(id);
-        if(this.sel && this.sel.id === id) { this.sel = null; this.render(); return; }
+        if(!el) return;
+
         if(app.store.prefs[`matchAudio_${type}`] !== false) {
             const { text, key } = this.resolveAudioText(this.list.find(x=>x.id==match), type);
             app.audio.play(text, key, 'match', 0);
         }
-        
-        if(!this.sel) { this.sel = { id, match }; this.render(); }
+
+        const resetStyle = (element) => {
+            element.className = "border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center cursor-pointer transition-all select-none active:scale-95 gpu-fix overflow-hidden bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 text-slate-700 dark:text-neutral-300 hover:border-indigo-400 shadow-sm";
+        };
+        const setSelectStyle = (element) => {
+            element.className = "border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center cursor-pointer transition-all select-none active:scale-95 gpu-fix overflow-hidden bg-slate-700 border-slate-700 text-white ring-2 ring-indigo-400";
+        };
+        const setSuccessStyle = (element) => {
+             element.className = "border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center transition-all scale-105 z-10 bg-emerald-500 border-emerald-500 text-white";
+        };
+        const setFailStyle = (element) => {
+             element.className = "border-2 rounded-xl w-full h-full flex flex-col items-center justify-center text-center transition-all bg-rose-500 border-rose-500 text-white";
+        };
+
+        if(this.sel && this.sel.id === id) { 
+            this.sel = null; 
+            resetStyle(el);
+            return; 
+        }
+
+        if(!this.sel) { 
+            this.sel = { id, match }; 
+            setSelectStyle(el);
+        } 
         else {
-            this.busy = true; const prev = document.getElementById(this.sel.id);
+            this.busy = true; 
+            const prevEl = document.getElementById(this.sel.id);
             const success = String(this.sel.match) === String(match);
             
-            el.className = prev.className = `rounded-xl w-full h-full flex flex-col items-center justify-center text-center border-2 text-white transition-all scale-105 z-10 ${success ? 'bg-emerald-500 border-emerald-500' : 'bg-rose-500 border-rose-500'}`;
-            
             if(success) {
+                setSuccessStyle(el);
+                setSuccessStyle(prevEl);
                 this.score(10); app.celebration.play();
+                
                 this.setTimeout(() => {
-                    this.state.matched.push(id, this.sel.id); app.store.saveMatch(this.state);
+                    this.state.matched.push(id, this.sel.id); 
+                    app.store.saveMatch(this.state);
+                    el.classList.add('invisible', 'pointer-events-none');
+                    prevEl.classList.add('invisible', 'pointer-events-none');
                     this.sel = null; this.busy = false;
-                    if(this.state.matched.length === this.state.cards.length) setTimeout(() => this.startNewGame(this.state.pairs), 300);
-                    else this.render();
+                    if(this.state.matched.length === this.state.cards.length) {
+                        setTimeout(() => this.startNewGame(this.state.pairs), 300);
+                    }
                 }, 250);
             } else {
+                setFailStyle(el);
+                setFailStyle(prevEl);
                 if(app.store.prefs.matchHint) {
                     const m = this.state.cards.find(c => String(c.match) === String(this.sel.match) && c.id !== this.sel.id)?.id;
-                    if(m) { const h = document.getElementById(m); if(h) h.classList.add('bg-yellow-100', 'dark:bg-yellow-900', 'border-yellow-400'); }
+                    const h = document.getElementById(m); 
+                    if(h) h.classList.add('bg-yellow-100', 'dark:bg-yellow-900', 'border-yellow-400');
                 }
-                this.setTimeout(() => { this.sel = null; this.busy = false; this.render(); }, 500);
+                this.setTimeout(() => { 
+                    resetStyle(el);
+                    resetStyle(prevEl);
+                    const allCards = document.querySelectorAll('#app-view > div > div > div');
+                    allCards.forEach(c => c.classList.remove('bg-yellow-100', 'dark:bg-yellow-900', 'border-yellow-400'));
+                    this.sel = null; this.busy = false; 
+                }, 500);
             }
         }
     }
@@ -381,16 +434,15 @@ class Voice extends GameMode {
 
 class Sentences extends GameMode {
     constructor(k) { super(k); this.render(); }
+    
     render() {
         this.busy = false; this.answered = false;
         const c = this.list[this.i];
         const p = app.store.prefs;
         const qKey = p.sentencesQ || 'ja'; const aKey = p.sentencesA || 'ja'; const transKey = p.sentencesTrans || 'en';
         
-        // Helper
         const createMask = (word, id) => `<span id="${id}" class="inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
 
-        // 1. Question (Top)
         let exKey = '';
         if(typeof LANG_CONFIG !== 'undefined') {
             const conf = LANG_CONFIG.find(l => l.key === qKey);
@@ -406,7 +458,6 @@ class Sentences extends GameMode {
         
         let match = variants.find(v => sentenceRaw.toLowerCase().includes(v.toLowerCase()));
         
-        // NEW: Fuzzy Matching for Japanese Conjugations
         const isJa = (qKey === 'ja' || qKey.startsWith('ja_'));
         if (!match && isJa && typeof sentenceRaw === 'string') {
             for (const v of variants) {
@@ -423,12 +474,17 @@ class Sentences extends GameMode {
             }
         }
 
+        // FIX: Create audio version with pause instead of answer
+        this.maskedAudioText = sentenceRaw;
         if (match) {
             const reg = new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
             maskedSentence = sentenceRaw.replace(reg, createMask(match, 'main-blank'));
+            
+            // For audio, replace matched word with a comma or pause
+            const pauseChar = (qKey.startsWith('ja') || qKey.startsWith('zh')) ? '，' : ' ... ';
+            this.maskedAudioText = sentenceRaw.replace(reg, pauseChar);
         }
 
-        // 2. Translation (Bottom)
         let bottomHtml = '';
         const dispMode = p.sentencesBottomDisp || 'sentence'; 
 
@@ -492,7 +548,10 @@ class Sentences extends GameMode {
 
     runCustomAutoPlay(c) {
         if(!app.store.prefs.sentencesAuto) return;
-        this.playSmartAudio(app.store.prefs.sentencesQ || 'ja');
+        // FIX: Play the masked text instead of the full text
+        const qKey = app.store.prefs.sentencesQ || 'ja';
+        let audioLang = (LANG_CONFIG.find(l=>l.key===qKey)||{}).audioSrc || qKey;
+        app.audio.play(this.maskedAudioText, audioLang, 'sentences', 0);
     }
 
     async check(btnWrap, isCorrect) {

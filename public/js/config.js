@@ -43,8 +43,7 @@ const GET_DEFAULTS = () => {
         flashBack1: 'ja_furi',    
         flashBack2: 'en',
         flashBack3: 'ja_ex', 
-        flashBack4: '',
-        flashAudioSrc: 'ja', 
+        flashBack4: 'ja_roma', // FIX: Default to 'ja_roma' for better UI/UX
 
         quizQ: 'ja', quizA: 'en',
         quizRandom: false,
@@ -81,7 +80,6 @@ const GET_DEFAULTS = () => {
         sentencesQ: 'ja',        
         sentencesA: 'ja',        
         sentencesTrans: 'en',
-        // UPDATED: Replaced boolean showTrans with 3-way option
         sentencesBottomDisp: 'sentence', // 'sentence' | 'word' | 'none'
         sentencesAuto: true,     
         sentencesRandom: false,  

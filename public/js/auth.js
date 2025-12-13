@@ -5,7 +5,6 @@ class AuthManager {
         this.isAdmin = false;
         this.adminEmail = "kevinkicho@gmail.com";
         
-        // Promise to block app load until Auth is settled (Anon or Real)
         this._resolveReady = null;
         this.readyPromise = new Promise((resolve) => {
             this._resolveReady = resolve;
@@ -20,34 +19,64 @@ class AuthManager {
             return;
         }
 
-        // Handle Redirect Result (for some mobile flows)
         auth.getRedirectResult().then((result) => {
             if (result.user) console.log("[Auth] Redirect Login Success");
         }).catch((error) => console.error("[Auth] Redirect Error:", error));
 
-        // Listen for Auth State Changes
         auth.onAuthStateChanged((user) => {
             if (user) {
                 this.currentUser = user;
                 this.isAdmin = (user.email === this.adminEmail);
                 console.log(`[Auth] User: ${user.uid} | Anon: ${user.isAnonymous} | Admin: ${this.isAdmin}`);
                 
-                // NEW: Clear session cache to force fresh score fetch on login swap
                 if (window.app && window.app.data) {
                     window.app.data.resetSession();
                 }
 
-                // Resolve the ready promise so the App can proceed
                 if (this._resolveReady) {
                     this._resolveReady(true);
-                    this._resolveReady = null; // Ensure only resolved once per load logic
+                    this._resolveReady = null;
                 }
+                
+                // FIX: Show loading screen immediately to prevent flicker
+                if(!user.isAnonymous) {
+                     const overlay = document.getElementById('overlay-init');
+                     if(overlay) {
+                         // Re-use or show overlay
+                         overlay.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
+                         const btn = document.getElementById('btn-init');
+                         if(btn) { btn.innerText = "Syncing Profile..."; btn.disabled = true; }
+                     } else {
+                         // If overlay was removed, maybe create a temp one, or just rely on speed
+                         // But since we want to enforce delay, it's best if main.js doesn't destroy it too early,
+                         // or we recreate a blocker. For now, let's assume overlay might still be there if this is initial load.
+                         // If this is a re-login (logout -> login), we might need a spinner.
+                         // Simplest fix for "Flicker after login":
+                         if(window.app && window.app.ui) {
+                             document.body.insertAdjacentHTML('beforeend', '<div id="temp-loader" class="fixed inset-0 bg-slate-900 z-[9999] flex items-center justify-center transition-opacity duration-500"><i class="ph-bold ph-spinner animate-spin text-4xl text-white"></i></div>');
+                         }
+                     }
+                     
+                     // Artificial delay to let data fetch and UI settle
+                     setTimeout(() => {
+                         const temp = document.getElementById('temp-loader');
+                         if(temp) { temp.classList.add('opacity-0'); setTimeout(()=>temp.remove(), 500); }
+                         
+                         const overlay = document.getElementById('overlay-init');
+                         if(overlay) { overlay.classList.add('opacity-0', 'pointer-events-none'); setTimeout(()=>overlay.remove(), 500); }
+                         
+                         if(window.app) window.app.goHome(false);
+                     }, 1500);
+                     
+                } else {
+                    // Anon login proceeds normally
+                    if(window.app) window.app.goHome(false);
+                }
+
             } else {
                 console.log("[Auth] No user, signing in anonymously...");
-                // We do NOT resolve here. We wait for signInAnonymously to trigger the listener again with a user.
                 auth.signInAnonymously().catch((error) => {
                     console.error("[Auth] Anon Sign-in failed", error);
-                    // If anon login fails (offline?), we must resolve to let the app load (likely with mock data or cache)
                     if (this._resolveReady) {
                         this._resolveReady(false);
                         this._resolveReady = null;
@@ -55,14 +84,11 @@ class AuthManager {
                 });
             }
             
-            // Update UI
             if(window.app && window.app.ui) {
                 const btn = document.getElementById('btn-login');
-                // Only show Photo/Profile if NOT anonymous
                 if(btn && user && !user.isAnonymous && user.photoURL) {
                      btn.innerHTML = `<img src="${user.photoURL}" class="w-full h-full rounded-full border border-slate-200 dark:border-neutral-600">`;
                 } else if(btn) {
-                     // Show generic icon for Anon or Logged Out
                      btn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
                 }
 
@@ -72,13 +98,9 @@ class AuthManager {
                     else devTab.classList.add('hidden');
                 }
             }
-            
-            // Reload Home to reflect score/auth state (only if app is already running)
-            if(window.app && window.app.ui && this.currentUser) window.app.goHome(false);
         });
     }
 
-    // Main.js calls this to wait before loading Data
     async waitForAuth() {
         return this.readyPromise;
     }
@@ -92,6 +114,10 @@ class AuthManager {
         if (!auth) return;
         auth.signOut().then(() => {
             console.log("[Auth] Signed Out");
+            // Reset state to avoid crash on reload
+            if (history && history.replaceState) {
+                history.replaceState({ view: 'home' }, '', window.location.pathname);
+            }
             location.reload(); 
         });
     }

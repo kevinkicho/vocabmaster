@@ -36,7 +36,6 @@ class UIManager {
         const editBtn = (isAdmin && !isMatch) ? `<button onclick="app.ui.openEditModal()" class="${btnClass} text-amber-500 border-amber-200 dark:border-amber-900/50 dark:text-amber-500"><i class="ph-bold ph-pencil-simple text-lg"></i></button>` : '';
         const standardControls = (!isMatch && opts.showDice) ? `<button onclick="app.game.rand()" class="${btnClass}"><i class="ph-bold ph-dice-five text-lg"></i></button>` : '';
         
-        // MATCH CONTROLS: dice calls app.game.newGame()
         const matchControls = isMatch ? `<button onclick="app.game.restorePrev()" class="${btnClass} ${!opts.hasPrev?'opacity-50 cursor-not-allowed':''}"><i class="ph-bold ph-arrow-u-up-left text-lg"></i></button><button onclick="app.game.shuffleGrid()" class="${btnClass}"><i class="ph-bold ph-arrows-clockwise text-lg"></i></button><button onclick="app.game.newGame()" class="${btnClass}"><i class="ph-bold ph-dice-five text-lg"></i></button>` : '';
         
         return `<div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">${inputHtml}<div class="flex items-center">${editBtn}${standardControls}${matchControls}<div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2"><span class="text-slate-400">PTS</span><span class="score-display">${score}</span></div><button onclick="app.goHome()" class="w-9 h-9 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x"></i></button></div></div>`;
@@ -49,8 +48,6 @@ class UIManager {
     loadSettings() {
         const setChk = (id, val) => { const el = document.getElementById(id); if(el) el.checked = val; }; 
         const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; }; 
-        
-        // FIX: Helper to set radio buttons correctly
         const setRad = (name, val) => { 
             const el = document.querySelector(`input[name="${name}"][value="${val}"]`);
             if(el) el.checked = true;
@@ -65,9 +62,7 @@ class UIManager {
 
             setVal('app-font', p.font || 'sans'); 
             
-            this.renderSettingsUI(); // Render HTML first
-            
-            // Apply Radio Button State *After* Rendering (or ensure container exists)
+            this.renderSettingsUI(); 
             setRad('global-click-mode', p.globalClickMode || 'double');
 
             setVal('flash-speed', p.flashSpeed); setChk('flash-random', p.flashRandom); setChk('flash-auto', p.flashAuto); 
@@ -106,7 +101,20 @@ class UIManager {
 
     renderThemeGrid() { const container = document.getElementById('theme-grid'); if(!container) return; const themes = [{ id: 'classic', color: '#6366f1', label: 'Classic' }, { id: 'sakura',  color: '#ec4899', label: 'Sakura' }, { id: 'ocean',   color: '#14b8a6', label: 'Ocean' }, { id: 'coffee',  color: '#f59e0b', label: 'Coffee' }, { id: 'cyber',   color: '#06b6d4', label: 'Cyber' }]; const cur = this.store.prefs.theme || 'classic'; container.innerHTML = themes.map(t => { const isActive = t.id === cur; const ring = isActive ? `ring-2 ring-offset-2 ring-${t.id === 'classic' ? 'indigo' : 'gray'}-400 dark:ring-offset-neutral-800` : ''; return `<button onclick="app.store.setTheme('${t.id}')" class="flex flex-col items-center gap-1 group"><div class="w-8 h-8 rounded-full shadow-sm border border-slate-200 dark:border-neutral-600 ${ring} transition-all active:scale-95" style="background-color: ${t.color}"></div><span class="text-[9px] font-bold text-slate-500 dark:text-neutral-400 ${isActive?'text-indigo-600 dark:text-indigo-400':''}">${t.label}</span></button>`; }).join(''); }
     
-    renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container || container.childElementCount > 0) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; }
+    renderPresetsUI() { 
+        const container = document.getElementById('preset-container'); 
+        if(!container || container.childElementCount > 0) return; 
+        if(!window.app.presets) return; 
+        const langs = window.app.presets.languages; 
+        const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); 
+        container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`;
+        
+        // FIX: Set default selection
+        const src = document.getElementById('preset-source');
+        const tgt = document.getElementById('preset-target');
+        if(src) src.value = 'en';
+        if(tgt) tgt.value = 'ja';
+    }
     
     renderSettingsUI() { 
         const p = this.store.prefs; if(typeof LANG_CONFIG === 'undefined') return; 

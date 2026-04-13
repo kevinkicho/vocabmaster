@@ -1,0 +1,11 @@
+{
+  "name": "vocabmaster",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3"
+  }
+}

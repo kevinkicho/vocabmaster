@@ -1,5 +1,5 @@
 /* sw.js */
-const CACHE_NAME = 'vocab-master-v1132-offline'; // VERSION BUMP
+const CACHE_NAME = 'vocab-master-v1143-offline'; // VERSION BUMP
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const ASSETS_TO_CACHE = [
   './js/ui.js',
   './js/services.js',
   './js/game_core.js',
+  './js/analytics.js',
+  './js/llm.js',
   './js/presets.js',
   // External Libraries
   'https://unpkg.com/@phosphor-icons/web',
@@ -64,6 +66,12 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Skip non-GET requests (POST to Ollama/Firebase can't be cached)
+  if (e.request.method !== 'GET') return;
+  // Skip localhost (Ollama LLM API)
+  const url = new URL(e.request.url);
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return;
+
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       const fetchPromise = fetch(e.request).then((networkResponse) => {

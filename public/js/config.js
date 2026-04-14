@@ -98,6 +98,10 @@ const GET_DEFAULTS = () => {
         sentencesReadWhole: false, 
 
         hanziEnableTooltip: true,
-        hanziAutoClose: "2000", 
+        hanziAutoClose: "2000",
+
+        // LLM (Smart Cloze)
+        llmEndpoint: 'http://localhost:11434',
+        llmModel: 'gemma3:1b',
     };
 };

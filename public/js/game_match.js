@@ -203,7 +203,7 @@ class Match extends GameMode {
             if(success) {
                 setSuccessStyle(el);
                 setSuccessStyle(prevEl);
-                this.score(10); app.celebration.play();
+                this.score(10, parseInt(match)); app.celebration.play();
                 
                 this.setTimeout(() => {
                     this.state.matched.push(id, this.sel.id); 
@@ -218,6 +218,7 @@ class Match extends GameMode {
             } else {
                 setFailStyle(el);
                 setFailStyle(prevEl);
+                if(app.analytics) app.analytics.recordAttempt(parseInt(match), 'match', false);
                 if(app.store.prefs.matchHint) {
                     const m = this.state.cards.find(c => String(c.match) === String(this.sel.match) && c.id !== this.sel.id)?.id;
                     const h = document.getElementById(m); 

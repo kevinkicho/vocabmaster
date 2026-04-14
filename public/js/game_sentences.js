@@ -9,17 +9,17 @@ class Sentences extends GameMode {
     setup() {
         this.root.innerHTML = `
             <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
-                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col">
-                    <div id="sn-header"></div>
-                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center justify-center p-6 text-center relative mb-2 landscape:mb-2 overflow-hidden">
-                         <div class="flex-1 w-full h-full flex items-center justify-center overflow-hidden relative">
+                <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col min-h-0">
+                    <div id="sn-header" class="shrink-0"></div>
+                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center p-4 landscape:p-3 text-center relative mb-2 landscape:mb-0 overflow-hidden min-h-0">
+                         <div class="flex-1 w-full flex items-center justify-center overflow-hidden relative min-h-0">
                             <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-neutral-100 leading-relaxed break-words"></p>
                          </div>
-                         <div id="sn-bottom-disp"></div>
+                         <div id="sn-bottom-disp" class="shrink-0 max-h-[30%] overflow-hidden w-full"></div>
                     </div>
                 </div>
                 <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
-                    <div id="sn-audio" class="mt-auto landscape:mt-0"></div>
+                    <div id="sn-audio" class="mt-auto landscape:mt-0 shrink-0"></div>
                     <div class="grid grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
                         ${[0,1,2,3].map(i => `
                             <div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix">
@@ -28,7 +28,7 @@ class Sentences extends GameMode {
                                 </button>
                             </div>`).join('')}
                     </div>
-                    <div id="sn-nav"></div>
+                    <div id="sn-nav" class="shrink-0"></div>
                 </div>
             </div>`;
 
@@ -114,12 +114,12 @@ class Sentences extends GameMode {
     }
 
     update() {
-        this.busy = false; 
+        this.busy = false;
         this.answered = false;
         const c = this.list[this.i];
         const p = app.store.prefs;
-        const qKey = p.sentencesQ || 'ja'; 
-        const aKey = p.sentencesA || 'ja'; 
+        const qKey = p.sentencesQ || 'ja';
+        const aKey = p.sentencesA || 'ja';
         const bottomKey = p.sentencesBottomLang || 'en';
 
         let exKey = '';
@@ -129,57 +129,14 @@ class Sentences extends GameMode {
         }
         const sentenceRaw = c[exKey] || "No example available.";
         const targetRaw = c[qKey] || "";
-        
+
+        // Phase 1: Regex cloze (instant)
         const result = this.generateCloze(sentenceRaw, targetRaw, qKey);
-        
-        this.maskedHtml = result.html;
-        this.maskedAudioText = result.audio;
         this.rawAudioText = sentenceRaw;
 
-        let transHtml = '';
-        const transLang = p.sentencesTrans;
-        if (transLang && transLang !== qKey) {
-            const transWord = c[transLang];
-            if (transWord) {
-                transHtml = `<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 mt-2 italic">${transWord}</p>`;
-            }
-        }
-
-        let bottomHtml = '';
-        const dispMode = p.sentencesBottomDisp || 'sentence_masked'; 
-        
-        if (dispMode !== 'none') {
-            let bottomText = '';
-            let bExKey = bottomKey;
-            const bConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(bottomKey) || null : null;
-            if (bConf && bConf.exKey) bExKey = bConf.exKey;
-
-            const wordText = c[bottomKey] || "";
-            const sentenceText = c[bExKey] || wordText || "";
-
-            switch (dispMode) {
-                case 'sentence_masked':
-                    const bResult = this.generateCloze(sentenceText, wordText, bottomKey);
-                    bottomText = bResult.html;
-                    break;
-                case 'sentence_full': bottomText = sentenceText; break;
-                case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${wordText}</span>`; break;
-                case 'word_full': bottomText = wordText; break;
-            }
-            if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
-        }
-
         this.updateHeader();
-        
-        if(this.dom.text) {
-             this.dom.text.innerHTML = "";
-             this.dom.text.dataset.brProcessed = "";
-             this.dom.text.dataset.lastFitted = "";
-             this.dom.text.innerHTML = this.maskedHtml + transHtml;
-             this.dom.text.dataset.wid = c.id;
-        }
-        
-        if(this.dom.bottomDisp) this.dom.bottomDisp.innerHTML = bottomHtml;
+        this._renderCloze(result, c, qKey, aKey, bottomKey);
+
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
         if(this.dom.sBox) {
             this.highlightQBox(this.dom.sBox, false);
@@ -193,23 +150,113 @@ class Sentences extends GameMode {
                  const span = btn.querySelector('span');
                  span.innerText = o[aKey];
                  const wrap = btn.parentElement;
-                 
-                 // --- FIX 2: Residue Cleanup ---
+
                  wrap.className = "w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix";
-                 
+
                  wrap.dataset.wid = o.id;
                  btn.className = "absolute inset-0 w-full h-full fit-box z-10";
-                 span.className = "fit-target font-black text-slate-600 dark:text-neutral-400"; 
-                 
-                 btn.blur(); // Remove focus
-                 
-                 const answerText = o[aKey]; 
+                 span.className = "fit-target font-black text-slate-600 dark:text-neutral-400";
+
+                 btn.blur();
+
+                 const answerText = o[aKey];
                  btn.onclick = () => app.game.handleInput(wrap, answerText, aKey, () => app.game.check(btn, o.id===c.id));
              }
         });
 
         this.afterRender();
         this.runCustomAutoPlay(c);
+
+        // Phase 2: LLM enhancement
+        const hasBlank = result.html.includes('main-blank');
+        const isCJK = ['ja', 'ko', 'zh'].includes(qKey);
+        const llmReady = app.llm && app.llm.available && app.llm.hasModel;
+        console.log('[Sentences] LLM check: hasBlank=' + hasBlank + ' isCJK=' + isCJK + ' llmReady=' + llmReady + ' available=' + (app.llm && app.llm.available) + ' hasModel=' + (app.llm && app.llm.hasModel));
+        if (llmReady && (!hasBlank || isCJK)) {
+            console.log('[Sentences] Firing LLM cloze for:', targetRaw, 'in:', sentenceRaw.substring(0, 30));
+            this._tryLLMCloze(sentenceRaw, targetRaw, qKey, c, aKey, bottomKey);
+        }
+    }
+
+    _renderCloze(result, card, qKey, aKey, bottomKey) {
+        const p = app.store.prefs;
+        this.maskedHtml = result.html;
+        this.maskedAudioText = result.audio;
+
+        let transHtml = '';
+        const transLang = p.sentencesTrans;
+        if (transLang && transLang !== qKey) {
+            const transWord = card[transLang];
+            if (transWord) {
+                transHtml = `<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 mt-2 italic">${transWord}</p>`;
+            }
+        }
+
+        let bottomHtml = '';
+        const dispMode = p.sentencesBottomDisp || 'sentence_masked';
+
+        if (dispMode !== 'none') {
+            let bottomText = '';
+            let bExKey = bottomKey;
+            const bConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(bottomKey) || null : null;
+            if (bConf && bConf.exKey) bExKey = bConf.exKey;
+
+            const wordText = card[bottomKey] || "";
+            const sentenceText = card[bExKey] || wordText || "";
+
+            switch (dispMode) {
+                case 'sentence_masked':
+                    const bResult = this.generateCloze(sentenceText, wordText, bottomKey);
+                    bottomText = bResult.html;
+                    break;
+                case 'sentence_full': bottomText = sentenceText; break;
+                case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${wordText}</span>`; break;
+                case 'word_full': bottomText = wordText; break;
+            }
+            if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
+        }
+
+        if(this.dom.text) {
+             this.dom.text.innerHTML = "";
+             this.dom.text.dataset.brProcessed = "";
+             this.dom.text.dataset.lastFitted = "";
+             this.dom.text.innerHTML = this.maskedHtml + transHtml;
+             this.dom.text.dataset.wid = card.id;
+        }
+
+        if(this.dom.bottomDisp) this.dom.bottomDisp.innerHTML = bottomHtml;
+    }
+
+    _buildClozeFromMatch(sentence, matchedText) {
+        const createMask = (word) => {
+            const id = 'main-blank-' + Math.random().toString(36).substr(2, 5);
+            return `<span id="${id}" data-word="${word}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
+        };
+        const escaped = matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const reg = new RegExp(`(${escaped})`, 'g');
+        return {
+            html: sentence.replace(reg, (m) => createMask(m)),
+            audio: sentence.replace(reg, ' ... ')
+        };
+    }
+
+    async _tryLLMCloze(sentenceRaw, targetRaw, qKey, card, aKey, bottomKey) {
+        // Subtle loading indicator
+        if (this.dom.text) this.dom.text.classList.add('opacity-60');
+
+        const match = await app.llm.findClozeMatch(sentenceRaw, targetRaw, qKey);
+
+        // Navigation guard: user may have moved to another card
+        if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+
+        if (match) {
+            const result = this._buildClozeFromMatch(sentenceRaw, match);
+            this._renderCloze(result, card, qKey, aKey, bottomKey);
+            // Re-fit text after LLM update
+            if (app.fitter && this.dom.text) await app.fitter.fitSmart(this.dom.text);
+        }
+
+        if (this.dom.text) this.dom.text.classList.remove('opacity-60');
     }
 
     async afterRender() {
@@ -306,6 +353,7 @@ class Sentences extends GameMode {
             this.waitAndNav(pAudio, 2500);
         } else {
             btnWrap.classList.add('bg-rose-500', 'border-rose-500');
+            this.miss();
         }
     }
 }

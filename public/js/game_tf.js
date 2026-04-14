@@ -189,6 +189,7 @@ class TF extends GameMode {
             }
             this.waitAndNav(pAudio, 2500);
         } else {
+            this.miss();
             this.waitAndNav(null, 2500);
         }
     }

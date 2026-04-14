@@ -4,6 +4,14 @@ module.exports = {
     './public/index.html',
     './public/js/**/*.js',
   ],
+  safelist: [
+    // Dynamic classes used in analytics tabs (ternary expressions in JS)
+    'bg-emerald-400', 'bg-emerald-500', 'bg-amber-400', 'bg-rose-400',
+    'text-emerald-500', 'text-amber-500', 'text-rose-500', 'text-amber-400', 'text-violet-400', 'text-violet-500',
+    'from-amber-50', 'to-orange-50', 'from-violet-50', 'to-purple-50',
+    'dark:from-amber-900/20', 'dark:to-orange-900/20', 'dark:from-violet-900/20', 'dark:to-purple-900/20',
+    'border-amber-100', 'dark:border-amber-900/30', 'border-violet-100', 'dark:border-violet-900/30',
+  ],
   darkMode: 'class',
   theme: {
     extend: {

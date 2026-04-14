@@ -32,8 +32,10 @@ class App {
             this.audio = new AudioService();
             this.data = new DataService();
             this.notes = new NoteService(); 
-            this.fitter = new TextFitter(); 
+            this.fitter = new TextFitter();
             this.celebration = new CelebrationService();
+            this.analytics = new AnalyticsService();
+            this.llm = new LLMService();
             this.presets = new PresetManager(); 
             this.game = null;
         } catch (e) {
@@ -105,7 +107,13 @@ class App {
             const count = await this.data.load();
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
-            
+
+            // 2b. Init LLM — auto-detect Ollama (non-blocking)
+            if (this.llm) {
+                this.llm.loadPrefs();
+                this.llm.autoDetect();
+            }
+
             // 3. Mock Data Check (Matches data.js logic)
             const isMock = this.data.list.length > 0 && this.data.list[0].ja === "Test 0";
             
@@ -226,6 +234,12 @@ class App {
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
                     </div>
+
+                    ${app.llm && app.llm.available && app.llm.hasModel ? `
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
+                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
+                        ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
+                    </div>` : ''}
                 </div>`;
 
             if(this.fitter) this.fitter.fitAll().then(() => view.classList.add('visible')).catch(()=>view.classList.add('visible'));
@@ -245,6 +259,7 @@ class App {
         else if (mode === 'match') this.game = new Match('match');
         else if (mode === 'voice') this.game = new Voice('voice');
         else if (mode === 'sentences') this.game = new Sentences('sentences');
+        else if (mode === 'story') this.game = new Story('story');
     }
 
     launch(fn) { 

@@ -143,6 +143,17 @@ class Store {
         this.prefs.hanziShowKr = getChk('hanzi-show-kr', this.prefs.hanziShowKr !== false);
         this.prefs.hanziShowEn = getChk('hanzi-show-en', this.prefs.hanziShowEn !== false);
 
+        // LLM
+        this.prefs.llmEndpoint = getVal('llm-endpoint', this.prefs.llmEndpoint);
+        this.prefs.llmModel = getVal('llm-model', this.prefs.llmModel);
+        if (window.app && window.app.llm) {
+            app.llm.loadPrefs();
+            app.llm.checkConnection().then(ok => {
+                if (ok) app.llm.hasModel = app.llm.availableModels.some(m => m.startsWith(app.llm.model.split(':')[0]));
+                if (app.ui) app.ui.updateLLMStatus(ok && app.llm.hasModel);
+            });
+        }
+
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.prefs));
         this.applyTheme();
         

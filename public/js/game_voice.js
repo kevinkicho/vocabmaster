@@ -202,6 +202,7 @@ class Voice extends GameMode {
             }
             this.waitAndNav(pAudio, 1500);
         } else {
+            this.miss();
             frontFace.classList.add('animate-shake', 'border-rose-300');
             setTimeout(() => frontFace.classList.remove('animate-shake', 'border-rose-300'), 500);
         }

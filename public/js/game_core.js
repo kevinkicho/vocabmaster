@@ -21,6 +21,8 @@ class GameMode {
              this.historyStack.push(this.i);
              this.historyPtr = 0;
         }
+
+        if(app.analytics) app.analytics.startSession(key);
         
         this.onWindowResize = () => {
             if(this.resizeTimeout) clearTimeout(this.resizeTimeout);
@@ -142,11 +144,18 @@ class GameMode {
     }
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
-    score(pts=10) {
+    score(pts=10, wordId=null) {
         app.score += pts;
         if(this.dom.headerScore) this.dom.headerScore.innerText = app.score;
         else { const el = document.querySelector('.score-display'); if(el) el.innerText = app.score; }
         if(app.data) app.data.recordScore(pts, this.key);
+        const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true);
+    }
+
+    miss(wordId=null) {
+        const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false);
     }
 
     async waitAndNav(audioPromise, fallbackDelay = 1500) {
@@ -345,12 +354,13 @@ class GameMode {
     }
 
     destroy() {
+        if(app.analytics) app.analytics.endSession();
         this.timeouts.forEach(id => clearTimeout(id));
         if(this.uiTimer) clearTimeout(this.uiTimer);
         this.timeouts = [];
         window.removeEventListener('resize', this.onWindowResize);
         this.unbindKeys();
-        if(app.ui) app.ui.hideTooltip(); 
+        if(app.ui) app.ui.hideTooltip();
     }
     
     async afterRender() { 

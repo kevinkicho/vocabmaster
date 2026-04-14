@@ -207,8 +207,9 @@ class Quiz extends GameMode {
             btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
         } else {
             btnWrap.classList.add('bg-rose-500', 'border-rose-500');
+            this.miss();
         }
-        
+
         if(isCorrect) {
             this.answered = true; this.busy = true; this.score(10);
             app.celebration.play();

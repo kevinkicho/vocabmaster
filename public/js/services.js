@@ -85,11 +85,12 @@ class TextFitter {
             if (el.innerText.length > 30 && !el.innerHTML.includes('<br')) { el.innerHTML = el.innerHTML.replace(/,\s/g, ', <br/>'); }
             el.style.opacity = '0';
             el.style.whiteSpace = 'normal'; el.style.lineHeight = '1.4'; el.style.display = 'block'; el.style.width = '100%';
-            requestAnimationFrame(() => {
+
+            const doFit = () => {
                 const style = window.getComputedStyle(p);
                 const availW = p.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
                 const availH = p.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-                if (availW <= 0 || availH <= 0) { el.style.opacity = '1'; resolve(); return; }
+                if (availW <= 0 || availH <= 0) return false;
                 const maxSize = Math.floor(Math.min(availW, availH));
                 let lo = 12, hi = Math.max(maxSize, 12), size = 12;
                 el.style.fontSize = `${hi}px`;
@@ -102,7 +103,16 @@ class TextFitter {
                 el.style.fontSize = `${size}px`;
                 el.dataset.lastFitted = el.innerHTML;
                 el.style.opacity = '1';
-                resolve();
+                return true;
+            };
+
+            // Double rAF ensures layout has settled before measuring
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (doFit()) { resolve(); return; }
+                    // Retry once after 100ms if container had 0 dimensions
+                    setTimeout(() => { doFit(); el.style.opacity = '1'; resolve(); }, 100);
+                });
             });
         });
     }

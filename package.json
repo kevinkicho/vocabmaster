@@ -2,6 +2,7 @@
   "name": "vocabmaster",
   "private": true,
   "scripts": {
+    "build": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
     "build:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --watch"
   },

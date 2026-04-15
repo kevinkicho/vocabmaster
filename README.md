@@ -131,6 +131,17 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 
 ---
 
+## Deployment
+
+Deploy manually from the command line:
+
+```bash
+npm run build
+firebase deploy --only hosting
+```
+
+---
+
 ## Related Projects
 
 - **[Ollama4Android](https://github.com/kevinkicho/Ollama4Android)** — Android app that runs Ollama locally on-device (or proxies to cloud models), providing the LLM backend for VocabMaster's AI features.

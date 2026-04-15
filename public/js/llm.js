@@ -9,10 +9,11 @@ class LLMService {
         this.cache = new Map();
         this.db = null;
         this.useNativeBridge = typeof AndroidBridge !== 'undefined' && AndroidBridge.isAvailable();
+        this.useDirectHTTP = false; // set true after first successful direct fetch
         this._queue = Promise.resolve(); // serialize all LLM calls
         this._initDB();
         if (this.useNativeBridge) {
-            console.log('[LLM] Android native bridge detected — using native HTTP for Ollama');
+            console.log('[LLM] Android native bridge detected');
         }
     }
 
@@ -160,20 +161,30 @@ class LLMService {
     async checkConnection() {
         try {
             let data;
-            if (this.useNativeBridge) {
-                // Use Android native bridge — bypasses Chrome HTTPS restriction
-                data = await AndroidBridge.checkStatus();
-            } else {
+            // Always try direct HTTP first — faster, no bridge overhead
+            try {
                 const resp = await fetch(this.endpoint + '/api/tags', {
                     signal: AbortSignal.timeout(3000)
                 });
-                if (!resp.ok) { this.available = false; return false; }
-                data = await resp.json();
+                if (resp.ok) {
+                    data = await resp.json();
+                    this.useDirectHTTP = true;
+                    console.log('[LLM] Direct HTTP connection OK');
+                }
+            } catch (e) {
+                console.log('[LLM] Direct HTTP failed, trying bridge...', e.message);
             }
+
+            // Fall back to Android bridge if direct HTTP failed
+            if (!data && this.useNativeBridge) {
+                data = await AndroidBridge.checkStatus();
+            }
+
+            if (!data) { this.available = false; return false; }
             this.available = true;
             console.log('[LLM] Raw tags response:', JSON.stringify(data));
             this.availableModels = (data.models || []).map(m => m.name || m.model || m);
-            console.log('[LLM] Connected. Models:', this.availableModels);
+            console.log('[LLM] Connected. Models:', this.availableModels, 'directHTTP:', this.useDirectHTTP);
             return true;
         } catch (e) {
             this.available = false;
@@ -190,28 +201,137 @@ class LLMService {
     // --- Warmup ---
     async warmup() {
         if (!this.available) return;
-        // Skip warmup on Android — discovery already validated, save the slot for real work
-        if (this.useNativeBridge) {
-            console.log('[LLM] Skipping warmup on Android (discovery validated connection)');
+        // Skip warmup if no direct HTTP and on Android — save the slot for real work
+        if (!this.useDirectHTTP && this.useNativeBridge) {
+            console.log('[LLM] Skipping warmup (bridge-only mode)');
             return;
         }
-        return this._enqueue(async () => {
-            try {
-                await fetch(this.endpoint + '/api/generate', {
+        try {
+            await this.generate({
+                prompt: 'Hi',
+                options: { num_predict: 1 },
+                timeout: 30000
+            });
+            console.log('[LLM] Model warmed up');
+        } catch (e) {
+            console.warn('[LLM] Warmup failed:', e.message);
+        }
+    }
+
+    // --- Streaming generation (direct HTTP with ReadableStream) ---
+    async streamGenerate(opts, onToken) {
+        const model = this.resolvedModel || this.model;
+        const body = {
+            model,
+            prompt: opts.prompt,
+            stream: true,
+            ...(opts.system && { system: opts.system }),
+            ...(opts.options && { options: opts.options })
+        };
+
+        // Try direct HTTP streaming first
+        if (this.useDirectHTTP || !this.useNativeBridge) {
+            return this._enqueue(async () => {
+                const resp = await fetch(this.endpoint + '/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    signal: AbortSignal.timeout(30000),
-                    body: JSON.stringify({
-                        model: this.resolvedModel || this.model,
-                        prompt: 'Hi',
-                        stream: false,
-                        options: { num_predict: 1 }
-                    })
+                    signal: AbortSignal.timeout(180000),
+                    body: JSON.stringify(body)
                 });
-                console.log('[LLM] Model warmed up');
-            } catch (e) {
-                console.warn('[LLM] Warmup failed:', e.message);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = '';
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const obj = JSON.parse(line);
+                            if (obj.response) {
+                                fullText += obj.response;
+                                if (onToken) onToken(obj.response);
+                            }
+                        } catch (e) { /* skip malformed lines */ }
+                    }
+                }
+                // Process any remaining buffer
+                if (buffer.trim()) {
+                    try {
+                        const obj = JSON.parse(buffer);
+                        if (obj.response) {
+                            fullText += obj.response;
+                            if (onToken) onToken(obj.response);
+                        }
+                    } catch (e) { /* skip */ }
+                }
+
+                return fullText;
+            });
+        }
+
+        // Fall back to Android bridge streaming
+        if (this.useNativeBridge && typeof AndroidBridge !== 'undefined' && AndroidBridge.streamGemma) {
+            let fullText = '';
+            await this._enqueue(() => AndroidBridge.streamGemma({
+                prompt: opts.prompt,
+                model,
+                system: opts.system || ''
+            }, (token) => {
+                fullText += token;
+                if (onToken) onToken(token);
+            }));
+            return fullText;
+        }
+
+        throw new Error('No streaming backend available');
+    }
+
+    // --- Non-streaming generation (direct HTTP preferred) ---
+    async generate(opts) {
+        const model = this.resolvedModel || this.model;
+        const body = {
+            model,
+            prompt: opts.prompt,
+            stream: false,
+            ...(opts.system && { system: opts.system }),
+            ...(opts.options && { options: opts.options })
+        };
+
+        return this._enqueue(async () => {
+            // Try direct HTTP first
+            if (this.useDirectHTTP || !this.useNativeBridge) {
+                const resp = await fetch(this.endpoint + '/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: AbortSignal.timeout(opts.timeout || 30000),
+                    body: JSON.stringify(body)
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                return data.response || '';
             }
+
+            // Fall back to bridge
+            if (this.useNativeBridge && typeof AndroidBridge !== 'undefined') {
+                const data = await AndroidBridge.askGemma({
+                    prompt: opts.prompt,
+                    model,
+                    system: opts.system || ''
+                });
+                return data.response || '';
+            }
+
+            throw new Error('No LLM backend available');
         });
     }
 
@@ -538,53 +658,29 @@ class LLMService {
         // 2. Availability guard
         if (!this.available || !this.hasModel) return null;
 
-        // 3. Enqueue (serialize requests — ollama handles one at a time on mobile)
-        return this._enqueue(async () => {
-            // Ultra-minimal prompt: partial JSON completion forces the model to just fill in the blank
+        // 3. Use the unified generate method (handles direct HTTP vs bridge)
+        try {
             const prompt = `Sentence: ${sentence}
 Word: ${target}
 The part of the sentence to blank out is: {"match":"`;
 
-            try {
-                let data;
-                if (this.useNativeBridge) {
-                    data = await AndroidBridge.askGemma({
-                        prompt: prompt,
-                        model: this.resolvedModel || this.model,
-                        system: 'Complete the JSON. Output only the value and closing brackets. No explanation.'
-                    });
-                } else {
-                    const resp = await fetch(this.endpoint + '/api/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        signal: AbortSignal.timeout(30000),
-                        body: JSON.stringify({
-                            model: this.resolvedModel || this.model,
-                            prompt: prompt,
-                            stream: false,
-                            options: { temperature: 0, num_predict: 64 }
-                        })
-                    });
+            const raw = await this.generate({
+                prompt,
+                system: 'Complete the JSON. Output only the value and closing brackets. No explanation.',
+                options: { temperature: 0, num_predict: 64 },
+                timeout: 30000
+            });
 
-                    if (!resp.ok) {
-                        console.warn('[LLM] API error:', resp.status);
-                        return null;
-                    }
-                    data = await resp.json();
-                }
+            console.log('[LLM] Raw response:', raw);
+            const match = this._parseResponse(raw, sentence);
+            console.log('[LLM] Parsed match:', match, 'for target:', target);
 
-                console.log('[LLM] Raw response:', data.response);
-                const match = this._parseResponse(data.response, sentence);
-                console.log('[LLM] Parsed match:', match, 'for target:', target);
-
-                // Cache result (even empty → avoid re-calling)
-                if (match) await this.setCache(sentence, target, langCode, match);
-                return match;
-            } catch (e) {
-                console.warn('[LLM] Request failed:', e.message);
-                return null;
-            }
-        });
+            if (match) await this.setCache(sentence, target, langCode, match);
+            return match;
+        } catch (e) {
+            console.warn('[LLM] Request failed:', e.message);
+            return null;
+        }
     }
 
     // --- Response parsing ---

@@ -8,8 +8,18 @@ class Story extends GameMode {
         this.qIndex = 0;       // which question the user is on
         this.phase = 'loading';
         this.streaming = false;
-        this._prefetched = null; // { storyWords, storyPart, questions, lang }
+        this._prefetched = null; // { storyWords, storyPart, questions, lang, rawText, wordIds }
         this._prefetching = false;
+
+        // Session progress
+        this.storiesPerSession = 5;
+        this.storyNum = 0;      // how many stories completed or in-progress (1-based during play)
+
+        // RTDB story cache
+        this._cachedStories = []; // fetched from RTDB at session start
+        this._cachedIndex = 0;
+        this._cacheLoaded = false;
+
         this.render();
     }
 
@@ -35,22 +45,117 @@ class Story extends GameMode {
         this.root.innerHTML = `
             <div class="flex flex-col h-full w-full">
                 <div id="story-header" class="shrink-0 px-2 pt-1 pb-2"></div>
-                <div id="story-body" class="flex-1 overflow-y-auto px-3 pb-4"></div>
+                <div id="story-body" class="flex-1 overflow-y-auto px-3 pb-4 overscroll-contain touch-pan-y"></div>
                 <div id="story-footer" class="shrink-0 px-3 pb-3"></div>
             </div>`;
 
         this.dom.header = document.getElementById('story-header');
         this.dom.body = document.getElementById('story-body');
         this.dom.footer = document.getElementById('story-footer');
-        this.setupHeader({ showDice: false });
 
+        this._setupStoryHeader();
+        this._loadCacheThenStart();
+    }
+
+    // Override parent — never show vocab pill in Story Mode
+    setupHeader() { this._setupStoryHeader(); }
+
+    // ── Story-specific header with session progress ────────────────
+
+    _setupStoryHeader() {
+        const num = this.storyNum || 1;
+        const total = this.storiesPerSession;
+        this.dom.header.innerHTML = `
+            <div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">
+                <div class="flex items-center bg-white dark:bg-neutral-800 rounded-full px-4 py-2 shadow-sm border border-slate-200 dark:border-neutral-700 mr-auto">
+                    <i class="ph-duotone ph-book-open-text text-sm text-indigo-500 mr-2"></i>
+                    <span id="story-progress" class="text-sm font-black text-indigo-600 dark:text-indigo-400">${num}</span>
+                    <span class="text-[10px] font-bold text-slate-400 ml-1">/ ${total}</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2">
+                        <span class="text-slate-400">PTS</span>
+                        <span class="score-display">${app.score}</span>
+                    </div>
+                    <button onclick="app.goHome()" class="w-9 h-9 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+            </div>`;
+        this.dom.headerScore = this.dom.header.querySelector('.score-display');
+    }
+
+    _updateProgress() {
+        const el = document.getElementById('story-progress');
+        if (el) el.textContent = this.storyNum;
+    }
+
+    // ── RTDB cache loading ─────────────────────────────────────────
+
+    async _loadCacheThenStart() {
+        // Try to load cached stories from RTDB for this language
+        if (!this._cacheLoaded) {
+            await this._loadCachedStories();
+            this._cacheLoaded = true;
+        }
         this.startStory();
+    }
+
+    async _loadCachedStories() {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+            const lang = this._getTargetLang();
+            const snap = await db.ref('stories')
+                .orderByChild('lang')
+                .equalTo(lang)
+                .limitToLast(50)
+                .once('value');
+            if (!snap.exists()) return;
+
+            const all = [];
+            snap.forEach(child => {
+                const v = child.val();
+                v._key = child.key;
+                all.push(v);
+            });
+
+            // Shuffle so user doesn't always see the same order
+            for (let i = all.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [all[i], all[j]] = [all[j], all[i]];
+            }
+            this._cachedStories = all;
+            this._cachedIndex = 0;
+            console.log('[Story] Loaded', all.length, 'cached stories from RTDB');
+        } catch (e) {
+            console.warn('[Story] Cache load failed:', e.message);
+        }
+    }
+
+    _nextCachedStory() {
+        if (this._cachedIndex >= this._cachedStories.length) return null;
+        const cached = this._cachedStories[this._cachedIndex];
+        this._cachedIndex++;
+        // Reconstruct storyWords from wordIds
+        const words = (cached.wordIds || []).map(id => app.data.list.find(w => w.id === id)).filter(Boolean);
+        if (words.length === 0 || !cached.questions || cached.questions.length === 0) return this._nextCachedStory(); // skip bad entries
+        return {
+            storyWords: words,
+            storyPart: cached.storyText,
+            questions: cached.questions,
+            lang: cached.lang,
+            fromCache: true
+        };
     }
 
     // ── Main flow ──────────────────────────────────────────────────
 
     async startStory() {
-        // If we have a prefetched story ready, use it instantly
+        this.storyNum++;
+        this._updateProgress();
+
+        // Priority 1: prefetched story (already generated in background)
         if (this._prefetched) {
             console.log('[Story] Using prefetched story');
             const p = this._prefetched;
@@ -59,10 +164,24 @@ class Story extends GameMode {
             this.questions = p.questions;
             this.qIndex = 0;
             this._showStoryWithQuestions(p.storyPart, p.lang);
-            this._prefetchNext(); // start prefetching the one after
+            if (!p.fromCache) this._saveStoryToRTDB(p.storyPart, p.questions, p.storyWords, p.lang, p.rawText);
+            this._prefetchNext();
             return;
         }
 
+        // Priority 2: cached story from RTDB (instant, no AI wait)
+        const cached = this._nextCachedStory();
+        if (cached) {
+            console.log('[Story] Serving cached story from RTDB');
+            this.storyWords = cached.storyWords;
+            this.questions = cached.questions;
+            this.qIndex = 0;
+            this._showStoryWithQuestions(cached.storyPart, cached.lang);
+            this._prefetchNext();
+            return;
+        }
+
+        // Priority 3: generate fresh story via AI
         this.phase = 'loading';
         this.storyText = '';
         this.questions = [];
@@ -87,25 +206,8 @@ class Story extends GameMode {
             return;
         }
 
-        // Loading UI with word pills + elapsed timer
-        const startTime = Date.now();
-        this.dom.body.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full gap-4">
-                <div class="flex flex-wrap justify-center gap-2 mb-2">
-                    ${wordList.map(w => `<span class="inline-block bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-sm font-bold px-3 py-1.5 rounded-full">${w}</span>`).join('')}
-                </div>
-                <div class="flex items-center gap-2">
-                    <i class="ph-bold ph-spinner animate-spin text-indigo-500"></i>
-                    <span class="text-xs font-bold text-slate-500 dark:text-neutral-400">Gemma is writing a story...</span>
-                </div>
-                <span id="story-elapsed" class="text-[10px] text-slate-300 dark:text-neutral-600 font-mono">0s</span>
-            </div>`;
-        this.afterRender();
-
-        this._elapsedTimer = setInterval(() => {
-            const el = document.getElementById('story-elapsed');
-            if (el) el.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
-        }, 1000);
+        // Show the story card shell immediately — stream tokens into it
+        this._showStreamingCard(wordList);
 
         const prompt = this._buildStoryPrompt(wordList, langName);
 
@@ -123,6 +225,41 @@ class Story extends GameMode {
         } finally {
             if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         }
+    }
+
+    // ── Streaming card — final UI from the start ───────────────────
+
+    _showStreamingCard(wordList) {
+        const startTime = Date.now();
+
+        this.dom.body.innerHTML = `
+            <div class="space-y-4 pb-2">
+                <div class="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-slate-200 dark:border-neutral-700 shadow-sm">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
+                        <span id="story-elapsed" class="ml-auto text-[10px] text-slate-300 dark:text-neutral-600 font-mono">0s</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 mb-3">
+                        ${wordList.map(w => `<span class="inline-block bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">${w}</span>`).join('')}
+                    </div>
+                    <div id="story-stream" class="text-base leading-relaxed text-slate-800 dark:text-neutral-100 whitespace-pre-wrap min-h-[60px] select-text"><span class="text-slate-300 dark:text-neutral-600 animate-pulse">|</span></div>
+                </div>
+                <div id="story-questions-area"></div>
+            </div>`;
+
+        this.dom.footer.innerHTML = `
+            <div class="flex items-center gap-2 justify-center opacity-60">
+                <i class="ph-bold ph-spinner animate-spin text-xs text-indigo-400"></i>
+                <span id="story-status" class="text-[11px] font-bold text-slate-400">Writing story...</span>
+            </div>`;
+
+        this._elapsedTimer = setInterval(() => {
+            const el = document.getElementById('story-elapsed');
+            if (el) el.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+        }, 1000);
+
+        this.afterRender();
     }
 
     // ── Prompt ──────────────────────────────────────────────────────
@@ -154,27 +291,23 @@ D) ...
 ANSWER: (letter)`;
     }
 
-    // ── Generation (stream story portion only, buffer questions) ────
+    // ── Generation (stream into the card) ──────────────────────────
 
     async _generateStory(prompt, lang) {
-        const model = app.llm.resolvedModel || app.llm.model;
-        console.log('[Story] _generateStory model:', model, 'bridge:', app.llm.useNativeBridge);
+        console.log('[Story] _generateStory directHTTP:', app.llm.useDirectHTTP, 'bridge:', app.llm.useNativeBridge);
 
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         this.phase = 'reading';
 
-        // Streaming display — only shows story text
-        this.dom.body.innerHTML = `
-            <div class="space-y-4">
-                <div id="story-stream" class="text-base leading-relaxed text-slate-800 dark:text-neutral-100 whitespace-pre-wrap min-h-[100px]"><span class="text-slate-300 dark:text-neutral-600 animate-pulse">|</span></div>
-            </div>`;
-        this.dom.footer.innerHTML = `
-            <div class="flex items-center gap-2 justify-center opacity-60">
-                <i class="ph-bold ph-spinner animate-spin text-xs text-indigo-400"></i>
-                <span class="text-[11px] font-bold text-slate-400">Streaming from Gemma...</span>
-            </div>`;
-
         const streamEl = document.getElementById('story-stream');
+        const statusEl = document.getElementById('story-status');
+        const elapsedEl = document.getElementById('story-elapsed');
+        const startTime = Date.now();
+
+        this._elapsedTimer = setInterval(() => {
+            if (elapsedEl) elapsedEl.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+        }, 1000);
+
         let fullText = '';
         let visibleText = '';
         let hitQuestionZone = false;
@@ -185,23 +318,17 @@ ANSWER: (letter)`;
             tokenCount++;
             fullText += token;
 
-            // Only show text up to the first question marker
             if (!hitQuestionZone) {
-                // Check if we just entered the question zone
                 if (/\nQ1[:\s]/.test(fullText) || /\nQUESTION[:\s]/i.test(fullText)) {
                     hitQuestionZone = true;
-                    // Extract just the story part for display
                     const cutPoint = fullText.search(/\nQ1[:\s]|\nQUESTION[:\s]/i);
                     visibleText = fullText.substring(0, cutPoint).replace(/^STORY:\s*/i, '').trim();
                     if (streamEl) streamEl.textContent = visibleText;
-                    // Update footer to show we're generating questions now
-                    this.dom.footer.innerHTML = `
-                        <div class="flex items-center gap-2 justify-center opacity-60">
-                            <i class="ph-bold ph-spinner animate-spin text-xs text-purple-400"></i>
-                            <span class="text-[11px] font-bold text-slate-400">Generating questions...</span>
-                        </div>`;
+                    if (statusEl) {
+                        statusEl.textContent = 'Generating questions...';
+                        statusEl.classList.replace('text-slate-400', 'text-purple-400');
+                    }
                 } else {
-                    // Still in story zone — show everything (strip STORY: prefix)
                     visibleText = fullText.replace(/^STORY:\s*/i, '').trim();
                     if (streamEl) streamEl.textContent = visibleText;
                     this.dom.body.scrollTop = this.dom.body.scrollHeight;
@@ -210,37 +337,18 @@ ANSWER: (letter)`;
             if (tokenCount === 1) console.log('[Story] First token received');
         };
 
-        if (app.llm.useNativeBridge && typeof AndroidBridge !== 'undefined' && AndroidBridge.streamGemma) {
-            console.log('[Story] Using native streaming bridge');
-            await app.llm._enqueue(() => AndroidBridge.streamGemma({
-                prompt,
-                model,
-                system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'
-            }, onToken));
-        } else {
-            const result = await app.llm._enqueue(async () => {
-                const resp = await fetch(app.llm.endpoint + '/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: AbortSignal.timeout(180000),
-                    body: JSON.stringify({
-                        model,
-                        prompt,
-                        system: 'You are a language learning assistant. Write simple, clear text suitable for learners.',
-                        stream: false
-                    })
-                });
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                return resp.json();
-            });
-            fullText = result.response || '';
-        }
+        // Use unified LLM streaming — direct HTTP preferred, bridge fallback
+        fullText = await app.llm.streamGenerate({
+            prompt,
+            system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'
+        }, onToken);
 
         this.streaming = false;
         this.storyText = fullText;
+        if (this._elapsedTimer) clearInterval(this._elapsedTimer);
+        if (elapsedEl) elapsedEl.remove();
         console.log('[Story] Generation complete, tokens:', tokenCount, 'length:', fullText.length);
 
-        // Parse and show polished result
         this._parseAndShow(fullText, lang);
     }
 
@@ -254,22 +362,59 @@ ANSWER: (letter)`;
         console.log('[Story] Parsed', this.questions.length, 'questions');
 
         if (this.questions.length > 0) {
-            this._showStoryWithQuestions(storyPart, lang);
+            // Transition in-place: update the streaming card rather than rebuilding
+            this._transitionToQuestions(storyPart, lang);
+            this._saveStoryToRTDB(storyPart, this.questions, this.storyWords, lang, text);
             this._prefetchNext();
         } else {
             this._showStoryOnly(storyPart);
         }
     }
 
+    // Smooth in-place transition: replace streamed text with highlighted version
+    _transitionToQuestions(storyPart, lang) {
+        this.phase = 'reading';
+        const streamEl = document.getElementById('story-stream');
+        const total = this.questions.length;
+
+        if (streamEl) {
+            streamEl.innerHTML = this._highlightWords(storyPart);
+            streamEl.classList.remove('whitespace-pre-wrap');
+        }
+
+        // Remove word pills (they served as loading context, now the story speaks for itself)
+        const pills = this.dom.body.querySelector('.flex.flex-wrap.gap-1\\.5');
+        if (pills) pills.remove();
+
+        // Remove elapsed timer if still present
+        const elapsed = document.getElementById('story-elapsed');
+        if (elapsed) elapsed.remove();
+
+        // Add TTS button
+        this._addSpeakerButton(storyPart);
+
+        // Show question button in footer
+        this.dom.footer.innerHTML = `
+            <button id="story-ready-btn" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-indigo-500 to-purple-500 active:scale-95 transition-transform shadow-lg">
+                <i class="ph-bold ph-question mr-1"></i> Question 1 of ${total}
+            </button>`;
+
+        document.getElementById('story-ready-btn').onclick = () => this._showCurrentQuestion();
+        this.afterRender();
+
+        // Auto-read story aloud
+        if (app.store.prefs.storyAutoRead !== false) {
+            this._readStory(storyPart);
+        }
+    }
+
     _extractStory(text) {
-        // Get text between STORY: and the first Q1:/QUESTION:
         const storyMatch = text.match(/STORY:\s*([\s\S]*?)(?=\nQ[12][:\s]|\nQUESTION[:\s]|$)/i);
         return storyMatch ? storyMatch[1].trim() : text.split(/\nQ[12][:\s]/i)[0].replace(/^STORY:\s*/i, '').trim();
     }
 
     _extractQuestions(text) {
         const questions = [];
-        // Match Q1/Q2 blocks or QUESTION blocks
         const qBlocks = text.matchAll(/(?:Q\d|QUESTION)[:\s]\s*([\s\S]*?)ANSWER:\s*([A-D])/gi);
         for (const m of qBlocks) {
             const block = m[1].trim();
@@ -303,8 +448,11 @@ ANSWER: (letter)`;
                     <div class="flex items-center gap-2 mb-3">
                         <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
+                        <button id="story-speak-btn" onclick="app.game._readStory()" class="ml-auto w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-indigo-500 hover:border-indigo-300">
+                            <i class="ph-bold ph-speaker-high text-sm"></i>
+                        </button>
                     </div>
-                    <div class="text-base leading-relaxed text-slate-800 dark:text-neutral-100">${highlighted}</div>
+                    <div id="story-stream" class="text-base leading-relaxed text-slate-800 dark:text-neutral-100 select-text">${highlighted}</div>
                 </div>
                 <div id="story-questions-area"></div>
             </div>`;
@@ -316,6 +464,11 @@ ANSWER: (letter)`;
 
         document.getElementById('story-ready-btn').onclick = () => this._showCurrentQuestion();
         this.afterRender();
+
+        // Auto-read for cached/prefetched stories
+        if (app.store.prefs.storyAutoRead !== false) {
+            this._readStory(storyPart);
+        }
     }
 
     _showCurrentQuestion() {
@@ -329,7 +482,6 @@ ANSWER: (letter)`;
         this.dom.footer.innerHTML = '';
 
         const area = document.getElementById('story-questions-area');
-        // Clear previous question area
         area.innerHTML = '';
 
         const qSection = document.createElement('div');
@@ -382,7 +534,6 @@ ANSWER: (letter)`;
             this.miss();
         }
 
-        // Advance to next question or show "New Story"
         this.qIndex++;
         const hasMore = this.qIndex < this.questions.length;
 
@@ -394,29 +545,51 @@ ANSWER: (letter)`;
                 </button>`;
             document.getElementById('story-next-q').onclick = () => this._showCurrentQuestion();
         } else {
-            const prefetchReady = !!this._prefetched;
-            this.dom.footer.innerHTML = `
-                <button onclick="app.game._loadNext()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
-                    <i class="ph-bold ph-arrow-right mr-1"></i> ${prefetchReady ? 'Next Story' : 'New Story'}
-                </button>`;
+            // Session complete?
+            const sessionDone = this.storyNum >= this.storiesPerSession;
+            if (sessionDone) {
+                this.dom.footer.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-center text-xs font-bold text-emerald-500 mb-1">
+                            <i class="ph-bold ph-check-circle mr-1"></i> Session complete! ${this.storiesPerSession} stories finished
+                        </div>
+                        <button onclick="app.game._resetSession()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-emerald-500 to-cyan-500 active:scale-95 transition-transform shadow-lg">
+                            <i class="ph-bold ph-arrow-clockwise mr-1"></i> New Session
+                        </button>
+                    </div>`;
+            } else {
+                const prefetchReady = !!this._prefetched;
+                const nextCached = this._cachedIndex < this._cachedStories.length;
+                const instant = prefetchReady || nextCached;
+                this.dom.footer.innerHTML = `
+                    <button onclick="app.game._loadNext()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
+                        <i class="ph-bold ph-arrow-right mr-1"></i> ${instant ? 'Next Story' : 'New Story'}
+                    </button>`;
+            }
         }
+    }
+
+    _resetSession() {
+        this.storyNum = 0;
+        this._prefetched = null;
+        this._prefetching = false;
+        this._loadNext();
     }
 
     _loadNext() {
         this.root.classList.remove('visible');
         this.answered = false;
         this.busy = false;
-        // Re-setup the shell
         this.root.innerHTML = `
             <div class="flex flex-col h-full w-full">
                 <div id="story-header" class="shrink-0 px-2 pt-1 pb-2"></div>
-                <div id="story-body" class="flex-1 overflow-y-auto px-3 pb-4"></div>
+                <div id="story-body" class="flex-1 overflow-y-auto px-3 pb-4 overscroll-contain touch-pan-y"></div>
                 <div id="story-footer" class="shrink-0 px-3 pb-3"></div>
             </div>`;
         this.dom.header = document.getElementById('story-header');
         this.dom.body = document.getElementById('story-body');
         this.dom.footer = document.getElementById('story-footer');
-        this.setupHeader({ showDice: false });
+        this._setupStoryHeader();
         this.startStory();
     }
 
@@ -427,7 +600,7 @@ ANSWER: (letter)`;
                 <div class="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-slate-200 dark:border-neutral-700 shadow-sm">
                     <div class="text-base leading-relaxed text-slate-800 dark:text-neutral-100">${highlighted}</div>
                 </div>
-                <p class="text-xs text-center text-slate-400">Gemma couldn't generate questions this time.</p>
+                <p class="text-xs text-center text-slate-400">Couldn't generate questions this time.</p>
             </div>`;
         this.dom.footer.innerHTML = `
             <button onclick="app.game._loadNext()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
@@ -440,10 +613,20 @@ ANSWER: (letter)`;
 
     async _prefetchNext() {
         if (this._prefetching) return;
+        if (this.storyNum >= this.storiesPerSession) return; // don't prefetch past session end
         this._prefetching = true;
         console.log('[Story] Prefetching next story in background...');
 
         try {
+            // Check if we can serve from cache instead of generating
+            const cached = this._nextCachedStory();
+            if (cached) {
+                this._prefetched = cached;
+                console.log('[Story] Prefetch served from RTDB cache');
+                this._updateNextButton();
+                return;
+            }
+
             const words = await this._pickWords(4);
             const lang = this._getTargetLang();
             const langName = app.llm._getLangName(lang);
@@ -451,35 +634,17 @@ ANSWER: (letter)`;
             if (wordList.length === 0) { this._prefetching = false; return; }
 
             const prompt = this._buildStoryPrompt(wordList, langName);
-            const model = app.llm.resolvedModel || app.llm.model;
-            let fullText = '';
-
-            if (app.llm.useNativeBridge && typeof AndroidBridge !== 'undefined' && AndroidBridge.streamGemma) {
-                await app.llm._enqueue(() => AndroidBridge.streamGemma({
-                    prompt, model,
-                    system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'
-                }, (token) => { fullText += token; }));
-            } else {
-                const result = await app.llm._enqueue(async () => {
-                    const resp = await fetch(app.llm.endpoint + '/api/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        signal: AbortSignal.timeout(180000),
-                        body: JSON.stringify({ model, prompt, system: 'You are a language learning assistant. Write simple, clear text suitable for learners.', stream: false })
-                    });
-                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                    return resp.json();
-                });
-                fullText = result.response || '';
-            }
+            let fullText = await app.llm.streamGenerate({
+                prompt,
+                system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'
+            });
 
             const storyPart = this._extractStory(fullText);
             const questions = this._extractQuestions(fullText);
 
             if (questions.length > 0) {
-                this._prefetched = { storyWords: words, storyPart, questions, lang };
+                this._prefetched = { storyWords: words, storyPart, questions, lang, rawText: fullText, wordIds: words.map(w => w.id) };
                 console.log('[Story] Prefetch ready:', questions.length, 'questions');
-                // Update the "New Story" button if user already finished current questions
                 this._updateNextButton();
             }
         } catch (e) {
@@ -490,7 +655,6 @@ ANSWER: (letter)`;
     }
 
     _updateNextButton() {
-        // If user is done with all questions and prefetch just landed, update button text
         if (this.qIndex >= this.questions.length && this._prefetched) {
             const btn = this.dom.footer?.querySelector('button');
             if (btn && btn.textContent.includes('New Story')) {
@@ -499,11 +663,64 @@ ANSWER: (letter)`;
         }
     }
 
+    // ── Save story to RTDB ──────────────────────────────────────────
+
+    async _saveStoryToRTDB(storyText, questions, words, lang, rawText) {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const wordIds = words.map(w => w.id).filter(Boolean);
+            const entry = {
+                storyText,
+                questions,
+                wordIds,
+                lang,
+                ts: firebase.database.ServerValue.TIMESTAMP
+            };
+
+            const ref = db.ref('stories').push();
+            await ref.set(entry);
+            console.log('[Story] Saved story to RTDB:', ref.key);
+        } catch (e) {
+            console.warn('[Story] RTDB save failed:', e.message);
+        }
+    }
+
+    // ── TTS ─────────────────────────────────────────────────────────
+
+    _addSpeakerButton(storyPart) {
+        this._currentStoryText = storyPart;
+        const header = this.dom.body.querySelector('.flex.items-center.gap-2.mb-3');
+        if (!header || document.getElementById('story-speak-btn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'story-speak-btn';
+        btn.className = 'ml-auto w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-indigo-500 hover:border-indigo-300';
+        btn.innerHTML = '<i class="ph-bold ph-speaker-high text-sm"></i>';
+        btn.onclick = () => this._readStory();
+        header.appendChild(btn);
+    }
+
+    _readStory(text) {
+        const storyText = text || this._currentStoryText;
+        if (!storyText || !app.audio) return;
+        const lang = this._getTargetLang();
+        app.audio.play(storyText, lang, null, 0);
+        // Visual feedback on button
+        const btn = document.getElementById('story-speak-btn');
+        if (btn) {
+            btn.classList.add('text-indigo-500', 'border-indigo-300');
+            setTimeout(() => btn.classList.remove('text-indigo-500', 'border-indigo-300'), 1500);
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────
 
     _highlightWords(text) {
         const lang = this._getTargetLang();
-        let html = this.wrapHanzi(text);
+        // Highlight on plain text FIRST, then wrap hanzi
+        // (reverse order would break mark tags inside hanzi spans)
+        let html = text;
         for (const w of this.storyWords) {
             const word = w[lang] || w.ja || '';
             if (!word) continue;
@@ -514,7 +731,8 @@ ANSWER: (letter)`;
                 html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${v}</mark>`);
             }
         }
-        return html;
+        // Now wrap hanzi characters that aren't already inside mark tags
+        return this.wrapHanzi(html);
     }
 
     async _pickWords(count) {

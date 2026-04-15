@@ -100,7 +100,10 @@ const GET_DEFAULTS = () => {
         hanziEnableTooltip: true,
         hanziAutoClose: "2000",
 
-        // LLM (Smart Cloze)
+        // Story Mode
+        storyAutoRead: true,
+
+        // LLM (Smart Cloze / Story Mode)
         llmEndpoint: 'http://localhost:11434',
         llmModel: 'gemma3:1b',
     };

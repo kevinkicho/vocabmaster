@@ -146,6 +146,7 @@ class Store {
         // LLM
         this.prefs.llmEndpoint = getVal('llm-endpoint', this.prefs.llmEndpoint);
         this.prefs.llmModel = getVal('llm-model', this.prefs.llmModel);
+        this.prefs.storyAutoRead = getChk('story-auto-read', this.prefs.storyAutoRead !== false);
         if (window.app && window.app.llm) {
             app.llm.loadPrefs();
             app.llm.checkConnection().then(ok => {

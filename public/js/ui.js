@@ -96,7 +96,7 @@ class UIManager {
             setChk('sentences-auto', p.sentencesAuto); setChk('sentences-random', p.sentencesRandom);
             setVal('sentences-audio-src', p.sentencesAudioSrc); setChk('sentences-play-correct', p.sentencesPlayCorrect); setChk('sentences-read-whole', p.sentencesReadWhole);
             // LLM
-            setVal('llm-endpoint', p.llmEndpoint || 'http://localhost:11434'); setVal('llm-model', p.llmModel || 'gemma3:1b');
+            setVal('llm-endpoint', p.llmEndpoint || 'http://localhost:11434'); setVal('llm-model', p.llmModel || 'gemma3:1b'); setChk('story-auto-read', p.storyAutoRead !== false);
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
         } catch(e) { console.error("Error loading settings UI:", e); }
@@ -1009,4 +1009,5 @@ class UIManager {
                 <p class="mt-2 text-[9px] text-slate-400">Requires ~2GB RAM. Runs in background automatically.</p>`;
         }
     }
+
 }

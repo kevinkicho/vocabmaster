@@ -4,9 +4,11 @@
   "scripts": {
     "build": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
     "build:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --watch"
+    "watch:css": "tailwindcss -i ./public/style.css -o ./public/tailwind.css --watch",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "tailwindcss": "^3"
+    "tailwindcss": "^3",
+    "vitest": "^4.1.4"
   }
 }

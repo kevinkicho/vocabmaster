@@ -4,7 +4,7 @@ class GameMode {
         this.key = key;
         console.log(`[GameMode] Init: ${key}`);
         this.i = app.store.getLoc(key);
-        this.list = app.data.list;
+        this.list = app.data.getFilteredList();
         this.root = document.getElementById('app-view');
         this.busy = false;
         this.answered = false;
@@ -172,7 +172,13 @@ class GameMode {
     // --- RENDER HELPERS ---
     wrapHanzi(text) {
         if (!text) return "";
-        return text.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
+        const escaped = escapeHtml(text);
+        return escaped.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
+    }
+
+    wrapHanziOnEscaped(html) {
+        if (!html) return "";
+        return html.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
     }
 
     toggle(el, w, r, ex, srcEx, orig) {
@@ -234,8 +240,8 @@ class GameMode {
         let pool = [this.list.find(x => x.id === correctId)];
         let safety = 0;
         while(pool.length < count && safety < 100) { 
-            const r = app.data.rand(); 
-            if(r.id !== correctId && !pool.find(x => x.id === r.id)) { pool.push(r); }
+            const r = this.list[Math.floor(Math.random() * this.list.length)]; 
+            if(r && r.id !== correctId && !pool.find(x => x.id === r.id)) { pool.push(r); }
             safety++;
         }
         return pool.sort(()=>Math.random()-0.5);
@@ -346,6 +352,14 @@ class GameMode {
             this.dom.headerInput = this.dom.header.querySelector('input[type="number"]');
             this.dom.headerScore = this.dom.header.querySelector('.score-display');
         }
+    }
+
+    getLevelBadge(item) {
+        if (!item) return '';
+        const level = item.level;
+        if (!level) return '';
+        const color = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors[level]) ? LEVEL_CONFIG.colors[level] : '#6366f1';
+        return `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold text-white ml-1.5" style="background:${color}">${escapeHtml(level)}</span>`;
     }
 
     updateHeader() {

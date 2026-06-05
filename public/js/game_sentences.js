@@ -53,17 +53,19 @@ class Sentences extends GameMode {
         const sentence = this.normalizeText(rawSentence);
         const targetFull = this.normalizeText(rawTarget);
         const cleanTarget = targetFull.replace(/\(.*?\)/g, "").trim(); 
-        if (!cleanTarget) return { html: sentence, audio: sentence };
+        if (!cleanTarget) return { html: escapeHtml(sentence), audio: sentence };
 
         const createMask = (word) => {
             const id = 'main-blank-' + Math.random().toString(36).substr(2, 5);
-            return `<span id="${id}" data-word="${word}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
+            return `<span id="${id}" data-word="${escapeHtml(word)}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${escapeHtml(word)}</span>`;
         };
 
         const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sentenceHtml = escapeHtml(sentence);
+        const cleanTargetHtml = escapeHtml(cleanTarget);
 
-        let reg = new RegExp(`(${escapeReg(cleanTarget)})`, 'gi');
-        if (sentence.match(reg)) return { html: sentence.replace(reg, (match) => createMask(match)), audio: sentence.replace(reg, " ... ") };
+        let reg = new RegExp(`(${escapeReg(cleanTargetHtml)})`, 'gi');
+        if (sentenceHtml.match(reg)) return { html: sentenceHtml.replace(reg, (match) => createMask(cleanTarget)), audio: sentence.replace(new RegExp(`(${escapeReg(cleanTarget)})`, 'gi'), " ... ") };
 
         const delimiters = /[\\/|;]/g; 
         if (targetFull.match(delimiters)) {
@@ -72,8 +74,9 @@ class Sentences extends GameMode {
             for (const v of variants) {
                 const vClean = v.replace(/\(.*?\)/g, "").trim();
                 if(!vClean) continue;
-                reg = new RegExp(`(${escapeReg(vClean)})`, 'gi');
-                if (sentence.match(reg)) return { html: sentence.replace(reg, (match) => createMask(match)), audio: sentence.replace(reg, " ... ") };
+                const vHtml = escapeHtml(vClean);
+                reg = new RegExp(`(${escapeReg(vHtml)})`, 'gi');
+                if (sentenceHtml.match(reg)) return { html: sentenceHtml.replace(reg, (match) => createMask(vClean)), audio: sentence.replace(new RegExp(`(${escapeReg(vClean)})`, 'gi'), " ... ") };
             }
         }
 
@@ -81,7 +84,7 @@ class Sentences extends GameMode {
         const tokens = cleanTarget.split(separators).filter(t => t.length > 0);
         
         if (tokens.length > 0) {
-            let tempHtml = sentence;
+            let tempHtml = sentenceHtml;
             let tempAudio = sentence;
             let matchedAny = false;
             
@@ -91,7 +94,8 @@ class Sentences extends GameMode {
             tokens.forEach(token => {
                 if (token.length < 3 && tokens.length > 1) return;
 
-                const tokenEsc = escapeReg(token);
+                const tokenHtml = escapeHtml(token);
+                const tokenEsc = escapeReg(tokenHtml);
                 let conjugationReg;
 
                 if (isEuro) {
@@ -101,8 +105,8 @@ class Sentences extends GameMode {
                 }
                 
                 if (tempHtml.match(conjugationReg)) {
-                    tempHtml = tempHtml.replace(conjugationReg, (match) => createMask(match));
-                    tempAudio = tempAudio.replace(conjugationReg, " ... ");
+                    tempHtml = tempHtml.replace(conjugationReg, (match) => createMask(token));
+                    tempAudio = tempAudio.replace(new RegExp(`(${escapeReg(token)})`, 'gi'), " ... ");
                     matchedAny = true;
                 }
             });
@@ -110,12 +114,13 @@ class Sentences extends GameMode {
             if (matchedAny) return { html: tempHtml, audio: tempAudio };
         }
 
-        return { html: sentence, audio: sentence };
+        return { html: sentenceHtml, audio: sentence };
     }
 
     update() {
         this.busy = false;
         this.answered = false;
+        this._clearOverlays();
         const c = this.list[this.i];
         const p = app.store.prefs;
         const qKey = p.sentencesQ || 'ja';
@@ -137,7 +142,7 @@ class Sentences extends GameMode {
         this.updateHeader();
         this._renderCloze(result, c, qKey, aKey, bottomKey);
 
-        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
+        if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c) + this._listenBtnHtml();
         if(this.dom.sBox) {
             this.highlightQBox(this.dom.sBox, false);
             this.dom.sBox.classList.remove('bg-emerald-500', 'border-emerald-500', 'bg-rose-500', 'border-rose-500');
@@ -188,7 +193,7 @@ class Sentences extends GameMode {
         if (transLang && transLang !== qKey) {
             const transWord = card[transLang];
             if (transWord) {
-                transHtml = `<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 mt-2 italic">${transWord}</p>`;
+                transHtml = `<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 mt-2 italic">${escapeHtml(transWord)}</p>`;
             }
         }
 
@@ -209,9 +214,9 @@ class Sentences extends GameMode {
                     const bResult = this.generateCloze(sentenceText, wordText, bottomKey);
                     bottomText = bResult.html;
                     break;
-                case 'sentence_full': bottomText = sentenceText; break;
-                case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${wordText}</span>`; break;
-                case 'word_full': bottomText = wordText; break;
+                case 'sentence_full': bottomText = escapeHtml(sentenceText); break;
+                case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${escapeHtml(wordText)}</span>`; break;
+                case 'word_full': bottomText = escapeHtml(wordText); break;
             }
             if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
         }
@@ -230,13 +235,15 @@ class Sentences extends GameMode {
     _buildClozeFromMatch(sentence, matchedText) {
         const createMask = (word) => {
             const id = 'main-blank-' + Math.random().toString(36).substr(2, 5);
-            return `<span id="${id}" data-word="${word}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${word}</span>`;
+            return `<span id="${id}" data-word="${escapeHtml(word)}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${escapeHtml(word)}</span>`;
         };
-        const escaped = matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sentenceHtml = escapeHtml(sentence);
+        const matchHtml = escapeHtml(matchedText);
+        const escaped = matchHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const reg = new RegExp(`(${escaped})`, 'g');
         return {
-            html: sentence.replace(reg, (m) => createMask(m)),
-            audio: sentence.replace(reg, ' ... ')
+            html: sentenceHtml.replace(reg, (m) => createMask(matchedText)),
+            audio: sentence.replace(new RegExp(`(${matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g'), ' ... ')
         };
     }
 
@@ -244,7 +251,7 @@ class Sentences extends GameMode {
         // Subtle loading indicator
         if (this.dom.text) this.dom.text.classList.add('opacity-60');
 
-        const match = await app.llm.findClozeMatch(sentenceRaw, targetRaw, qKey);
+        const match = await app.llm.findClozeMatch(sentenceRaw, targetRaw, qKey, card.level);
 
         // Navigation guard: user may have moved to another card
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
@@ -272,14 +279,15 @@ class Sentences extends GameMode {
              const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null, false);
              const nodes = [];
              while(walker.nextNode()) nodes.push(walker.currentNode);
-             nodes.forEach(node => {
-                 if(node.parentNode && (node.parentNode.tagName === 'SPAN' || node.parentNode.classList.contains('main-blank'))) return; 
-                 if(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/.test(node.nodeValue)) {
-                     const span = document.createElement('span');
-                     span.innerHTML = node.nodeValue.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
-                     node.parentNode.replaceChild(span, node);
-                 }
-             });
+              nodes.forEach(node => {
+                  if(node.parentNode && (node.parentNode.tagName === 'SPAN' || node.parentNode.classList.contains('main-blank'))) return; 
+                  if(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/.test(node.nodeValue)) {
+                      const span = document.createElement('span');
+                      const escaped = escapeHtml(node.nodeValue);
+                      span.innerHTML = escaped.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
+                      node.parentNode.replaceChild(span, node);
+                  }
+              });
         }
         this.dom.btns.forEach(btn => {
             const span = btn.querySelector('.fit-target');
@@ -354,6 +362,186 @@ class Sentences extends GameMode {
         } else {
             btnWrap.classList.add('bg-rose-500', 'border-rose-500');
             this.miss();
+
+            if (app.llm && app.llm.available && app.llm.hasModel) {
+                const card = this.list[this.i];
+                if (card) {
+                    const p = app.store.prefs;
+                    const qKey = p.sentencesQ || 'ja';
+                    const aKey = p.sentencesA || 'en';
+                    const exConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(qKey) : null;
+                    const exKey = exConf && exConf.exKey ? exConf.exKey : '';
+                    const sentence = card[exKey] || '';
+                    const word = card[qKey] || '';
+                    if (sentence && word) {
+                        this._showGrammarLink(word, sentence, qKey, card.level);
+                    }
+                }
+            }
         }
+    }
+    _showGrammarLink(word, sentence, langCode, level) {
+        const existing = document.getElementById('sn-grammar-link');
+        if (existing) existing.remove();
+
+        const link = document.createElement('button');
+        link.id = 'sn-grammar-link';
+        link.className = 'mt-2 mx-auto block text-[11px] font-bold text-indigo-500 dark:text-indigo-400 hover:underline active:scale-95 transition-transform';
+        link.innerHTML = '<i class="ph-bold ph-lightbulb mr-1"></i>Why? — Tap for grammar explanation';
+        link.onclick = () => this._showGrammarExplanation(word, sentence, langCode, level);
+
+        if (this.dom.bottomDisp) {
+            this.dom.bottomDisp.appendChild(link);
+        } else if (this.dom.sBox) {
+            this.dom.sBox.appendChild(link);
+        }
+    }
+
+    async _showGrammarExplanation(word, sentence, langCode, level) {
+        const link = document.getElementById('sn-grammar-link');
+        if (link) {
+            link.innerHTML = '<i class="ph-bold ph-spinner animate-spin mr-1"></i>Loading explanation...';
+            link.disabled = true;
+        }
+
+        const explanation = await app.llm.getGrammarExplanation(word, sentence, langCode, level);
+
+        if (!this.list[this.i]) { link && link.remove(); return; }
+
+        if (link) link.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'sn-grammar-panel';
+        panel.className = 'mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800 text-xs text-left';
+
+        if (explanation) {
+            const formatted = escapeHtml(explanation)
+                .replace(/^GRAMMAR:\s*/im, '<p class="font-bold text-indigo-700 dark:text-indigo-300 mb-1"><i class="ph-bold ph-book-open mr-1"></i>Grammar</p><p class="text-slate-700 dark:text-neutral-200 mb-2">')
+                .replace(/^USAGE:\s*/im, '</p><p class="font-bold text-indigo-700 dark:text-indigo-300 mb-1"><i class="ph-bold ph-chat-centered-text mr-1"></i>Usage</p><p class="text-slate-700 dark:text-neutral-200 mb-2">')
+                .replace(/^EXAMPLE:\s*/im, '</p><p class="font-bold text-indigo-700 dark:text-indigo-300 mb-1"><i class="ph-bold ph-pencil-simple mr-1"></i>Example</p><p class="text-slate-700 dark:text-neutral-200">')
+                + '</p>';
+            panel.innerHTML = formatted;
+        } else {
+            panel.innerHTML = '<p class="text-slate-500 dark:text-neutral-400 text-center">Could not load explanation.</p>';
+        }
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'mt-2 w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-neutral-300';
+        closeBtn.textContent = 'Close';
+        closeBtn.onclick = () => panel.remove();
+        panel.appendChild(closeBtn);
+
+        if (this.dom.bottomDisp) {
+            this.dom.bottomDisp.appendChild(panel);
+        } else if (this.dom.sBox) {
+            this.dom.sBox.appendChild(panel);
+        }
+    }
+
+    _clearOverlays() {
+        const grammarLink = document.getElementById('sn-grammar-link');
+        if (grammarLink) grammarLink.remove();
+        const grammarPanel = document.getElementById('sn-grammar-panel');
+        if (grammarPanel) grammarPanel.remove();
+        const listeningPanel = document.getElementById('sn-listening-panel');
+        if (listeningPanel) listeningPanel.remove();
+    }
+
+    _listenBtnHtml() {
+        const llmReady = app.llm && app.llm.available && app.llm.hasModel;
+        if (!llmReady) return '';
+        return `<button id="sn-listen-btn" onclick="app.game._startListening()" class="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 active:scale-95 transition-all"><i class="ph-bold ph-headphones mr-1"></i>Listen</button>`;
+    }
+
+    async _startListening() {
+        const card = this.list[this.i];
+        if (!card) return;
+        const p = app.store.prefs;
+        const qKey = p.sentencesQ || 'ja';
+        const words = [card[qKey] || card.ja || card.en].filter(Boolean);
+        if (words.length === 0) return;
+
+        const btn = document.getElementById('sn-listen-btn');
+        if (btn) {
+            btn.innerHTML = '<i class="ph-bold ph-spinner animate-spin mr-1"></i>Loading...';
+            btn.disabled = true;
+        }
+
+        const result = await app.llm.getListeningPassage(words, qKey, card.level);
+
+        if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+
+        if (btn) {
+            btn.innerHTML = '<i class="ph-bold ph-headphones mr-1"></i>Listen';
+            btn.disabled = false;
+        }
+
+        if (!result || !result.passage) {
+            this._showListeningError();
+            return;
+        }
+
+        this._showListeningPanel(result, qKey);
+    }
+
+    _showListeningError() {
+        const existing = document.getElementById('sn-listening-panel');
+        if (existing) existing.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'sn-listening-panel';
+        panel.className = 'mt-3 p-3 bg-rose-50 dark:bg-rose-900/20 rounded-xl border border-rose-200 dark:border-rose-800 text-xs text-center';
+        panel.innerHTML = '<p class="text-rose-500 dark:text-rose-300 font-bold"><i class="ph-bold ph-warning mr-1"></i>Could not generate listening passage.</p>';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'mt-1 text-[10px] font-bold text-rose-400 hover:text-rose-600 dark:hover:text-rose-200';
+        closeBtn.textContent = 'Close';
+        closeBtn.onclick = () => panel.remove();
+        panel.appendChild(closeBtn);
+
+        this.dom.bottomDisp.appendChild(panel);
+    }
+
+    _showListeningPanel(result, qKey) {
+        const existing = document.getElementById('sn-listening-panel');
+        if (existing) existing.remove();
+
+        const panel = document.createElement('div');
+        panel.id = 'sn-listening-panel';
+        panel.className = 'mt-3 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl border border-cyan-200 dark:border-cyan-800 text-xs text-left';
+
+        const conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(qKey) : null;
+        const audioLang = (conf && conf.audioSrc) ? conf.audioSrc : qKey;
+
+        let html = '<div class="flex items-center gap-2 mb-2"><i class="ph-bold ph-headphones text-cyan-500 text-lg"></i><span class="font-black text-cyan-700 dark:text-cyan-300 uppercase tracking-widest text-[10px]">Listening Passage</span></div>';
+
+        html += `<p class="text-slate-700 dark:text-neutral-200 leading-relaxed mb-3 select-text" id="sn-listening-text">${escapeHtml(result.passage)}</p>`;
+
+        html += '<button onclick="app.audio.play(document.getElementById(\'sn-listening-text\').innerText, \'' + audioLang + '\', \'sentences\', 0)" class="px-3 py-1 rounded-lg text-[10px] font-bold bg-cyan-500 text-white active:scale-95 transition-transform mb-3"><i class="ph-bold ph-speaker-high mr-1"></i>Play Audio</button>';
+
+        if (result.question) {
+            html += '<div class="border-t border-cyan-200 dark:border-cyan-800 pt-2 mt-1">';
+            html += `<p class="font-bold text-slate-700 dark:text-neutral-200 mb-1.5"><i class="ph-bold ph-question mr-1"></i>${escapeHtml(result.question.question)}</p>`;
+            result.question.choices.forEach(c => {
+                const letter = c.charAt(0).toUpperCase();
+                const isSelected = result.question.answer && letter === result.question.answer;
+                const cls = isSelected ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700 font-bold' : 'bg-white dark:bg-neutral-800 border-slate-200 dark:border-neutral-700';
+                html += `<button class="block w-full text-left mb-1 px-2 py-1.5 rounded-lg border ${cls} text-slate-700 dark:text-neutral-200 transition-colors" onclick="this.classList.toggle('bg-emerald-100');this.classList.toggle('dark:bg-emerald-900/30');this.classList.toggle('font-bold')">${escapeHtml(c)}</button>`;
+            });
+            if (result.question.answer) {
+                html += `<p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1"><i class="ph-bold ph-check-circle mr-1"></i>Answer: ${escapeHtml(result.question.answer)}</p>`;
+            }
+            html += '</div>';
+        }
+
+        panel.innerHTML = html;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'mt-2 w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-neutral-300';
+        closeBtn.textContent = 'Close';
+        closeBtn.onclick = () => panel.remove();
+        panel.appendChild(closeBtn);
+
+        this.dom.bottomDisp.appendChild(panel);
     }
 }

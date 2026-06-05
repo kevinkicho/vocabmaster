@@ -1,0 +1,32 @@
+{
+  "rules": {
+    "vocab": {
+      ".read": true,
+      ".indexOn": ["id", "e", "k", "s", "t"],
+      "$itemId": {
+        ".write": "auth != null"
+      }
+    },
+    "dictionary": {
+      ".read": true,
+      ".indexOn": ["s", "t"],
+      "$itemId": {
+        ".write": "auth != null"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "stories": {
+      ".read": true,
+      ".indexOn": ["lang", "ts"],
+      "$storyId": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['storyText', 'questions', 'lang', 'ts']) && newData.child('lang').isString() && newData.child('storyText').isString()"
+      }
+    }
+  }
+}

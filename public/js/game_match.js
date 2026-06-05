@@ -145,12 +145,12 @@ class Match extends GameMode {
                     const isM = this.state.matched.includes(c.id);
                     const isS = this.sel && this.sel.id === c.id;
                     const className = `${baseClass} ${isM ? matchedClass : (isS ? selectedClass : defaultClass)}`;
-                    return `<div id="${c.id}" data-wid="${c.match}" onclick="event.stopPropagation(); app.game.tap('${c.id}','${c.match}','${c.type}')" class="${className}"><div class="fit-box w-full h-full"><span class="fit-target font-black">${c.txt}</span></div></div>`;
+                    return `<div id="${escapeHtml(c.id)}" data-wid="${escapeHtml(c.match)}" onclick="event.stopPropagation(); app.game.tap('${escapeHtml(c.id)}','${escapeHtml(c.match)}','${escapeHtml(c.type)}')" class="${className}"><div class="fit-box w-full h-full"><span class="fit-target font-black">${escapeHtml(c.txt)}</span></div></div>`;
                 }).join('')}
             </div>
         </div>`;
         this.afterRender();
-    }
+        }
     
     tap(id, match, type) {
         if(this.busy || this.state.matched.includes(id)) return;

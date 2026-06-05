@@ -85,7 +85,7 @@ class App {
                     
                     if (user && !user.isAnonymous) {
                         // Logged In View
-                        loginBtn.innerHTML = `<img src="${user.photoURL}" class="w-full h-full rounded-full border-2 border-indigo-200 p-0.5">`;
+                        loginBtn.innerHTML = `<img src="${escapeHtml(user.photoURL)}" class="w-full h-full rounded-full border-2 border-indigo-200 p-0.5">`;
                         loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
                     } else {
                         // Guest/Anon View

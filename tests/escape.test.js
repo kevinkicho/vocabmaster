@@ -1,0 +1,45 @@
+import { readFileSync } from 'fs';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { fileURLToPath } from 'url';
+import { join } from 'path';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const src = readFileSync(join(__dirname, '..', 'public', 'js', 'escape.js'), 'utf8');
+
+let escapeHtml;
+beforeAll(() => {
+    const fn = new Function(src + '\nreturn escapeHtml;');
+    escapeHtml = fn();
+});
+
+describe('escapeHtml', () => {
+    it('escapes script tags', () => {
+        expect(escapeHtml("<script>alert('xss')</script>")).toBe(
+            '&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;'
+        );
+    });
+
+    it('escapes double quotes', () => {
+        expect(escapeHtml('say "hello"')).toBe('say &quot;hello&quot;');
+    });
+
+    it('escapes single quotes', () => {
+        expect(escapeHtml("it's")).toBe('it&#39;s');
+    });
+
+    it('escapes ampersands', () => {
+        expect(escapeHtml('a & b')).toBe('a &amp; b');
+    });
+
+    it('handles null input', () => {
+        expect(escapeHtml(null)).toBe('');
+    });
+
+    it('handles undefined input', () => {
+        expect(escapeHtml(undefined)).toBe('');
+    });
+
+    it('handles non-string input (numbers)', () => {
+        expect(escapeHtml(42)).toBe('42');
+    });
+});

@@ -4,17 +4,18 @@ class Store {
         const defaults = (typeof GET_DEFAULTS === 'function') ? GET_DEFAULTS() : {};
         this.STORAGE_KEY = 'vm_prefs_v1195_STABLE'; 
 
-        const customDefaults = {
-            ...defaults,
-            flashAudioSrc: 'ja', 
-            sentencesBottomLang: 'en',
-            sentencesBottomDisp: 'sentence',
-            font: 'sans',
-            quizPlayAnswer: true,
-            showAudioBtns: true,
-            quizShowEx: false,
-            sentencesReadWhole: false // NEW: Default for the audio setting
-        };
+const customDefaults = {
+        ...defaults,
+        flashAudioSrc: 'ja', 
+        sentencesBottomLang: 'en',
+        sentencesBottomDisp: 'sentence',
+        font: 'sans',
+        quizPlayAnswer: true,
+        showAudioBtns: true,
+        quizShowEx: false,
+        sentencesReadWhole: false,
+        selectedVoices: {}
+    };
 
         try {
             const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
@@ -155,13 +156,31 @@ class Store {
             });
         }
 
+        // Voice Selection
+        if (typeof LANG_CONFIG !== 'undefined') {
+            LANG_CONFIG.forEach(l => {
+                if (!l.visualOnly) {
+                    const voiceKey = `selectedVoice_${l.key}`;
+                    const el = document.getElementById(`voice-select-${l.key}`);
+                    if (el) this.prefs.selectedVoices[l.key] = el.value;
+                }
+            });
+        }
+
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.prefs));
         this.applyTheme();
         
         if(window.app && window.app.game) {
-            if (window.app.game.resizeGame) { window.app.game.startNewGame(window.app.game.state.pairs); } 
-            else if (window.app.game.update) { window.app.game.update(); }
-            else { window.app.game.render(); }
+            const game = window.app.game;
+            game.list = app.data.getFilteredList();
+            if (game.list.length === 0) game.list = app.data.list;
+            if (game.i >= game.list.length) game.i = 0;
+            game.historyStack = [game.i];
+            game.historyPtr = 0;
+            game.save();
+            if (game.resizeGame) { game.startNewGame(game.state.pairs); } 
+            else if (game.update) { game.update(); }
+            else { game.render(); }
         }
         if(window.app && window.app.notes && window.app.notes.currentWordId) {
             window.app.notes.check(window.app.notes.currentWordId);
@@ -179,9 +198,16 @@ class Store {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.prefs));
         if(window.app && window.app.ui) window.app.ui.loadSettings();
         if(window.app && window.app.game) {
-            if (window.app.game.resizeGame) { window.app.game.state.matched = []; window.app.game.startNewGame(window.app.game.state.pairs); } 
-            else if (window.app.game.update) { window.app.game.update(); }
-            else { window.app.game.render(); }
+            const game = window.app.game;
+            game.list = app.data.getFilteredList();
+            if (game.list.length === 0) game.list = app.data.list;
+            if (game.i >= game.list.length) game.i = 0;
+            game.historyStack = [game.i];
+            game.historyPtr = 0;
+            game.save();
+            if (game.resizeGame) { game.state.matched = []; game.startNewGame(game.state.pairs); } 
+            else if (game.update) { game.update(); }
+            else { game.render(); }
         }
         this.applyTheme();
     }

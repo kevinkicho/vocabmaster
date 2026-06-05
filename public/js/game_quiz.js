@@ -115,10 +115,10 @@ class Quiz extends GameMode {
         if(exMainTxt || exSubTxt) {
             exHtml = `
                 <div class="flex-1 w-full flex items-center justify-center relative min-h-0">
-                    ${exMainTxt ? `<p id="qz-ex-main" class="fit-smart font-black text-indigo-500 dark:text-indigo-400 leading-tight p-2 w-full text-center">${exMainTxt}</p>` : ''}
+                    ${exMainTxt ? `<p id="qz-ex-main" class="fit-smart font-black text-indigo-500 dark:text-indigo-400 leading-tight p-2 w-full text-center">${escapeHtml(exMainTxt)}</p>` : ''}
                 </div>
                 ${exMainTxt && exSubTxt ? `<div class="w-16 h-px bg-slate-300 dark:bg-neutral-600 my-2 shrink-0"></div>` : ''}
-                ${exSubTxt ? `<div class="flex-none w-full text-center pb-2"><p class="text-sm sm:text-base font-bold text-slate-500 dark:text-slate-400">${exSubTxt}</p></div>` : ''}
+                ${exSubTxt ? `<div class="flex-none w-full text-center pb-2"><p class="text-sm sm:text-base font-bold text-slate-500 dark:text-slate-400">${escapeHtml(exSubTxt)}</p></div>` : ''}
             `;
         }
 
@@ -139,8 +139,7 @@ class Quiz extends GameMode {
         }
         
         if(this.dom.qText) {
-             this.dom.qText.innerText = qText; 
-             this.dom.qText.innerHTML = qText; 
+             this.dom.qText.textContent = qText; 
              this.dom.qText.classList.remove('text-white');
              this.dom.qText.classList.add('text-slate-800', 'dark:text-neutral-200');
         }

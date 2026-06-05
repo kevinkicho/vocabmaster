@@ -147,12 +147,10 @@ class Voice extends GameMode {
         this.updateHeader();
         
         if(this.dom.frontText) { 
-            this.dom.frontText.innerText = item[frontKey]; 
-            this.dom.frontText.innerHTML = this.wrapHanzi(item[frontKey]); 
+            this.dom.frontText.textContent = item[frontKey]; 
         }
         if(this.dom.backText) { 
-            this.dom.backText.innerText = item[backKey]; 
-            this.dom.backText.innerHTML = this.wrapHanzi(item[backKey]); 
+            this.dom.backText.textContent = item[backKey]; 
         }
         
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(item);

@@ -28,6 +28,65 @@ const DEFAULT_CELEBS = [
 
 const LANG_MAP = new Map(LANG_CONFIG.map(l => [l.key, l]));
 
+const CEFR_LEVELS = {
+    A1: { label: 'Beginner', description: 'Can understand and use familiar everyday expressions and basic phrases', wordCountRange: '500-1000' },
+    A2: { label: 'Elementary', description: 'Can communicate in routine tasks requiring a direct exchange of information on familiar matters', wordCountRange: '1000-2000' },
+    B1: { label: 'Intermediate', description: 'Can deal with most situations likely to arise while travelling; can describe experiences and events', wordCountRange: '2000-3500' },
+    B2: { label: 'Upper Intermediate', description: 'Can interact with a degree of fluency and spontaneity; can produce clear, detailed text on a wide range of subjects', wordCountRange: '3500-5500' },
+    C1: { label: 'Advanced', description: 'Can express ideas fluently and spontaneously; can use language flexibly for social, academic and professional purposes', wordCountRange: '5500-8000' },
+    C2: { label: 'Proficient', description: 'Can understand virtually everything heard or read with ease; can express themselves spontaneously with precision', wordCountRange: '8000-16000' }
+};
+
+function mapLevelToCEFR(level, langCode) {
+    if (!level) return null;
+    const jlptMap = { 'N5': 'A1', 'N4': 'A2', 'N3': 'B1', 'N2': 'B2', 'N1': 'C1' };
+    const hskMap = { 'HSK1': 'A1', 'HSK2': 'A2', 'HSK3': 'B1', 'HSK4': 'B2', 'HSK5': 'C1', 'HSK6': 'C2' };
+    const topikMap = { 'TOPIK1': 'A1', 'TOPIK2': 'A1', 'TOPIK3': 'A2', 'TOPIK4': 'B1', 'TOPIK5': 'B2', 'TOPIK6': 'C1' };
+
+    const isJapanese = ['ja', 'ja_furi', 'ja_roma'].includes(langCode);
+    const isChinese = ['zh', 'zh_pin'].includes(langCode);
+    const isKorean = ['ko', 'ko_roma'].includes(langCode);
+
+    if (isJapanese && jlptMap[level]) return jlptMap[level];
+    if (isChinese && hskMap[level]) return hskMap[level];
+    if (isKorean && topikMap[level]) return topikMap[level];
+
+    if (CEFR_LEVELS[level]) return level;
+
+    if (jlptMap[level]) return jlptMap[level];
+    if (hskMap[level]) return hskMap[level];
+    if (topikMap[level]) return topikMap[level];
+
+    return null;
+}
+
+const LEVEL_CONFIG = {
+    groups: [
+        {
+            key: 'jlpt', label: 'JLPT', langs: ['ja', 'ja_furi', 'ja_roma'],
+            levels: ['N5', 'N4', 'N3', 'N2', 'N1']
+        },
+        {
+            key: 'hsk', label: 'HSK', langs: ['zh', 'zh_pin'],
+            levels: ['HSK1', 'HSK2', 'HSK3', 'HSK4', 'HSK5', 'HSK6']
+        },
+        {
+            key: 'topik', label: 'TOPIK', langs: ['ko', 'ko_roma'],
+            levels: ['TOPIK1', 'TOPIK2', 'TOPIK3', 'TOPIK4', 'TOPIK5', 'TOPIK6']
+        },
+        {
+            key: 'cefr', label: 'CEFR', langs: ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'ru_tr'],
+            levels: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+        }
+    ],
+    colors: {
+        'N5': '#22c55e', 'N4': '#3b82f6', 'N3': '#a855f7', 'N2': '#f97316', 'N1': '#ef4444',
+        'HSK1': '#22c55e', 'HSK2': '#3b82f6', 'HSK3': '#a855f7', 'HSK4': '#f97316', 'HSK5': '#ef4444', 'HSK6': '#dc2626',
+        'TOPIK1': '#22c55e', 'TOPIK2': '#3b82f6', 'TOPIK3': '#a855f7', 'TOPIK4': '#f97316', 'TOPIK5': '#ef4444', 'TOPIK6': '#dc2626',
+        'A1': '#22c55e', 'A2': '#3b82f6', 'B1': '#a855f7', 'B2': '#f97316', 'C1': '#ef4444', 'C2': '#dc2626'
+    }
+};
+
 const GET_DEFAULTS = () => {
     return { 
         dark: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches, 
@@ -43,6 +102,8 @@ const GET_DEFAULTS = () => {
         
         globalClickMode: 'double', 
         audioWait: true,
+
+        levelFilter: ['all'],
 
         flashSpeed: "700",
         flashRandom: false,

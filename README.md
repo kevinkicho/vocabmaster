@@ -1,8 +1,6 @@
 # VocabMaster
 
-**VocabMaster** is a PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features seven game modes (including AI-powered Story Mode), granular per-mode settings, context-aware audio, LLM integration via Ollama, and a smooth render pipeline — all in a single-page app optimized for mobile.
-
-**Live:** [vocabmaster112225.web.app](https://vocabmaster112225.web.app)
+**VocabMaster** is a personal-use PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features seven game modes (including AI-powered Story Mode), granular per-mode settings, context-aware audio, LLM integration via Ollama, native Android TTS support, and a smooth render pipeline — all in a single-page app optimized for mobile.
 
 ---
 
@@ -48,11 +46,21 @@ VocabMaster integrates with [Ollama](https://ollama.com) for AI-powered features
 
 ### Android App
 
-An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for localhost, enabling communication with [Ollama4Android](https://github.com/kevinkicho/Ollama4Android) running on the same device.
+An Android WebView wrapper (`android/`) provides native Android TTS support and bypasses Chrome's HTTPS-only restriction for localhost, enabling communication with [Ollama4Android](https://github.com/kevinkicho/Ollama4Android) running on the same device.
 
-- **Native bridge** — Kotlin `@JavascriptInterface` ↔ `evaluateJavascript()` bridge with promise-based async pattern
+- **Native TTS bridge** — `TTSBridge.kt` wraps Android's `TextToSpeech` API, exposing 393+ system voices (Google TTS, Samsung TTS, etc.) via `@JavascriptInterface`. Voice selection and preview are handled natively, bypassing Chrome's limited Web Speech API voice set.
+- **JS bridge** — `native_tts.js` provides a promise-based `NativeTTSBridge` matching the `AndroidBridge` pattern, with `getVoices()`, `speak()`, `previewVoice()`, and `stop()`.
+- **Auto-detection** — `AudioService` detects the native bridge at startup and uses it instead of the Web Speech API for all TTS.
+- **LLM bridge** — Kotlin `@JavascriptInterface` ↔ `evaluateJavascript()` bridge with promise-based async pattern
 - **Streaming support** — Token-by-token streaming from Ollama via native HTTP, pushed to JS via `onToken` callbacks
 - **Port discovery** — User enters the port shown in Ollama4Android; saved to localStorage for reconnection
+
+Build and install the Android wrapper from the `android/` directory:
+
+```bash
+cd android && ./gradlew assembleDebug
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
 ---
 
@@ -60,6 +68,8 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 
 - **14 languages supported** — Japanese, Korean, English, Chinese, Spanish, Portuguese, Italian, French, German, Russian (+ Furigana, Romaji, Pinyin, Transliteration visual columns)
 - **Per-mode settings** — Each game mode has independent controls for language pairs, audio behavior, randomization, and example display
+- **Native Android TTS** — Dedicated Android WebView wrapper with `TTSBridge` providing 393+ system voices (Google & Samsung) via native `TextToSpeech` API, bypassing Chrome's limited voice set
+- **Voice selection** — Per-language TTS voice picker in Settings, with instant preview playback; provider grouping (Google/Samsung/Local) when available
 - **Context-aware audio** — `playSmartAudio()` detects visible content (word vs. example sentence) and plays the appropriate audio
 - **Auto-play on correct** — Quiz, TF, Voice, and Sentences modes play audio on correct answer with configurable `audioWait`
 - **Render pipeline** — Container hidden during updates, text fitted via binary search, then smooth 0.3s fade-in reveal
@@ -88,6 +98,7 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 | `public/js/analytics.js` | Per-word accuracy tracking, session recording, weekly/monthly stats, most-missed-words |
 | `public/js/llm.js` | `LLMService` — Direct HTTP streaming, Ollama connection, model auto-detect, cloze matching, bridge fallback |
 | `public/js/android_bridge.js` | Promise-based JS wrapper for Android `@JavascriptInterface` with streaming `onToken` support |
+| `public/js/native_tts.js` | `NativeTTSBridge` — promise-based JS wrapper for native Android TTS (getVoices, speak, preview, stop) |
 | `public/js/game_core.js` | `GameMode` base class — nav, keyboard, scoring, `waitAndNav`, `autoPlay`, `handleInput`, DOM caching |
 | `public/js/game_flashcard.js` | Flip card with 1–4 back panels, speed control, context-aware flip audio |
 | `public/js/game_quiz.js` | 4-choice quiz, flippable question card, correct-answer audio, double-click mode |
@@ -104,6 +115,7 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 | `public/sw.js` | Service worker — versioned cache, stale-while-revalidate, per-asset error handling |
 | `public/style.css` | Custom CSS — fit-target/fit-smart opacity transitions, app-view reveal, Hanzi tooltips |
 | `public/favicon.svg` | Indigo rounded-square "V" icon |
+| `android/` | Android Studio WebView wrapper project with native TTS bridge |
 
 ---
 
@@ -112,7 +124,7 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 - **Frontend:** Vanilla JS (ES6+ classes), Tailwind CSS v3 (static build), Phosphor Icons
 - **Backend:** Firebase Hosting, Auth, Realtime Database (compat SDK v11)
 - **AI:** Ollama (local + cloud via ollama4android proxy), model-agnostic — Gemma, Qwen, DeepSeek, Mistral, GLM, etc.
-- **Android:** Kotlin WebView wrapper with `@JavascriptInterface` native bridge, Gson
+- **Android:** Kotlin WebView wrapper with native TTS (`TextToSpeech` API) and `@JavascriptInterface` bridge for LLM
 - **Audio:** Web Speech Synthesis API (TTS), Web Speech Recognition API (voice mode)
 - **Animations:** canvas-confetti, CSS transitions
 - **Charts:** Chart.js (stats dashboard)
@@ -133,12 +145,20 @@ An Android Studio WebView wrapper bypasses Chrome's HTTPS-only restriction for l
 
 ## Deployment
 
-Deploy manually from the command line:
+This app is designed for personal use. Deploy locally with Firebase:
 
 ```bash
 npm run build
 firebase deploy --only hosting
 ```
+
+Or serve locally for development:
+
+```bash
+npx serve public
+```
+
+The Android wrapper (`android/`) loads from Firebase hosting by default. To use a local server instead, edit `MainActivity.kt` and change `APP_URL` to your local address (e.g. `http://10.0.2.2:5000` for Android emulator, or your machine's LAN IP for a physical device).
 
 ---
 

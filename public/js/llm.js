@@ -549,7 +549,7 @@ class LLMService {
     _showToast(message, icon, colorClass) {
         const toast = document.createElement('div');
         toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[95] bg-white dark:bg-neutral-800 shadow-lg rounded-full px-4 py-2 flex items-center gap-2 border border-slate-200 dark:border-neutral-700 transition-all duration-300 opacity-0 -translate-y-2';
-        toast.innerHTML = `<i class="ph-bold ${icon} ${colorClass}"></i><span class="text-xs font-bold text-slate-700 dark:text-neutral-200">${message}</span>`;
+        toast.innerHTML = `<i class="ph-bold ${icon} ${colorClass}"></i><span class="text-xs font-bold text-slate-700 dark:text-neutral-200">${escapeHtml(message)}</span>`;
         document.body.appendChild(toast);
         requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(-50%) translateY(0)'; });
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
@@ -649,8 +649,19 @@ class LLMService {
         }));
     }
 
+    static LEVEL_DIFFICULTY_MAP = {
+        'N5': 'beginner (N5)', 'N4': 'advanced beginner (N4)', 'N3': 'intermediate (N3)',
+        'N2': 'upper intermediate (N2)', 'N1': 'advanced (N1)',
+        'HSK1': 'beginner (HSK 1)', 'HSK2': 'advanced beginner (HSK 2)', 'HSK3': 'intermediate (HSK 3)',
+        'HSK4': 'upper intermediate (HSK 4)', 'HSK5': 'advanced (HSK 5)', 'HSK6': 'proficient (HSK 6)',
+        'TOPIK1': 'beginner (TOPIK 1)', 'TOPIK2': 'advanced beginner (TOPIK 2)', 'TOPIK3': 'intermediate (TOPIK 3)',
+        'TOPIK4': 'upper intermediate (TOPIK 4)', 'TOPIK5': 'advanced (TOPIK 5)', 'TOPIK6': 'proficient (TOPIK 6)',
+        'A1': 'beginner (A1)', 'A2': 'elementary (A2)', 'B1': 'intermediate (B1)',
+        'B2': 'upper intermediate (B2)', 'C1': 'advanced (C1)', 'C2': 'proficient (C2)'
+    };
+
     // --- Core: Find cloze match ---
-    async findClozeMatch(sentence, target, langCode) {
+    async findClozeMatch(sentence, target, langCode, level) {
         // 1. Check cache
         const cached = await this.getFromCache(sentence, target, langCode);
         if (cached !== null && cached !== '') return cached;
@@ -658,10 +669,16 @@ class LLMService {
         // 2. Availability guard
         if (!this.available || !this.hasModel) return null;
 
-        // 3. Use the unified generate method (handles direct HTTP vs bridge)
+        // 3. Build level-aware prompt
+        let levelHint = '';
+        if (level && LLMService.LEVEL_DIFFICULTY_MAP[level]) {
+            const difficulty = LLMService.LEVEL_DIFFICULTY_MAP[level];
+            levelHint = `\nThe learner is at ${difficulty} level. Focus on base forms and common conjugations typical for that level.`;
+        }
+
         try {
             const prompt = `Sentence: ${sentence}
-Word: ${target}
+Word: ${target}${levelHint}
 The part of the sentence to blank out is: {"match":"`;
 
             const raw = await this.generate({
@@ -714,6 +731,127 @@ The part of the sentence to blank out is: {"match":"`;
             console.warn('[LLM] Parse error:', e.message, 'Raw:', raw);
             return null;
         }
+    }
+
+    // --- Listening comprehension ---
+    buildListeningPrompt(words, langCode, level) {
+        const langName = this._getLangName(langCode);
+        const joined = words.join(', ');
+        let levelHint = '';
+        if (level && LLMService.LEVEL_DIFFICULTY_MAP[level]) {
+            const difficulty = LLMService.LEVEL_DIFFICULTY_MAP[level];
+            levelHint = `\nThe learner is at ${difficulty} level. Use simpler vocabulary and shorter sentences for lower levels; more natural, idiomatic expressions for higher levels.`;
+        }
+
+        return `Write a short listening passage (3-5 sentences) in ${langName} using these words: ${joined}${levelHint}
+
+The passage should use natural spoken language that a learner would hear in everyday conversation.
+
+After the passage, write 1 comprehension question with exactly 3 answer choices (A, B, C) and mark the correct answer.
+
+Format exactly like this:
+PASSAGE:
+(the passage text in ${langName})
+
+QUESTION:
+(the question in ${langName})
+A) ...
+B) ...
+C) ...
+ANSWER: (letter)`;
+    }
+
+    async getListeningPassage(words, langCode, level) {
+        if (!this.available || !this.hasModel) return null;
+        try {
+            const prompt = this.buildListeningPrompt(words, langCode, level);
+            const raw = await this.generate({
+                prompt,
+                system: 'You are a language learning assistant. Write natural, conversational text suitable for listening practice. Follow the format exactly.',
+                options: { temperature: 0.5, num_predict: 384 },
+                timeout: 45000
+            });
+            if (!raw) return null;
+            const passage = this._extractListeningPassage(raw);
+            const question = this._extractListeningQuestion(raw);
+            return { passage, question, raw };
+        } catch (e) {
+            console.warn('[LLM] Listening passage failed:', e.message);
+            return null;
+        }
+    }
+
+    _extractListeningPassage(raw) {
+        const m = raw.match(/PASSAGE:\s*\n([\s\S]*?)(?=\n\s*QUESTION:)/i);
+        return m ? m[1].trim() : null;
+    }
+
+    _extractListeningQuestion(raw) {
+        const m = raw.match(/QUESTION:\s*\n([\s\S]*?)(?=\n\s*ANSWER:)/i);
+        if (!m) return null;
+        const block = m[1].trim();
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        const question = lines[0] || '';
+        const choices = lines.slice(1).filter(l => /^[A-C]\)/i.test(l));
+        const answerMatch = raw.match(/ANSWER:\s*([A-C])/i);
+        const answer = answerMatch ? answerMatch[1].toUpperCase() : null;
+        return { question, choices, answer };
+    }
+
+    // --- Grammar explanation ---
+    buildGrammarExplanationPrompt(word, context, langCode, level) {
+        const langName = this._getLangName(langCode);
+        let levelHint = '';
+        if (level && LLMService.LEVEL_DIFFICULTY_MAP[level]) {
+            const difficulty = LLMService.LEVEL_DIFFICULTY_MAP[level];
+            levelHint = `\nThe learner is at ${difficulty} level. Adjust the explanation accordingly — keep it simple for beginners, more detailed for advanced learners.`;
+        }
+
+        return `Explain the grammar of the word "${word}" as used in this ${langName} sentence: "${context}"${levelHint}
+
+Provide your answer in this exact format:
+GRAMMAR: (the grammar rule or pattern this word demonstrates)
+USAGE: (how the word is used in the given sentence, in 1-2 sentences)
+EXAMPLE: (a simpler ${langName} example sentence using the same grammar pattern, at the learner's level)`;
+    }
+
+    async getGrammarExplanation(word, context, langCode, level) {
+        if (!this.available || !this.hasModel) return null;
+        try {
+            const prompt = this.buildGrammarExplanationPrompt(word, context, langCode, level);
+            const raw = await this.generate({
+                prompt,
+                system: 'You are a language learning assistant. Give concise, accurate grammar explanations. Follow the format exactly.',
+                options: { temperature: 0.3, num_predict: 256 },
+                timeout: 30000
+            });
+            if (!raw) return null;
+            const parsed = this._extractGrammarExplanation(raw);
+            if (parsed) {
+                let result = '';
+                if (parsed.grammar) result += 'GRAMMAR: ' + parsed.grammar;
+                if (parsed.usage) result += (result ? '\n' : '') + 'USAGE: ' + parsed.usage;
+                if (parsed.example) result += (result ? '\n' : '') + 'EXAMPLE: ' + parsed.example;
+                return result || raw.trim();
+            }
+            return raw.trim();
+        } catch (e) {
+            console.warn('[LLM] Grammar explanation failed:', e.message);
+            return null;
+        }
+    }
+
+    _extractGrammarExplanation(raw) {
+        if (!raw) return null;
+        const grammar = raw.match(/GRAMMAR:\s*([\s\S]*?)(?=USAGE:|$)/i);
+        const usage = raw.match(/USAGE:\s*([\s\S]*?)(?=EXAMPLE:|$)/i);
+        const example = raw.match(/EXAMPLE:\s*([\s\S]*?)$/i);
+        if (!grammar && !usage && !example) return null;
+        return {
+            grammar: grammar ? grammar[1].trim() : null,
+            usage: usage ? usage[1].trim() : null,
+            example: example ? example[1].trim() : null
+        };
     }
 
     // --- Helpers ---

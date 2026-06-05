@@ -6,6 +6,20 @@ class DataService {
         this.dailyScoreLoaded = false;
         this.kanjiCache = {}; 
         this.pendingFetches = {}; 
+        this._defaultList = null;
+    }
+
+    getFilteredList() {
+        const prefs = app && app.store ? app.store.prefs : null;
+        if (!prefs || !prefs.levelFilter || prefs.levelFilter.includes('all')) return this.list;
+        const selected = prefs.levelFilter;
+        const filtered = this.list.filter(item => {
+            if (!item.level && !item.tags) return selected.includes('unassigned');
+            if (item.level && selected.includes(item.level)) return true;
+            if (item.tags && item.tags.some(t => selected.includes(t))) return true;
+            return false;
+        });
+        return filtered.length > 0 ? filtered : this.list;
     }
     
     resetSession() {
@@ -145,6 +159,40 @@ class DataService {
         } catch(e) { alert("Error: " + e.message); }
     }
 
+    loadCollection(collectionKey) {
+        if (typeof VOCAB_COLLECTIONS === 'undefined' || !VOCAB_COLLECTIONS[collectionKey]) return false;
+        if (!this._defaultList) this._defaultList = this.list;
+        const collection = VOCAB_COLLECTIONS[collectionKey];
+        const langKey = collection[0] && collection[0].lang ? collection[0].lang : null;
+        const exKey = langKey ? langKey + '_ex' : null;
+        this.list = collection.map((item, i) => {
+            const entry = { id: item.id !== undefined ? item.id : i, level: item.level || '' };
+            if (typeof LANG_CONFIG !== 'undefined') {
+                LANG_CONFIG.forEach(c => { entry[c.key] = ''; });
+            }
+            if (item.en) entry.en = item.en;
+            if (langKey && item[langKey]) entry[langKey] = item[langKey];
+            if (exKey && item[exKey]) {
+                entry[exKey] = item[exKey];
+            } else if (langKey && item[langKey + '_ex']) {
+                entry[langKey + '_ex'] = item[langKey + '_ex'];
+            }
+            if (item.en_ex) entry.en_ex = item.en_ex;
+            if (item.tags) entry.tags = item.tags;
+            if (item.level) entry.level = item.level;
+            return entry;
+        });
+        return true;
+    }
+
+    resetToDefaultList() {
+        if (this._defaultList) {
+            this.list = this._defaultList;
+            return true;
+        }
+        return false;
+    }
+
     parseCSV(txt) {
         let lines = txt.split(/\r?\n/).filter(l => l.trim().length > 0 && !l.trim().startsWith('['));
         if (lines.length > 0) lines = lines.slice(1); 
@@ -154,6 +202,10 @@ class DataService {
             if(parts.length===0) parts.push(...line.split(','));
             const item = { id: i };
             if(typeof LANG_CONFIG !== 'undefined') { LANG_CONFIG.forEach(c => item[c.key] = parts[c.index] ? parts[c.index].trim() : ""); }
+            const levelIdx = LANG_CONFIG ? LANG_CONFIG.length : 15;
+            const tagIdx = levelIdx + 1;
+            if (parts[levelIdx] && parts[levelIdx].trim()) item.level = parts[levelIdx].trim();
+            if (parts[tagIdx] && parts[tagIdx].trim()) item.tags = parts[tagIdx].split(/[;|]/).map(t => t.trim()).filter(Boolean);
             return item;
         });
     }

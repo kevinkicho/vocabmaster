@@ -115,11 +115,11 @@ class TF extends GameMode {
             const exMain = c[p.tfExMain] || (exMainConf?.exKey ? c[exMainConf.exKey] : '');
             const exSubConf = LANG_MAP.get(p.tfExSub);
             const exSub = c[p.tfExSub] || (exSubConf?.exKey ? c[exSubConf.exKey] : '');
-            if(exMain||exSub) exHtml = `<div class="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1 leading-tight">${exMain}</p>`:''}${exSub?`<p class="text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">${exSub}</p>`:''}</div>`;
+            if(exMain||exSub) exHtml = `<div class="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800 w-full text-center">${exMain?`<p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-1 leading-tight">${escapeHtml(exMain)}</p>`:''}${exSub?`<p class="text-[10px] text-slate-400 dark:text-neutral-500 leading-tight">${escapeHtml(exSub)}</p>`:''}</div>`;
         }
 
         this.updateHeader();
-        if(this.dom.front) { this.dom.front.innerText = c[frontKey]; this.dom.front.innerHTML = c[frontKey]; }
+        if(this.dom.front) { this.dom.front.textContent = c[frontKey]; }
         if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
         
         if(this.dom.topClick) this.dom.topClick.onclick = () => {

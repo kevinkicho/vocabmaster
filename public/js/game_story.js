@@ -191,8 +191,9 @@ class Story extends GameMode {
         const lang = this._getTargetLang();
         const langName = app.llm._getLangName(lang);
         const wordList = this.storyWords.map(w => w[lang] || w.ja || w.en).filter(Boolean);
+        const storyLevel = this.storyWords.map(w => w.level).find(Boolean) || null;
 
-        console.log('[Story] Picked words:', wordList, 'lang:', lang);
+        console.log('[Story] Picked words:', wordList, 'lang:', lang, 'level:', storyLevel);
 
         if (wordList.length === 0) {
             this.dom.body.innerHTML = `
@@ -209,7 +210,7 @@ class Story extends GameMode {
         // Show the story card shell immediately — stream tokens into it
         this._showStreamingCard(wordList);
 
-        const prompt = this._buildStoryPrompt(wordList, langName);
+        const prompt = this._buildStoryPrompt(wordList, langName, storyLevel);
 
         try {
             await this._generateStory(prompt, lang);
@@ -219,7 +220,7 @@ class Story extends GameMode {
                 <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
                     <i class="ph-duotone ph-warning text-4xl text-rose-400"></i>
                     <p class="text-sm font-bold text-slate-600 dark:text-neutral-300">Story generation failed</p>
-                    <p class="text-xs text-slate-400">${e.message}</p>
+                    <p class="text-xs text-slate-400">${escapeHtml(e.message)}</p>
                     <button onclick="app.game.render()" class="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-500 active:scale-95 transition-transform">Try Again</button>
                 </div>`;
         } finally {
@@ -241,7 +242,7 @@ class Story extends GameMode {
                         <span id="story-elapsed" class="ml-auto text-[10px] text-slate-300 dark:text-neutral-600 font-mono">0s</span>
                     </div>
                     <div class="flex flex-wrap gap-1.5 mb-3">
-                        ${wordList.map(w => `<span class="inline-block bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">${w}</span>`).join('')}
+                        ${wordList.map(w => `<span class="inline-block bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full">${escapeHtml(w)}</span>`).join('')}
                     </div>
                     <div id="story-stream" class="text-base leading-relaxed text-slate-800 dark:text-neutral-100 whitespace-pre-wrap min-h-[60px] select-text"><span class="text-slate-300 dark:text-neutral-600 animate-pulse">|</span></div>
                 </div>
@@ -264,9 +265,17 @@ class Story extends GameMode {
 
     // ── Prompt ──────────────────────────────────────────────────────
 
-    _buildStoryPrompt(words, langName) {
+    _buildStoryPrompt(words, langName, level) {
         const joined = words.join(', ');
-        return `Write a very short story (3-5 sentences) in ${langName} using these words: ${joined}
+        let levelInstruction = '';
+        if (level) {
+            const diffMap = (typeof LLMService !== 'undefined' && LLMService.LEVEL_DIFFICULTY_MAP) ? LLMService.LEVEL_DIFFICULTY_MAP : {};
+            const difficulty = diffMap[level];
+            if (difficulty) {
+                levelInstruction = `\nThe learner's proficiency level is ${difficulty}. Adjust vocabulary complexity and grammar accordingly — use simpler structures for lower levels and more natural, nuanced expressions for higher levels.`;
+            }
+        }
+        return `Write a very short story (3-5 sentences) in ${langName} using these words: ${joined}${levelInstruction}
 
 After the story, write 2 comprehension questions, each with 4 answer choices (A, B, C, D) and mark the correct answer.
 
@@ -631,9 +640,10 @@ ANSWER: (letter)`;
             const lang = this._getTargetLang();
             const langName = app.llm._getLangName(lang);
             const wordList = words.map(w => w[lang] || w.ja || w.en).filter(Boolean);
+            const storyLevel = words.map(w => w.level).find(Boolean) || null;
             if (wordList.length === 0) { this._prefetching = false; return; }
 
-            const prompt = this._buildStoryPrompt(wordList, langName);
+            const prompt = this._buildStoryPrompt(wordList, langName, storyLevel);
             let fullText = await app.llm.streamGenerate({
                 prompt,
                 system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'
@@ -718,21 +728,19 @@ ANSWER: (letter)`;
 
     _highlightWords(text) {
         const lang = this._getTargetLang();
-        // Highlight on plain text FIRST, then wrap hanzi
-        // (reverse order would break mark tags inside hanzi spans)
-        let html = text;
+        let html = escapeHtml(text);
         for (const w of this.storyWords) {
             const word = w[lang] || w.ja || '';
             if (!word) continue;
             const variants = word.split(/[·・,;、\/|]/).map(s => s.trim()).filter(Boolean);
             for (const v of variants) {
-                const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const escapedHtml = escapeHtml(v);
+                const escaped = escapedHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 const re = new RegExp(escaped, 'g');
-                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${v}</mark>`);
+                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${escapedHtml}</mark>`);
             }
         }
-        // Now wrap hanzi characters that aren't already inside mark tags
-        return this.wrapHanzi(html);
+        return this.wrapHanziOnEscaped(html);
     }
 
     async _pickWords(count) {

@@ -95,12 +95,12 @@ class Flashcard extends GameMode {
         const backs = [item[p.flashBack1], item[p.flashBack2], item[p.flashBack3], item[p.flashBack4]].filter(t => t && t.trim()); 
 
         let backHtml = backs.length <= 2 
-            ? backs.map((txt, idx) => `<div class="flex-1 flex flex-col items-center justify-center p-4 ${idx===0 && backs.length>1 ? 'border-b landscape:border-b-0 landscape:border-r border-slate-600/50' : ''} overflow-hidden"><div class="flex-1 w-full fit-box"><span class="fit-target font-black">${txt}</span></div></div>`).join('')
-            : `<div class="grid grid-cols-1 landscape:grid-cols-2 grid-rows-4 landscape:grid-rows-2 w-full h-full">${backs.map(txt => `<div class="flex items-center justify-center p-2 overflow-hidden"><div class="w-full h-full fit-box"><span class="fit-target font-black text-sm">${txt}</span></div></div>`).join('')}</div>`;
+            ? backs.map((txt, idx) => `<div class="flex-1 flex flex-col items-center justify-center p-4 ${idx===0 && backs.length>1 ? 'border-b landscape:border-b-0 landscape:border-r border-slate-600/50' : ''} overflow-hidden"><div class="flex-1 w-full fit-box"><span class="fit-target font-black">${escapeHtml(txt)}</span></div></div>`).join('')
+            : `<div class="grid grid-cols-1 landscape:grid-cols-2 grid-rows-4 landscape:grid-rows-2 w-full h-full">${backs.map(txt => `<div class="flex items-center justify-center p-2 overflow-hidden"><div class="w-full h-full fit-box"><span class="fit-target font-black text-sm">${escapeHtml(txt)}</span></div></div>`).join('')}</div>`;
         
         if(backs.length <= 2) backHtml = `<div class="flex flex-col landscape:flex-row w-full h-full">${backHtml}</div>`;
 
-        if(this.dom.front) { this.dom.front.innerText = frontText; this.dom.front.innerHTML = frontText; }
+        if(this.dom.front) { this.dom.front.textContent = frontText; }
         if(this.dom.backContainer) this.dom.backContainer.innerHTML = backHtml;
         this.updateHeader();
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(item);

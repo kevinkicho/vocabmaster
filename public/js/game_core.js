@@ -2,7 +2,7 @@
 class GameMode {
     constructor(key) {
         this.key = key;
-        console.log(`[GameMode] Init: ${key}`);
+        L(`[GameMode] Init: ${key}`);
         this.i = app.store.getLoc(key);
         this.list = app.data.getFilteredList();
         this.root = document.getElementById('app-view');

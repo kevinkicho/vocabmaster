@@ -65,7 +65,7 @@ class AnalyticsService {
                 await this.updateStreak(uid);
             }
         } catch (e) {
-            console.error('[Analytics] Flush failed', e);
+            L('[Analytics] Flush failed', e);
             this.buffer = [...bufferCopy, ...this.buffer];
             this.sessions = [...sessionsCopy, ...this.sessions];
             this._saveBuffer();
@@ -166,7 +166,7 @@ class AnalyticsService {
             streak.lastDate = today;
             await ref.set(streak);
         } catch (e) {
-            console.error('[Analytics] Streak update failed', e);
+            L('[Analytics] Streak update failed', e);
         }
     }
 
@@ -200,7 +200,7 @@ class AnalyticsService {
                 const recovered = JSON.parse(saved);
                 if (Array.isArray(recovered) && recovered.length > 0) {
                     this.buffer = [...recovered, ...this.buffer];
-                    console.log(`[Analytics] Recovered ${recovered.length} buffered events`);
+                    L(`[Analytics] Recovered ${recovered.length} buffered events`);
                 }
                 sessionStorage.removeItem(this.SESSION_KEY);
             }

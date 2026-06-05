@@ -11,7 +11,7 @@ class Voice extends GameMode {
     
     initSpeech() {
         if (!('webkitSpeechRecognition' in window)) {
-            console.warn("Speech API not supported");
+            L("Speech API not supported");
             return;
         }
         this.recognition = new webkitSpeechRecognition();

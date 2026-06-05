@@ -100,7 +100,7 @@ class UIManager {
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
-        } catch(e) { console.error("Error loading settings UI:", e); }
+        } catch(e) { L("Error loading settings UI:", e); }
     }
 
     renderFontsAccordion() {
@@ -282,7 +282,7 @@ class UIManager {
             if(viewVocab) viewVocab.scrollTop = 0;
             if(viewDict) viewDict.scrollTop = 0;
 
-        } catch(e) { console.error("Open Edit Modal Error", e); }
+        } catch(e) { L("Open Edit Modal Error", e); }
     }
 
     switchEditTab(tab) {
@@ -1077,7 +1077,7 @@ class UIManager {
         const text = JSON.stringify(sample, null, 2)
             + '\n\n--- Total: ' + voices.length + ' voices ---\n'
             + '\nAll voiceURIs:\n' + voices.map(v => v.voiceURI).join('\n');
-        console.log(text);
+        L(text);
         const container = document.getElementById('voice-selector-container');
         if (container) {
             const existing = container.querySelector('#voice-raw-dump');

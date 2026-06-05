@@ -1,3 +1,4 @@
+function L(...args) { if (window.VM_DEBUG) console.log(...args); }
 function escapeHtml(str) {
     if (str == null) return '';
     return String(str)

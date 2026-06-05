@@ -22,7 +22,7 @@ window.onerror = (msg, url, line) => { console.error(`Global: ${msg} (${url}:${l
 
 class App {
     constructor() {
-        console.log("App Constructing...");
+        L("App Constructing...");
         this.score = 0; 
         this.dailyScore = 0; 
         try {
@@ -39,7 +39,7 @@ class App {
             this.presets = new PresetManager(); 
             this.game = null;
         } catch (e) {
-            console.error("Constructor Fail:", e);
+            L("Constructor Fail:", e);
             alert("Critical Init Error: " + e.message);
         }
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
@@ -47,7 +47,7 @@ class App {
     }
 
     async init() {
-        console.log("App Init Start");
+        L("App Init Start");
         const btn = document.getElementById('btn-init');
         const statusBar = document.getElementById('status-bar');
         
@@ -74,7 +74,7 @@ class App {
         // --- AUTH & UI LISTENER (Central Control Tower) ---
         if(typeof firebase !== 'undefined' && typeof auth !== 'undefined') {
             auth.onAuthStateChanged(user => {
-                console.log("Auth State Changed:", user ? user.email : "None");
+                L("Auth State Changed:", user ? user.email : "None");
                 if(this.auth) this.auth.currentUser = user;
                 if(this.notes) this.notes.setUser(user);
                 
@@ -159,7 +159,7 @@ class App {
 
             this.goHome(false); 
         } catch (e) {
-            console.error("Init failed:", e);
+            L("Init failed:", e);
             statusBar.innerText = "Error: " + e.message;
             statusBar.classList.add('text-rose-500');
             btn.innerText = "Retry"; 
@@ -179,7 +179,7 @@ class App {
         
         const provider = new firebase.auth.GoogleAuthProvider();
         auth.signInWithPopup(provider).catch(e => {
-            console.error("Login Error:", e);
+            L("Login Error:", e);
             if(loginBtn) {
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
@@ -268,7 +268,7 @@ class App {
             this.game = fn(); 
             history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
         } catch(e) {
-            console.error("Launch Error:", e);
+            L("Launch Error:", e);
             alert("Failed to start game: " + e.message);
         }
     }
@@ -285,6 +285,6 @@ window.app = new App();
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW Failed', err));
+            navigator.serviceWorker.register('./sw.js').catch(err => L('SW Failed', err));
     });
 }

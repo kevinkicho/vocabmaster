@@ -11,7 +11,7 @@ class AudioService {
         this._voicePollTimer = null;
         this._voiceUserGesture = false;
         if (this.useNative) {
-            console.log('[Audio] Using native Android TTS');
+            L('[Audio] Using native Android TTS');
             this.loadVoices();
         } else if (this.synth) {
             if (this.synth.onvoiceschanged !== undefined) {
@@ -118,9 +118,9 @@ class AudioService {
                     isNetwork: v.isNetwork
                 }));
                 this._voicePollAttempts = 100;
-                console.log('[Audio] Native loadVoices: found', this.voices.length, 'voices');
+                L('[Audio] Native loadVoices: found', this.voices.length, 'voices');
                 if (app && app.ui) app.ui.renderVoiceSelector();
-            } catch(e) { console.error('[Audio] Native voice load error:', e); }
+            } catch(e) { L('[Audio] Native voice load error:', e); }
             return;
         }
         if (!this.synth) return; 
@@ -128,9 +128,9 @@ class AudioService {
             this.voices = this.synth.getVoices();
             this._buildVoiceMap();
             if (this.voices.length > 0) this._voicePollAttempts = 100;
-            console.log('[Audio] loadVoices: found', this.voices.length, 'voices');
+            L('[Audio] loadVoices: found', this.voices.length, 'voices');
             if (this.voices.length > 0) {
-                this.voices.forEach(v => console.log('[Audio]  -', v.name, '|', v.lang, '|', v.voiceURI, '| local:', v.localService));
+                this.voices.forEach(v => L('[Audio]  -', v.name, '|', v.lang, '|', v.voiceURI, '| local:', v.localService));
             }
         } catch(e) {} 
     }

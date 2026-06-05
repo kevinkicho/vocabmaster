@@ -127,9 +127,9 @@ class Story extends GameMode {
             }
             this._cachedStories = all;
             this._cachedIndex = 0;
-            console.log('[Story] Loaded', all.length, 'cached stories from RTDB');
+            L('[Story] Loaded', all.length, 'cached stories from RTDB');
         } catch (e) {
-            console.warn('[Story] Cache load failed:', e.message);
+            L('[Story] Cache load failed:', e.message);
         }
     }
 
@@ -157,7 +157,7 @@ class Story extends GameMode {
 
         // Priority 1: prefetched story (already generated in background)
         if (this._prefetched) {
-            console.log('[Story] Using prefetched story');
+            L('[Story] Using prefetched story');
             const p = this._prefetched;
             this._prefetched = null;
             this.storyWords = p.storyWords;
@@ -172,7 +172,7 @@ class Story extends GameMode {
         // Priority 2: cached story from RTDB (instant, no AI wait)
         const cached = this._nextCachedStory();
         if (cached) {
-            console.log('[Story] Serving cached story from RTDB');
+            L('[Story] Serving cached story from RTDB');
             this.storyWords = cached.storyWords;
             this.questions = cached.questions;
             this.qIndex = 0;
@@ -193,7 +193,7 @@ class Story extends GameMode {
         const wordList = this.storyWords.map(w => w[lang] || w.ja || w.en).filter(Boolean);
         const storyLevel = this.storyWords.map(w => w.level).find(Boolean) || null;
 
-        console.log('[Story] Picked words:', wordList, 'lang:', lang, 'level:', storyLevel);
+        L('[Story] Picked words:', wordList, 'lang:', lang, 'level:', storyLevel);
 
         if (wordList.length === 0) {
             this.dom.body.innerHTML = `
@@ -215,7 +215,7 @@ class Story extends GameMode {
         try {
             await this._generateStory(prompt, lang);
         } catch (e) {
-            console.error('[Story] Generation failed:', e);
+            L('[Story] Generation failed:', e);
             this.dom.body.innerHTML = `
                 <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
                     <i class="ph-duotone ph-warning text-4xl text-rose-400"></i>
@@ -303,7 +303,7 @@ ANSWER: (letter)`;
     // ── Generation (stream into the card) ──────────────────────────
 
     async _generateStory(prompt, lang) {
-        console.log('[Story] _generateStory directHTTP:', app.llm.useDirectHTTP, 'bridge:', app.llm.useNativeBridge);
+        L('[Story] _generateStory directHTTP:', app.llm.useDirectHTTP, 'bridge:', app.llm.useNativeBridge);
 
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         this.phase = 'reading';
@@ -343,7 +343,7 @@ ANSWER: (letter)`;
                     this.dom.body.scrollTop = this.dom.body.scrollHeight;
                 }
             }
-            if (tokenCount === 1) console.log('[Story] First token received');
+            if (tokenCount === 1) L('[Story] First token received');
         };
 
         // Use unified LLM streaming — direct HTTP preferred, bridge fallback
@@ -356,7 +356,7 @@ ANSWER: (letter)`;
         this.storyText = fullText;
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         if (elapsedEl) elapsedEl.remove();
-        console.log('[Story] Generation complete, tokens:', tokenCount, 'length:', fullText.length);
+        L('[Story] Generation complete, tokens:', tokenCount, 'length:', fullText.length);
 
         this._parseAndShow(fullText, lang);
     }
@@ -368,7 +368,7 @@ ANSWER: (letter)`;
         this.questions = this._extractQuestions(text);
         this.qIndex = 0;
 
-        console.log('[Story] Parsed', this.questions.length, 'questions');
+        L('[Story] Parsed', this.questions.length, 'questions');
 
         if (this.questions.length > 0) {
             // Transition in-place: update the streaming card rather than rebuilding
@@ -624,14 +624,14 @@ ANSWER: (letter)`;
         if (this._prefetching) return;
         if (this.storyNum >= this.storiesPerSession) return; // don't prefetch past session end
         this._prefetching = true;
-        console.log('[Story] Prefetching next story in background...');
+        L('[Story] Prefetching next story in background...');
 
         try {
             // Check if we can serve from cache instead of generating
             const cached = this._nextCachedStory();
             if (cached) {
                 this._prefetched = cached;
-                console.log('[Story] Prefetch served from RTDB cache');
+                L('[Story] Prefetch served from RTDB cache');
                 this._updateNextButton();
                 return;
             }
@@ -654,11 +654,11 @@ ANSWER: (letter)`;
 
             if (questions.length > 0) {
                 this._prefetched = { storyWords: words, storyPart, questions, lang, rawText: fullText, wordIds: words.map(w => w.id) };
-                console.log('[Story] Prefetch ready:', questions.length, 'questions');
+                L('[Story] Prefetch ready:', questions.length, 'questions');
                 this._updateNextButton();
             }
         } catch (e) {
-            console.warn('[Story] Prefetch failed:', e.message);
+            L('[Story] Prefetch failed:', e.message);
         } finally {
             this._prefetching = false;
         }
@@ -691,9 +691,9 @@ ANSWER: (letter)`;
 
             const ref = db.ref('stories').push();
             await ref.set(entry);
-            console.log('[Story] Saved story to RTDB:', ref.key);
+            L('[Story] Saved story to RTDB:', ref.key);
         } catch (e) {
-            console.warn('[Story] RTDB save failed:', e.message);
+            L('[Story] RTDB save failed:', e.message);
         }
     }
 

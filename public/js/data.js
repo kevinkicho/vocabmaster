@@ -38,7 +38,7 @@ class DataService {
         let loaded = false;
         if (typeof db !== 'undefined' && db) {
             try {
-                console.log("[Data] Fetching vocab...");
+                L("[Data] Fetching vocab...");
                 const snap = await db.ref('vocab').once('value');
                 if (snap.exists()) {
                     const val = snap.val();
@@ -46,7 +46,7 @@ class DataService {
                     this.list = this.list.filter(item => item !== null).sort((a,b) => a.id - b.id);
                     loaded = true;
                 }
-            } catch (e) { console.warn("[Data] RTDB fetch failed", e); }
+            } catch (e) { L("[Data] RTDB fetch failed", e); }
         }
         if (!loaded) {
             try {
@@ -123,7 +123,7 @@ class DataService {
         updates[`users/${uid}/weekly/modes/${mode}`] = firebase.database.ServerValue.increment(points);
         updates[`users/${uid}/weekly/daily/${todayKey}/${mode}`] = firebase.database.ServerValue.increment(points);
 
-        try { await db.ref().update(updates); } catch(e) { console.error("[Data] Scoring failed", e); }
+        try { await db.ref().update(updates); } catch(e) { L("[Data] Scoring failed", e); }
     }
 
     async getStats() {

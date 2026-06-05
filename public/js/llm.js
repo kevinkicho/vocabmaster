@@ -13,7 +13,7 @@ class LLMService {
         this._queue = Promise.resolve(); // serialize all LLM calls
         this._initDB();
         if (this.useNativeBridge) {
-            console.log('[LLM] Android native bridge detected');
+            L('[LLM] Android native bridge detected');
         }
     }
 
@@ -28,9 +28,9 @@ class LLMService {
                 }
             };
             req.onsuccess = (e) => { this.db = e.target.result; };
-            req.onerror = () => { console.warn('[LLM] IndexedDB init failed'); };
+            req.onerror = () => { L('[LLM] IndexedDB init failed'); };
         } catch (e) {
-            console.warn('[LLM] IndexedDB not available');
+            L('[LLM] IndexedDB not available');
         }
     }
 
@@ -65,7 +65,7 @@ class LLMService {
             const tx = this.db.transaction('cloze_cache', 'readwrite');
             const store = tx.objectStore('cloze_cache');
             store.put({ match, ts: Date.now() }, key);
-        } catch (e) { console.warn('[LLM] Cache write failed:', e); }
+        } catch (e) { L('[LLM] Cache write failed:', e); }
     }
 
     async clearCache() {
@@ -104,7 +104,7 @@ class LLMService {
 
     // --- Auto-detect: always probe on startup ---
     async autoDetect() {
-        console.log('[LLM] autoDetect start, useNativeBridge:', this.useNativeBridge);
+        L('[LLM] autoDetect start, useNativeBridge:', this.useNativeBridge);
 
         // If running in Android, check for saved port or prompt user
         if (this.useNativeBridge) {
@@ -112,13 +112,13 @@ class LLMService {
             if (savedPort) {
                 try {
                     const port = parseInt(savedPort);
-                    console.log('[LLM] Trying saved port:', port);
+                    L('[LLM] Trying saved port:', port);
                     const data = await AndroidBridge.connectToPort(port);
                     this.endpoint = `http://localhost:${port}`;
                     AndroidBridge.setPort(port);
-                    console.log('[LLM] Connected to saved port:', port);
+                    L('[LLM] Connected to saved port:', port);
                 } catch (e) {
-                    console.warn('[LLM] Saved port failed:', e.message);
+                    L('[LLM] Saved port failed:', e.message);
                     localStorage.removeItem('vm_ollama_port');
                     this._showPortPrompt();
                     return;
@@ -130,22 +130,22 @@ class LLMService {
         }
 
         const ok = await this.checkConnection();
-        console.log('[LLM] checkConnection result:', ok, 'models:', JSON.stringify(this.availableModels));
+        L('[LLM] checkConnection result:', ok, 'models:', JSON.stringify(this.availableModels));
         if (ok) {
             // Use preferred model if available, otherwise use first available model
             const wanted = this.model.replace(/[:\-_]/g, '').toLowerCase();
             const preferredMatch = this.availableModels.find(m => (m || '').replace(/[:\-_]/g, '').toLowerCase().includes(wanted));
             this.resolvedModel = preferredMatch || this.availableModels[0] || null;
             this.hasModel = !!this.resolvedModel;
-            console.log('[LLM] hasModel:', this.hasModel, 'resolvedModel:', this.resolvedModel, '(preferred was:', this.model + ')');
+            L('[LLM] hasModel:', this.hasModel, 'resolvedModel:', this.resolvedModel, '(preferred was:', this.model + ')');
             if (this.hasModel) {
-                console.log('[LLM] Ready with model:', this.resolvedModel);
+                L('[LLM] Ready with model:', this.resolvedModel);
                 this._showAIWelcome();
                 this.warmup();
                 // Refresh home menu so the AI section appears
                 if (app && !app.game) app.goHome(false);
             } else {
-                console.log('[LLM] Ollama running but no models loaded');
+                L('[LLM] Ollama running but no models loaded');
                 this._showModelPrompt();
             }
         } else {
@@ -169,10 +169,10 @@ class LLMService {
                 if (resp.ok) {
                     data = await resp.json();
                     this.useDirectHTTP = true;
-                    console.log('[LLM] Direct HTTP connection OK');
+                    L('[LLM] Direct HTTP connection OK');
                 }
             } catch (e) {
-                console.log('[LLM] Direct HTTP failed, trying bridge...', e.message);
+                L('[LLM] Direct HTTP failed, trying bridge...', e.message);
             }
 
             // Fall back to Android bridge if direct HTTP failed
@@ -182,9 +182,9 @@ class LLMService {
 
             if (!data) { this.available = false; return false; }
             this.available = true;
-            console.log('[LLM] Raw tags response:', JSON.stringify(data));
+            L('[LLM] Raw tags response:', JSON.stringify(data));
             this.availableModels = (data.models || []).map(m => m.name || m.model || m);
-            console.log('[LLM] Connected. Models:', this.availableModels, 'directHTTP:', this.useDirectHTTP);
+            L('[LLM] Connected. Models:', this.availableModels, 'directHTTP:', this.useDirectHTTP);
             return true;
         } catch (e) {
             this.available = false;
@@ -203,7 +203,7 @@ class LLMService {
         if (!this.available) return;
         // Skip warmup if no direct HTTP and on Android — save the slot for real work
         if (!this.useDirectHTTP && this.useNativeBridge) {
-            console.log('[LLM] Skipping warmup (bridge-only mode)');
+            L('[LLM] Skipping warmup (bridge-only mode)');
             return;
         }
         try {
@@ -212,9 +212,9 @@ class LLMService {
                 options: { num_predict: 1 },
                 timeout: 30000
             });
-            console.log('[LLM] Model warmed up');
+            L('[LLM] Model warmed up');
         } catch (e) {
-            console.warn('[LLM] Warmup failed:', e.message);
+            L('[LLM] Warmup failed:', e.message);
         }
     }
 
@@ -400,7 +400,7 @@ class LLMService {
                 localStorage.setItem('vm_ollama_port', String(port));
                 this.endpoint = 'http://localhost:' + port;
                 AndroidBridge.setPort(port);
-                console.log('[LLM] Connected via port prompt:', port);
+                L('[LLM] Connected via port prompt:', port);
                 closePrompt();
                 // Re-run autoDetect now that port is set
                 this.autoDetect();
@@ -688,14 +688,14 @@ The part of the sentence to blank out is: {"match":"`;
                 timeout: 30000
             });
 
-            console.log('[LLM] Raw response:', raw);
+            L('[LLM] Raw response:', raw);
             const match = this._parseResponse(raw, sentence);
-            console.log('[LLM] Parsed match:', match, 'for target:', target);
+            L('[LLM] Parsed match:', match, 'for target:', target);
 
             if (match) await this.setCache(sentence, target, langCode, match);
             return match;
         } catch (e) {
-            console.warn('[LLM] Request failed:', e.message);
+            L('[LLM] Request failed:', e.message);
             return null;
         }
     }
@@ -713,7 +713,7 @@ The part of the sentence to blank out is: {"match":"`;
                 if (valMatch && valMatch[1].trim()) {
                     const candidate = valMatch[1].trim();
                     if (sentence.includes(candidate)) {
-                        console.log('[LLM] Parsed from completion:', candidate);
+                        L('[LLM] Parsed from completion:', candidate);
                         return candidate;
                     }
                 }
@@ -723,12 +723,12 @@ The part of the sentence to blank out is: {"match":"`;
             const match = parsed.match;
             if (!match || match === '') return null;
             if (!sentence.includes(match)) {
-                console.warn('[LLM] Hallucinated match:', match);
+                L('[LLM] Hallucinated match:', match);
                 return null;
             }
             return match;
         } catch (e) {
-            console.warn('[LLM] Parse error:', e.message, 'Raw:', raw);
+            L('[LLM] Parse error:', e.message, 'Raw:', raw);
             return null;
         }
     }
@@ -776,7 +776,7 @@ ANSWER: (letter)`;
             const question = this._extractListeningQuestion(raw);
             return { passage, question, raw };
         } catch (e) {
-            console.warn('[LLM] Listening passage failed:', e.message);
+            L('[LLM] Listening passage failed:', e.message);
             return null;
         }
     }
@@ -836,7 +836,7 @@ EXAMPLE: (a simpler ${langName} example sentence using the same grammar pattern,
             }
             return raw.trim();
         } catch (e) {
-            console.warn('[LLM] Grammar explanation failed:', e.message);
+            L('[LLM] Grammar explanation failed:', e.message);
             return null;
         }
     }

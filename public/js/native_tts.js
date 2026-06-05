@@ -100,7 +100,7 @@ const NativeTTSBridge = (() => {
             }
             return fn.apply(window.NativeTTS, args);
         } catch (e) {
-            console.error('[NativeTTSBridge]', methodName, 'error:', e);
+            L('[NativeTTSBridge]', methodName, 'error:', e);
             return null;
         }
     }
@@ -118,7 +118,7 @@ const NativeTTSBridge = (() => {
                 const voices = JSON.parse(raw);
                 return Array.isArray(voices) ? voices : [];
             } catch (e) {
-                console.error('[NativeTTSBridge] getVoices error:', e);
+                L('[NativeTTSBridge] getVoices error:', e);
                 return [];
             }
         },
@@ -135,7 +135,7 @@ const NativeTTSBridge = (() => {
             try {
                 window.NativeTTS.stop();
             } catch (e) {
-                console.error('[NativeTTSBridge] stop error:', e);
+                L('[NativeTTSBridge] stop error:', e);
             }
         }
     };

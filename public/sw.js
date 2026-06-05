@@ -1,11 +1,10 @@
 /* sw.js */
-const CACHE_NAME = 'vocab-master-v1143-offline'; // VERSION BUMP
+const CACHE_NAME = 'vocab-master-v1150';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './tailwind.css',
   './favicon.svg',
-  './master112625.csv',
   './js/config.js',
   './js/main.js',
   './js/store.js',
@@ -40,10 +39,9 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching assets');
       return Promise.all(
         ASSETS_TO_CACHE.map(url =>
-          cache.add(url).catch(err => console.warn('[SW] Failed to cache:', url, err))
+          cache.add(url).catch(err => { if (self.location.search.includes('debug=1')) console.warn('[SW] Failed to cache:', url, err); })
         )
       );
     })
@@ -56,7 +54,6 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[SW] Removing old cache', key);
             return caches.delete(key);
           }
         })

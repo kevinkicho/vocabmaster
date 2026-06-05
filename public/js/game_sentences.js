@@ -176,9 +176,9 @@ class Sentences extends GameMode {
         const hasBlank = result.html.includes('main-blank');
         const isCJK = ['ja', 'ko', 'zh'].includes(qKey);
         const llmReady = app.llm && app.llm.available && app.llm.hasModel;
-        console.log('[Sentences] LLM check: hasBlank=' + hasBlank + ' isCJK=' + isCJK + ' llmReady=' + llmReady + ' available=' + (app.llm && app.llm.available) + ' hasModel=' + (app.llm && app.llm.hasModel));
+        L('[Sentences] LLM check: hasBlank=' + hasBlank + ' isCJK=' + isCJK + ' llmReady=' + llmReady + ' available=' + (app.llm && app.llm.available) + ' hasModel=' + (app.llm && app.llm.hasModel));
         if (llmReady && (!hasBlank || isCJK)) {
-            console.log('[Sentences] Firing LLM cloze for:', targetRaw, 'in:', sentenceRaw.substring(0, 30));
+            L('[Sentences] Firing LLM cloze for:', targetRaw, 'in:', sentenceRaw.substring(0, 30));
             this._tryLLMCloze(sentenceRaw, targetRaw, qKey, c, aKey, bottomKey);
         }
     }

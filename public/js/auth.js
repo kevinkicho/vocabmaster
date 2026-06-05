@@ -31,7 +31,7 @@ class AuthManager {
                             resolve(cred.user);
                         })
                         .catch(e => {
-                            console.error("Anon Auth Failed:", e);
+                            L("Anon Auth Failed:", e);
                             resolve(null);
                         });
                 }

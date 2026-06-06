@@ -203,7 +203,8 @@ class UIManager {
         const unassignedActive = selected.includes('unassigned');
         const unClass = unassignedActive ? 'bg-slate-600 text-white border-slate-600' : 'bg-white dark:bg-neutral-700 text-slate-400 dark:text-neutral-500 border-slate-200 dark:border-neutral-600';
         html += `<button data-level="unassigned" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${unClass}">Untagged</button>`;
-        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p></div>`;
+        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>`;
+        html += `<p class="text-[8px] text-slate-400 dark:text-neutral-600 mt-1 italic">TOPIK &amp; CEFR levels are approximated from JLPT proficiency</p></div>`;
         container.innerHTML = html;
         container.querySelectorAll('.level-filter-btn').forEach(btn => {
             btn.onclick = () => { this.toggleLevel(btn.dataset.level); };

@@ -1,0 +1,66 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.vocabmaster.app"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:4:5-67
+11-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:4:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:5:5-79
+12-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:5:22-76
+13
+14    <permission
+14-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+15        android:name="com.vocabmaster.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+15-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+16        android:protectionLevel="signature" />
+16-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+17
+18    <uses-permission android:name="com.vocabmaster.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+18-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+18-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+19
+20    <application
+20-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:7:5-22:19
+21        android:allowBackup="true"
+21-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:8:9-35
+22        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+22-->[androidx.core:core:1.12.0] C:\Users\kevin\.gradle\caches\8.9\transforms\48bf16037714990cc24c67d57814b82f\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+23        android:debuggable="true"
+24        android:extractNativeLibs="false"
+25        android:label="VocabMaster"
+25-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:9:9-36
+26        android:supportsRtl="true"
+26-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:10:9-35
+27        android:theme="@style/Theme.VocabMaster"
+27-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:11:9-49
+28        android:usesCleartextTraffic="true" >
+28-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:12:9-44
+29        <activity
+29-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:13:9-21:20
+30            android:name="com.vocabmaster.app.MainActivity"
+30-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:14:13-41
+31            android:configChanges="orientation|screenSize"
+31-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:16:13-59
+32            android:exported="true" >
+32-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:15:13-36
+33            <intent-filter>
+33-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:17:13-20:29
+34                <action android:name="android.intent.action.MAIN" />
+34-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:18:17-69
+34-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:18:25-66
+35
+36                <category android:name="android.intent.category.LAUNCHER" />
+36-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:19:17-77
+36-->C:\Users\kevin\Desktop\vocabmaster-master\android\app\src\main\AndroidManifest.xml:19:27-74
+37            </intent-filter>
+38        </activity>
+39    </application>
+40
+41</manifest>

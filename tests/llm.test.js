@@ -4,12 +4,14 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const src = readFileSync(join(__dirname, '..', 'public', 'js', 'llm.js'), 'utf8');
+const escapeSrc = readFileSync(join(__dirname, '..', 'public', 'js', 'escape.js'), 'utf8');
+const src = escapeSrc + '\n' + readFileSync(join(__dirname, '..', 'public', 'js', 'llm.js'), 'utf8');
 
 let LLMService, service;
 beforeAll(() => {
     const fn = new Function('window', 'document', src + '\nreturn { LLMService };');
-    const result = fn({}, {});
+    const mockWindow = { VM_DEBUG: false };
+    const result = fn(mockWindow, {});
     LLMService = result.LLMService;
     service = new LLMService();
 });

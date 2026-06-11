@@ -1,8 +1,69 @@
-// FIX 1: Import explicitly from 'v1' to support .schedule() syntax
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import * as https from "https";
 
 admin.initializeApp();
+
+// Ollama Cloud API proxy — bypasses CORS for web apps
+export const ollamaProxy = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const { path, method = "GET", headers = {}, body } = req.body;
+  if (!path) {
+    res.status(400).json({ error: "Missing path" });
+    return;
+  }
+
+  const options: https.RequestOptions = {
+    hostname: "api.ollama.com",
+    path: path,
+    method: method,
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+  };
+
+  const proxyReq = https.request(options, (proxyRes) => {
+    // Stream responses (critical for Story mode NDJSON streaming on web)
+    res.status(proxyRes.statusCode || 200);
+
+    // Forward key headers so client can treat it like a direct Ollama response
+    const contentType = proxyRes.headers['content-type'] || proxyRes.headers['Content-Type'];
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+    // Enable chunked transfer for true streaming
+    if (proxyRes.headers['transfer-encoding']) {
+      res.setHeader('Transfer-Encoding', proxyRes.headers['transfer-encoding']);
+    }
+
+    proxyRes.on("data", (chunk) => {
+      res.write(chunk);
+    });
+    proxyRes.on("end", () => {
+      res.end();
+    });
+  });
+
+  proxyReq.on("error", (e) => {
+    res.status(502).json({ error: e.message });
+  });
+
+  if (body) proxyReq.write(JSON.stringify(body));
+  proxyReq.end();
+});
 
 const db = admin.database();
 const firestore = admin.firestore();

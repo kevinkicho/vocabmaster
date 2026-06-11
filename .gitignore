@@ -17,6 +17,11 @@ generate_sentences.js
 debut_models.js
 service-account.json
 
+# Firebase service account / admin credentials (never commit private keys)
+vocabmaster112225-*.json
+*-firebase-adminsdk-*.json
+*1e8a10d5f0a9*.json
+
 # Uncomment this if you'd like others to create their own Firebase project.
 # For a team working on the same Firebase project(s), it is recommended to leave
 # it commented so all members can deploy to the same project(s) in .firebaserc.
@@ -76,3 +81,47 @@ nul
 getvoices.ps1
 getvoices2.ps1
 ttstest.html
+
+# Ollama cloud API key
+.env
+public/js/ollama_config.js
+android-capacitor/www/js/ollama_config.js
+
+# ===========================================
+# Android / Gradle (aggressive hygiene)
+# ===========================================
+# Build outputs - these are huge and should never be committed
+android/app/build/
+android/app/.cxx/
+android/build/
+.gradle/
+local.properties
+*.iml
+*.hprof
+captures/
+
+# Android Studio / IDE
+.idea/
+*.swp
+*.swo
+
+# Gradle wrapper (keep the jar + properties, but caches are noisy)
+# (wrapper jar is usually committed for reproducibility)
+
+# Intermediate / cache dirs seen in this project
+android/app/intermediates/
+android/app/tmp/
+nul
+
+# ===========================================
+# Misc project noise
+# ===========================================
+# Temporary test outputs
+test-*.css
+test-*.js
+test.html
+test-config*.js
+
+# Screenshots (optional - uncomment if you don't want them in git)
+# screenshots/
+

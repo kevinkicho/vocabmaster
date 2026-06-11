@@ -9,25 +9,14 @@
 ### Mobile
 <table>
   <tr>
-    <td align="center"><img src="screenshots/mobile/mainmenu.png" width="200" alt="Main Menu" /><br/>Main Menu</td>
-    <td align="center"><img src="screenshots/mobile/flashcard1.png" width="200" alt="Flashcard Front" /><br/>Flashcard (Front)</td>
-    <td align="center"><img src="screenshots/mobile/flashcard2.png" width="200" alt="Flashcard Back" /><br/>Flashcard (Back)</td>
-    <td align="center"><img src="screenshots/mobile/quiz.png" width="200" alt="Quiz Mode" /><br/>Quiz Mode</td>
+    <td align="center"><img src="screenshots/new/01_home.png" width="200" alt="Main Menu" /><br/>Home</td>
+    <td align="center"><img src="screenshots/new/02_flashcards_front.png" width="200" alt="Flashcard Front" /><br/>Flashcard (Front)</td>
+    <td align="center"><img src="screenshots/new/03_flashcards_back.png" width="200" alt="Flashcard Back" /><br/>Flashcard (Back)</td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/mobile/matching1.png" width="200" alt="Matching 1" /><br/>Matching</td>
-    <td align="center"><img src="screenshots/mobile/matching2.png" width="200" alt="Matching 2" /><br/>Matching (In Progress)</td>
-    <td align="center"><img src="screenshots/mobile/true-false.png" width="200" alt="True False" /><br/>True / False</td>
-    <td align="center"><img src="screenshots/mobile/story1.jpg" width="200" alt="Story Mode" /><br/>Story Mode</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/mobile/story2.jpg" width="200" alt="Story Mode Complete" /><br/>Story Questions</td>
-    <td align="center"><img src="screenshots/mobile/setting1.png" width="200" alt="Settings 1" /><br/>Settings</td>
-    <td align="center"><img src="screenshots/mobile/setting2.png" width="200" alt="Settings 2" /><br/>Settings (Audio)</td>
-    <td align="center"><img src="screenshots/mobile/setting3.png" width="200" alt="Settings 3" /><br/>Settings (Theme)</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/mobile/setting4.png" width="200" alt="Settings 4" /><br/>Settings (Presets)</td>
+    <td align="center"><img src="screenshots/new/04_games_menu.png" width="200" alt="Games Menu" /><br/>Games Menu</td>
+    <td align="center"><img src="screenshots/new/05_quiz_game.png" width="200" alt="Quiz Game" /><br/>Quiz Mode</td>
+    <td align="center"><img src="screenshots/new/06_quiz_answered.png" width="200" alt="Quiz Answered" /><br/>Quiz (Answered)</td>
   </tr>
 </table>
 

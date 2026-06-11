@@ -1,0 +1,9 @@
+# VocabMaster AI Agent Directives
+
+These rules are strictly enforced for all AI agents, including Cursor, GitHub Copilot, and other LLM-assisted tools interacting with this repository.
+
+1. **NEVER BYPASS TESTS:** You are strictly forbidden from bypassing, commenting out, or disabling failing tests.
+2. **FIX THE SOURCE:** If `npm run validate` or `vitest` throws an error, you MUST fix the underlying source code or HTML configuration that is causing the failure. You must NOT modify the test suite itself unless the test is objectively outdated.
+3. **DO NOT MODIFY VALIDATION PIPELINES:** You must not remove or decouple `npm run validate` from the package.json scripts (e.g., `prebuild`, `pre-commit`).
+4. **ALWAYS VALIDATE BEFORE DEPLOY:** You must actively run `npm run validate` and ensure all suites pass with a 0 exit code before you confirm to the user that a build or deployment is ready.
+5. **DO NOT CHASE CARROTS:** Focus on long-term stability rather than quick fixes. If an architectural decision blocks immediate progress because of testing, explain the blocker to the user rather than hacking a workaround.

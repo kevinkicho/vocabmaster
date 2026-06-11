@@ -1,0 +1,403 @@
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:16.645Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:18.461Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:21.517Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:24.455Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:26.117Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:30.105Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:32.386Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["cada vez mais","franca","comercial","durante o sono"] lang: pt
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:35.383Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["remendo de papel","estilo japonês","comando","dorso da mão"] lang: pt
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:36.503Z
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["triste","certificado de ensino","recentemente","acostumar"] lang: pt
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: AI failed to generate a valid story and questions format. Must include Q1: and ANSWER: format.
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["avó","com cheiro de peixe ou sangue","descrevendo","forma original"] lang: pt
+[LOG] [Audio] Native voice load error: {}
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["remendo de papel","estilo japonês","comando","dorso da mão"] lang: pt
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:41.959Z
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["remendo de papel","estilo japonês","comando","dorso da mão"] lang: pt
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:45.637Z
+[LOG] SW Failed {}
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["remendo de papel","estilo japonês","comando","dorso da mão"] lang: pt
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:50.818Z
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:53.527Z
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["estar entusiasmado com","depósito","inconveniente","pequeno objeto"] lang: pt
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:06:54.319Z
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["estar entusiasmado com","depósito","inconveniente","pequeno objeto"] lang: pt
+
+RECENT UID: RKEFYagEPebAC02zQAvZcYOj6Rh1 | Session: s_mq8geemp_jae1k | Date: 2026-06-11T19:07:01.540Z
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 1: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 2: Generation failed
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 1 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 2 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [LLM] HTTP error 500 for http://127.0.0.1:11434/api/generate body: {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] Attempt 3 error: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Validator] All 3 attempts failed for generatedCloze: Ollama HTTP 500 {"error":"Cloud API error 404: {\"error\": \"model 'gemma2:27b' not found\"}\n"}
+[LOG] [Critic] Attempt 3: Generation failed
+[LOG] [Story] Validation failed on attempt 1: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Retry 2 prompt adjusted due to validation failure.
+[LOG] [Story] Validation failed on attempt 2: Empty output 
+RAW TEXT:
+
+[LOG] [Story] Generation failed: {} llm: {"endpoint":"http://127.0.0.1:11434","resolvedModel":"gemma2:27b","useCloud":false,"available":true,"hasModel":true} wordList: ["estar entusiasmado com","depósito","inconveniente","pequeno objeto"] lang: pt
+

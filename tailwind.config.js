@@ -24,6 +24,10 @@ module.exports = {
           50: 'var(--n-50)', 100: 'var(--n-100)', 200: 'var(--n-200)', 300: 'var(--n-300)', 400: 'var(--n-400)',
           500: 'var(--n-500)', 600: 'var(--n-600)', 700: 'var(--n-700)', 800: 'var(--n-800)', 900: 'var(--n-900)',
         },
+        neutral: {
+          50: 'var(--n-50)', 100: 'var(--n-100)', 200: 'var(--n-200)', 300: 'var(--n-300)', 400: 'var(--n-400)',
+          500: 'var(--n-500)', 600: 'var(--n-600)', 700: 'var(--n-700)', 800: 'var(--n-800)', 900: 'var(--n-900)',
+        },
       },
       fontFamily: {
         sans: ['"Noto Sans JP"', '"Noto Sans KR"', '"Noto Sans SC"', '"Noto Sans TC"', '"Nunito"', 'sans-serif'],

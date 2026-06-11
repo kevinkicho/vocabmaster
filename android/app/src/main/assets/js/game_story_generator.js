@@ -18,20 +18,28 @@ async startStory() {
                 return;
             }
 
-            this.dom.body.innerHTML = `
-                <div class="flex flex-col items-center justify-center h-full gap-4 p-6 text-center">
-                    <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-neutral-800 flex items-center justify-center">
-                        <i class="ph-duotone ph-brain text-4xl text-slate-300 dark:text-neutral-600"></i>
-                    </div>
-                    <h2 class="text-lg font-black text-slate-700 dark:text-neutral-200">AI Required</h2>
-                    <p class="text-xs text-slate-500 dark:text-neutral-400 max-w-xs">We couldn't connect to an AI provider and there are no cached stories available yet.</p>
-                    <div class="flex gap-2 mt-2">
-                        <button onclick="app.modal(true); if(app.ui && app.ui.renderAISettings) app.ui.renderAISettings();" class="px-4 py-2 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-slate-600 to-slate-700 active:scale-95 transition-transform">Open AI Settings</button>
-                        <button onclick="if(app.llm){app.llm.autoDetect().then(()=>{ if(app.game && app.game.startStory) app.game.startStory(); else if(app.game) app.game.render(); }).catch(()=>{})}" class="px-4 py-2 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform">Retry Connection</button>
-                    </div>
-                    <button onclick="app.goHome()" class="mt-1 text-xs text-slate-400">Back to Menu</button>
-                </div>`;
-            this.afterRender();
+            L('[Story] AI offline and no cache, using local fallback');
+            this.storyWords = await this._pickWords(4);
+            const lang = this._getTargetLang();
+            const langName = (app.llm && app.llm._getLangName) ? app.llm._getLangName(lang) : lang;
+            const wordList = this.storyWords.map(w => w[lang]).filter(Boolean);
+
+            if (wordList.length === 0) {
+                this.dom.body.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
+                        <i class="ph-duotone ph-warning text-4xl text-amber-400"></i>
+                        <p class="text-sm font-bold text-slate-600 dark:text-neutral-300">No vocab words found</p>
+                        <p class="text-xs text-slate-400">Make sure your word list has ${langName} words.</p>
+                        <button onclick="app.goHome()" class="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-500 active:scale-95 transition-transform">Back to Menu</button>
+                    </div>`;
+                this.afterRender();
+                return;
+            }
+
+            const fallback = window.StoryFallback.generate(wordList, lang);
+            this.questions = fallback.questions;
+            this.qIndex = 0;
+            this._showStoryWithQuestions(fallback.storyPart, lang, true);
             return;
         }
 
@@ -100,14 +108,13 @@ async startStory() {
             L('[Story] Generation failed:', e, 'llm:', llmInfo, 'wordList:', wordList, 'lang:', lang);
             // Force a remote log push so the detailed llmInfo + stack is immediately available in RTDB for analysis
             if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-            this.dom.body.innerHTML = `
-                <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
-                    <i class="ph-duotone ph-warning text-4xl text-rose-400"></i>
-                    <p class="text-sm font-bold text-slate-600 dark:text-neutral-300">Story generation failed</p>
-                    <p class="text-xs text-slate-400">${escapeHtml(e.message || e)}</p>
-                    <p class="text-[9px] text-slate-500">Check exported debug log file for full details (endpoint, model, error). Also available in RTDB under your uid.</p>
-                    <button onclick="app.game.render()" class="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-500 active:scale-95 transition-transform">Try Again</button>
-                </div>`;
+            
+            L('[Story] Fallback triggered due to generation failure');
+            if (this._elapsedTimer) clearInterval(this._elapsedTimer);
+            const fallback = window.StoryFallback.generate(wordList, lang);
+            this.questions = fallback.questions;
+            this.qIndex = 0;
+            this._showStoryWithQuestions(fallback.storyPart, lang, true);
         } finally {
             if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         }
@@ -314,14 +321,13 @@ _parseAndShow(text, lang) {
             L('[Story] 0 questions after generation. modelUsed=', modelUsed, 'fullTextLen=', (text || '').length, 'rawPrefix=', (text || '').slice(0, 200));
             if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
 
-            this.dom.body.innerHTML = `
-                <div class="flex flex-col items-center justify-center h-full gap-3 text-center">
-                    <i class="ph-duotone ph-warning text-4xl text-rose-400"></i>
-                    <p class="text-sm font-bold text-slate-600 dark:text-neutral-300">AI failed to produce valid questions</p>
-                    <p class="text-xs text-slate-400">Story activity requires successful AI generation of story + questions.</p>
-                    <button onclick="app.game.render()" class="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-500 active:scale-95 transition-transform">Try Again</button>
-                </div>`;
-            this.afterRender();
+            L('[Story] Fallback triggered due to 0 questions parsed from AI');
+            const langName = (app.llm && app.llm._getLangName) ? app.llm._getLangName(lang) : lang;
+            const wordList = this.storyWords.map(w => w[lang]).filter(Boolean);
+            const fallback = window.StoryFallback.generate(wordList, lang);
+            this.questions = fallback.questions;
+            this.qIndex = 0;
+            this._showStoryWithQuestions(fallback.storyPart, lang, true);
         }
     },
 

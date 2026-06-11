@@ -61,6 +61,10 @@ class UIManager {
         const setRad = (name, val) => { const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if(el) el.checked = true; };
         const p = this.store.prefs;
         try { 
+            const settingsList = document.getElementById('settings-list');
+            if (settingsList && settingsList.innerHTML.trim() === '' && window.SETTINGS_HTML) {
+                settingsList.innerHTML = window.SETTINGS_HTML;
+            }
             this.renderPresetsUI(); this.renderThemeGrid(); this.renderLevelFilter();
             this.renderFontsAccordion();
             setChk('toggle-dark', p.dark); setChk('toggle-anim', p.anim); 

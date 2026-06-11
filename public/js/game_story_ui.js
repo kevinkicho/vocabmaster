@@ -65,10 +65,12 @@ _showStreamingCard(wordList) {
     },
 
 // --- Display: story + sequential questions ---
-_showStoryWithQuestions(storyPart, lang) {
+_showStoryWithQuestions(storyPart, lang, isFallback = false) {
         this.phase = 'reading';
         const highlighted = this._highlightWords(storyPart);
         const total = this.questions.length;
+
+        const fallbackBadge = isFallback ? `<span class="ml-2 text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 px-2 py-0.5 rounded-full">Basic Mode</span>` : '';
 
         this.dom.body.innerHTML = `
             <div class="space-y-4 pb-2">
@@ -76,6 +78,7 @@ _showStoryWithQuestions(storyPart, lang) {
                     <div class="flex items-center gap-2 mb-3">
                         <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
+                        ${fallbackBadge}
                         <button id="story-speak-btn" onclick="app.game._readStory()" class="ml-auto w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-indigo-500 hover:border-indigo-300">
                             <i class="ph-bold ph-speaker-high text-sm"></i>
                         </button>

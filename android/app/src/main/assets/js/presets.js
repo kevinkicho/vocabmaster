@@ -11,65 +11,39 @@ class PresetManager {
             alert("Please select two different languages.");
             return;
         }
-        // Phase 3 groundwork (from settings registry review): when stabilizing, we can replace
-        // the manual ~40 assignments below with a schema-driven pass:
-        //   const schema = (typeof getAllPrefs==='function') ? getAllPrefs(LANG_CONFIG):[];
-        //   schema.forEach(entry => { if(entry.presetBehavior==='source') newPrefs[entry.key]=sourceKey; ... })
-        // This centralizes presetBehavior:'target'|'source'|'auto'|'none' declared in preferences_registry.js
-        // For now behavior is unchanged (manual is complete + battle-tested across activities).
-
         const source = this.getLang(sourceKey);
         const target = this.getLang(targetKey);
         if (!source || !target) return;
 
         const newPrefs = { ...app.store.prefs };
 
-        LANG_CONFIG.forEach(l => {
-            const capKey = l.key.charAt(0).toUpperCase() + l.key.slice(1);
-            const enable = (l.key === sourceKey || l.key === targetKey);
-            newPrefs[`matchShow${capKey}`] = enable;
-            if(!l.visualOnly) {
-                newPrefs[`matchAudio_${l.key}`] = enable;
-                newPrefs[`btnAudio_${l.key}`] = enable;
+        const schema = (typeof getAllPrefs === 'function') ? getAllPrefs(LANG_CONFIG) : [];
+        schema.forEach(entry => {
+            if (entry.presetBehavior === 'target') {
+                newPrefs[entry.key] = target.key;
+            } else if (entry.presetBehavior === 'source') {
+                newPrefs[entry.key] = source.key;
+            } else if (entry.presetBehavior === 'auto') {
+                const langCode = entry.key.split('_')[1] || entry.key.replace('matchShow', '').toLowerCase();
+                const enable = (langCode === source.key.toLowerCase() || langCode === target.key.toLowerCase());
+                newPrefs[entry.key] = enable;
             }
         });
 
-        newPrefs.flashFront = target.key;
+        // Special fallbacks
         newPrefs.flashAuto = true;
-        newPrefs.flashAudioSrc = target.key;
+        newPrefs.quizAuto = true;
+        newPrefs.tfAuto = true;
+        newPrefs.voiceAuto = true;
+        newPrefs.sentencesAuto = true;
+        newPrefs.matchHint = true;
+        newPrefs.sentencesShowTrans = true;
+
         newPrefs.flashBack1 = target.secondary || source.key;
         newPrefs.flashBack2 = (target.secondary) ? source.key : (source.key === 'en' ? 'ja' : 'en');
         newPrefs.flashBack3 = target.exKey || ''; 
         newPrefs.flashBack4 = source.exKey || '';
 
-        newPrefs.quizQ = target.key;
-        newPrefs.quizA = source.key;
-        newPrefs.quizAuto = true;
-        newPrefs.quizAudioSrc = target.key;
-        newPrefs.quizExMain = target.key;
-        newPrefs.quizExSub = source.key;
-
-        newPrefs.tfFront = target.key;
-        newPrefs.tfBack = source.key;
-        newPrefs.tfAuto = true;
-        newPrefs.tfAudioSrc = target.key;
-        newPrefs.tfExMain = target.key;
-        newPrefs.tfExSub = source.key;
-
-        newPrefs.matchHint = true;
-
-        newPrefs.voiceDispFront = target.key;
-        newPrefs.voiceDispBack = source.key;
-        newPrefs.voiceAudioTarget = target.key;
-        newPrefs.voiceAuto = true;
-        newPrefs.voiceExMain = target.key;
-
-newPrefs.sentencesQ = target.key;       
-        newPrefs.sentencesA = target.key;       
-        newPrefs.sentencesTrans = source.key;   
-        newPrefs.sentencesAudioSrc = target.key;
-        newPrefs.sentencesShowTrans = true;     
-        newPrefs.sentencesAuto = true;
         // Save preset selection for UI display
         newPrefs.presetSource = source.key;
         newPrefs.presetTarget = target.key;

@@ -165,7 +165,6 @@ const GET_DEFAULTS = () => {
         storyAutoRead: true,
 
         // LLM (Smart Cloze / Story Mode)
-        llmEndpoint: 'http://localhost:11434',
-        llmModel: 'gemma3:1b',
+        llmModel: 'gemma4:31b',
     };
 };

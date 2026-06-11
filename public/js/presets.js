@@ -11,6 +11,12 @@ class PresetManager {
             alert("Please select two different languages.");
             return;
         }
+        // Phase 3 groundwork (from settings registry review): when stabilizing, we can replace
+        // the manual ~40 assignments below with a schema-driven pass:
+        //   const schema = (typeof getAllPrefs==='function') ? getAllPrefs(LANG_CONFIG):[];
+        //   schema.forEach(entry => { if(entry.presetBehavior==='source') newPrefs[entry.key]=sourceKey; ... })
+        // This centralizes presetBehavior:'target'|'source'|'auto'|'none' declared in preferences_registry.js
+        // For now behavior is unchanged (manual is complete + battle-tested across activities).
 
         const source = this.getLang(sourceKey);
         const target = this.getLang(targetKey);
@@ -58,14 +64,23 @@ class PresetManager {
         newPrefs.voiceAuto = true;
         newPrefs.voiceExMain = target.key;
 
-        newPrefs.sentencesQ = target.key;       
+newPrefs.sentencesQ = target.key;       
         newPrefs.sentencesA = target.key;       
         newPrefs.sentencesTrans = source.key;   
         newPrefs.sentencesAudioSrc = target.key;
         newPrefs.sentencesShowTrans = true;     
         newPrefs.sentencesAuto = true;
+        // Save preset selection for UI display
+        newPrefs.presetSource = source.key;
+        newPrefs.presetTarget = target.key;
 
         app.store.applyPresetSettings(newPrefs);
+
+        // When preset changes language pool (incl. matchShow*), clear any stale persisted match state
+        // (the Match ctor re-uses old cards from matchState if present, which could have old languages like zh/ko).
+        if (app && app.store && typeof app.store.clearMatch === 'function') {
+            app.store.clearMatch();
+        }
 
         // FIX: Auto-refresh active game
         if (window.app && window.app.game) {

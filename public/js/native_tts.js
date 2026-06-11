@@ -105,7 +105,7 @@ const NativeTTSBridge = (() => {
         }
     }
 
-    return {
+    const bridge = {
         isAvailable() {
             return typeof window.NativeTTS !== 'undefined'
                 && typeof window.NativeTTS.speak === 'function';
@@ -139,4 +139,8 @@ const NativeTTSBridge = (() => {
             }
         }
     };
+
+    // Explicitly expose globally so services.js and patches can see it reliably across script loads / WebView
+    window.NativeTTSBridge = bridge;
+    return bridge;
 })();

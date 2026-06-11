@@ -62,11 +62,11 @@ class TF extends GameMode {
                     <div id="tf-header"></div>
                     <div id="tf-c" class="bg-white dark:bg-neutral-900 rounded-[2rem] shadow-sm border-4 border-transparent flex-1 flex flex-col items-center justify-center p-2 text-center transition-all duration-300 relative overflow-hidden mb-2 landscape:mb-2 gpu-fix">
                         <div id="tf-top-click" class="h-[45%] w-full fit-box cursor-pointer select-none flex-col">
-                            <span id="tf-front" class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300"></span>
+                            <span id="tf-front" class="fit-target font-black text-slate-800 dark:text-white transition-colors duration-300"></span>
                             <div id="tf-ex-container"></div>
                         </div>
                         <div class="h-[10%] w-full flex flex-col items-center justify-center shrink-0"><div class="w-12 h-1 bg-slate-100 dark:bg-neutral-800 rounded-full mb-1"></div><p id="tf-lbl" class="text-slate-400 text-[10px] uppercase tracking-widest font-bold">Matches?</p></div>
-                        <div class="h-[45%] w-full fit-box"><span id="tf-m" class="fit-target font-black text-slate-600 dark:text-neutral-400 transition-colors"></span></div>
+                        <div class="h-[45%] w-full fit-box"><span id="tf-m" class="fit-target font-black text-slate-600 dark:text-white transition-colors"></span></div>
                     </div>
                 </div>
                 <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:pt-2">
@@ -134,7 +134,7 @@ class TF extends GameMode {
         if(this.dom.lbl) this.dom.lbl.innerText = "Matches?";
         if(this.dom.matchText) {
             this.dom.matchText.innerText = this.dispBack;
-            this.dom.matchText.className = "fit-target font-black text-slate-600 dark:text-neutral-400 transition-colors";
+            this.dom.matchText.className = "fit-target font-black text-slate-600 dark:text-white transition-colors";
         }
         
         // FIX: Clean slate
@@ -178,7 +178,7 @@ class TF extends GameMode {
         
         if(this.dom.lbl) this.dom.lbl.innerText = ""; 
         
-        mText.classList.remove('text-slate-600', 'dark:text-neutral-400');
+        mText.classList.remove('text-slate-600', 'dark:text-white');
         mText.classList.add(win ? 'text-emerald-100' : 'text-rose-100', 'font-black');
         if(win) {
             this.score(10); app.celebration.play();

@@ -1,68 +1,20 @@
-# Architecture
+# VocabMaster Architecture & Findings
 
-## Overview
+## 1. Modularization Strategy
+To improve maintainability and resolve the "chasing the carrot" syntax issues with massive files:
+- `llm.js` was broken down into `llm_cache.js`, `llm_features.js`, `llm_response_validator.js`, etc.
+- **Dependency Order**: Because many modules extend `LLMService.prototype` directly, `llm.js` MUST be loaded before all its extensions. `llm_response_validator.js` MUST be loaded before `llm_validator_schemas.js` and `llm_validator_prompts.js` because they attach static fields to the `LLMResponseValidator` class.
 
-VocabMaster is a single-page PWA built with vanilla JavaScript (ES6+ classes), Tailwind CSS v3, and Firebase. The app runs in browser, as a PWA, or inside a native Android WebView wrapper.
+## 2. ESM Transition (Phase 2)
+Currently, all scripts are injected via `<script>` tags in `index.html`. 
+- **The Challenge**: Any misplaced script order results in `ReferenceError: X is not defined`, breaking the entire application silently.
+- **The Solution**: In Phase 2, we will migrate to Vite and true ES Modules (`import`/`export`), entirely eliminating global scope dependence and order issues.
 
-## System Diagram
+## 3. Local AI Integration (Ollama4Android)
+- `LLMService` defaults to `http://127.0.0.1:11434` when Native/Capacitor environment is detected.
+- This allows 100% free, private local LLM generation for features like Flashcards context, Story generation, and Quiz questions.
+- A Learning Loop (`learning_loop.js`) pushes session outcomes and ratings to Firebase RTDB under `users/{uid}/learning_loop_sessions`.
 
-```
-┌─────────────────────────────────────────────────┐
-│                   Browser / PWA                  │
-│  ┌───────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ index.html │ │ Tailwind │ │ Service Worker │  │
-│  └─────┬─────┘ └──────────┘ └────────────────┘  │
-│        │                                         │
-│  ┌─────▼──────────────────────────────────────┐  │
-│  │              main.js (App Controller)       │  │
-│  │  ┌─────────┐ ┌───────┐ ┌────────────────┐  │  │
-│  │  │  Store  │ │UIMgr  │ │   AuthMgr      │  │  │
-│  │  └────┬────┘ └───┬───┘ └───────┬────────┘  │  │
-│  │       │          │             │            │  │
-│  │  ┌────▼──────────▼─────────────▼─────────┐  │  │
-│  │  │            Services                   │  │  │
-│  │  │  AudioService│LLMService│DataService  │  │  │
-│  │  │  TextFitter  │Celebration│Analytics   │  │  │
-│  │  └────────────────┬──────────────────────┘  │  │
-│  │                   │                         │  │
-│  │  ┌────────────────▼──────────────────────┐  │  │
-│  │  │           Game Modes                  │  │  │
-│  │  │  Flashcard│Quiz│TF│Match│Voice│Sent   │  │  │
-│  │  │  Story(LLM)                           │  │  │
-│  │  └───────────────────────────────────────┘  │  │
-│  └─────────────────────────────────────────────┘  │
-│                                                   │
-│  ┌──────────────────┐  ┌──────────────────────┐   │
-│  │  NativeTTSBridge  │  │   AndroidBridge      │   │
-│  │  (Android TTS)    │  │   (Ollama LLM)       │   │
-│  └──────────────────┘  └──────────────────────┘   │
-└─────────────────────────────────────────────────┘
-         │                      │
-    ┌────▼────┐          ┌──────▼──────┐
-    │ Android │          │  Firebase   │
-    │ WebView │          │  RTDB/Auth  │
-    │ + TTS   │          └─────────────┘
-    └─────────┘
-```
-
-## Key Design Patterns
-
-- **Class-based game modes** — `GameMode` base class provides shared nav, keyboard, scoring, audio, rendering
-- **Service layer** — AudioService, TextFitter, CelebrationService, LLMService, AnalyticsService are injected into App
-- **Preferences** — All settings stored in localStorage via Store class, loaded on app init
-- **Bridge pattern** — Native Android features (TTS, LLM) accessed via JS bridge interfaces that fall back to web APIs
-
-## Data Flow
-
-1. App starts → Firebase Auth (anonymous) → DataService.load() → vocab list
-2. User launches game → GameMode constructor → getFilteredList() → render()
-3. Score → DataService.recordScore() → Firebase RTDB (ServerValue.increment)
-4. Settings change → Store.saveSettings() → localStorage → game.update()
-
-## Audio Pipeline
-
-```
-playSmartAudio(langKey)
-  ├── NativeTTSBridge.isAvailable() → NativeTTSBridge.speak()
-  └── Web Speech API → speechSynthesis.speak()
-```
+## 4. E2E Sanity Testing
+- We instituted Playwright tests running on `pre-commit` to prevent pushing code with unhandled console errors or `ReferenceError` crashes.
+- Android builds (`npm run build:android`) will automatically validate these tests before compiling.

@@ -86,6 +86,12 @@ class Flashcard extends GameMode {
         const item = this.list[this.i];
         const p = app.store.prefs;
         
+        if (!item) {
+            L('[Flashcard] No item at index', this.i, '— list length', this.list && this.list.length);
+            app.goHome(false);
+            return;
+        }
+        
         if(this.dom.card) {
             this.dom.card.classList.remove('rotate-y-180');
             this.dom.card.dataset.wid = item.id;

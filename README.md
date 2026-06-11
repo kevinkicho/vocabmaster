@@ -4,7 +4,53 @@
 
 ---
 
-## Game Modes
+## Screenshots
+
+### Mobile
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/mobile/mainmenu.png" width="200" alt="Main Menu" /><br/>Main Menu</td>
+    <td align="center"><img src="screenshots/mobile/flashcard1.png" width="200" alt="Flashcard Front" /><br/>Flashcard (Front)</td>
+    <td align="center"><img src="screenshots/mobile/flashcard2.png" width="200" alt="Flashcard Back" /><br/>Flashcard (Back)</td>
+    <td align="center"><img src="screenshots/mobile/quiz.png" width="200" alt="Quiz Mode" /><br/>Quiz Mode</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/mobile/matching1.png" width="200" alt="Matching 1" /><br/>Matching</td>
+    <td align="center"><img src="screenshots/mobile/matching2.png" width="200" alt="Matching 2" /><br/>Matching (In Progress)</td>
+    <td align="center"><img src="screenshots/mobile/true-false.png" width="200" alt="True False" /><br/>True / False</td>
+    <td align="center"><img src="screenshots/mobile/story1.jpg" width="200" alt="Story Mode" /><br/>Story Mode</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/mobile/story2.jpg" width="200" alt="Story Mode Complete" /><br/>Story Questions</td>
+    <td align="center"><img src="screenshots/mobile/setting1.png" width="200" alt="Settings 1" /><br/>Settings</td>
+    <td align="center"><img src="screenshots/mobile/setting2.png" width="200" alt="Settings 2" /><br/>Settings (Audio)</td>
+    <td align="center"><img src="screenshots/mobile/setting3.png" width="200" alt="Settings 3" /><br/>Settings (Theme)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/mobile/setting4.png" width="200" alt="Settings 4" /><br/>Settings (Presets)</td>
+  </tr>
+</table>
+
+### Desktop
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/desktop/suite_es_2026-06-10_18-50-54.png" width="400" alt="ES Desktop" /><br/>Desktop Flow (Spanish)</td>
+    <td align="center"><img src="screenshots/desktop/suite_story_questions_es_2026-06-10_19-37-52.png" width="400" alt="Story ES" /><br/>AI Story Mode (Spanish)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/desktop/suite_story_questions_ja_2026-06-10_18-50-13.png" width="400" alt="Story JA" /><br/>AI Story Mode (Japanese)</td>
+    <td align="center"><img src="screenshots/desktop/suite_story_questions_zh_2026-06-10_19-10-01.png" width="400" alt="Story ZH" /><br/>AI Story Mode (Chinese)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/desktop/cloze_suite_es_2026-06-10_21-41-28.png" width="400" alt="Cloze ES" /><br/>AI Cloze (Spanish)</td>
+    <td align="center"><img src="screenshots/desktop/cloze_suite_ja_answered_2026-06-11_08-44-29.png" width="400" alt="Cloze JA" /><br/>AI Cloze (Japanese)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/desktop/cloze_suite_zh_2026-06-10_21-42-00.png" width="400" alt="Cloze ZH" /><br/>AI Cloze (Chinese)</td>
+  </tr>
+</table>
+
+---
 
 | Mode | Description |
 | :--- | :--- |
@@ -161,6 +207,16 @@ npx serve public
 The Android wrapper (`android/`) loads from Firebase hosting by default. To use a local server instead, edit `MainActivity.kt` and change `APP_URL` to your local address (e.g. `http://10.0.2.2:5000` for Android emulator, or your machine's LAN IP for a physical device).
 
 ---
+
+## Documentation for Agents & Continuity
+
+See the `docs/` folder for living plans:
+- `docs/current-status-and-roadmap.md`
+- `docs/medium-term-roadmap.md` (collections, review queue, Story + higher tiers)
+- `docs/web-ai-parity-proxy-implementation.md`
+- `docs/development.md`
+- `docs/architecture.md`
+- `docs/lessons-learned.md`
 
 ## Related Projects
 

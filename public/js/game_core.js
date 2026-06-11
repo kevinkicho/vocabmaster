@@ -15,6 +15,20 @@ class GameMode {
         // Caching DOM elements to avoid querySelector re-runs
         this.dom = {}; 
 
+        // Safety: if a collection (e.g. Spanish A1) filtered the list to empty for the current data set,
+        // fall back to the full list so the game can at least start (prevents "item.id undefined" crashes).
+        if (!this.list || this.list.length === 0) {
+            L(`[GameMode] Filtered list empty for ${key} (collection=${app.data && app.data.currentCollection}); falling back to full list`);
+            this.list = (app.data && app.data.list) ? app.data.list : [];
+        }
+
+        // Clamp index in case persisted loc is stale for current (filtered) list
+        if (this.list.length > 0) {
+            this.i = Math.max(0, Math.min(this.i || 0, this.list.length - 1));
+        } else {
+            this.i = 0;
+        }
+
         this.historyStack = [];
         this.historyPtr = -1;
         if (this.list && this.list.length > 0) {
@@ -23,6 +37,13 @@ class GameMode {
         }
 
         if(app.analytics) app.analytics.startSession(key);
+
+        // Learning Loop tracking — start session
+        if (app.learningLoop) {
+            const level = app.store?.prefs?.levelFilter?.[0] || 'N4';
+            const lang = app.store?.prefs?.presetLang || 'ja';
+            app.learningLoop.startSession(key, level, lang);
+        }
         
         this.onWindowResize = () => {
             if(this.resizeTimeout) clearTimeout(this.resizeTimeout);
@@ -145,10 +166,21 @@ class GameMode {
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
     score(pts=10, wordId=null) {
-        app.score += pts;
-        if(this.dom.headerScore) this.dom.headerScore.innerText = app.score;
-        else { const el = document.querySelector('.score-display'); if(el) el.innerText = app.score; }
-        if(app.data) app.data.recordScore(pts, this.key);
+        app.score = Math.max(0, Number(app.score) || 0);
+        const numPts = Math.max(0, Number(pts) || 0);
+        app.score += numPts;
+        // Always scope to current header to avoid stale refs (after re-render in nav/update) or global selector grabbing wrong .score-display
+        let scoreEl = this.dom.headerScore;
+        if (!scoreEl && this.dom.header) {
+            scoreEl = this.dom.header.querySelector('.score-display');
+            if (scoreEl) this.dom.headerScore = scoreEl;
+        }
+        if (scoreEl) scoreEl.innerText = app.score;
+        else {
+            const el = document.querySelector('.score-display');
+            if (el) el.innerText = app.score;
+        }
+        if(app.data) app.data.recordScore(numPts, this.key);
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
         if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true);
     }
@@ -160,10 +192,14 @@ class GameMode {
 
     async waitAndNav(audioPromise, fallbackDelay = 1500) {
         const wait = app.store.prefs.audioWait;
-        if (wait && audioPromise) {
-            await audioPromise;
-        } else {
-            await new Promise(r => setTimeout(r, fallbackDelay));
+        try {
+            if (wait && audioPromise) {
+                await audioPromise;
+            } else {
+                await new Promise(r => setTimeout(r, fallbackDelay));
+            }
+        } catch (e) {
+            L('[GameCore] waitAndNav audio error:', e);
         }
         this.busy = false; 
         this.nav(1);
@@ -348,6 +384,8 @@ class GameMode {
 
     setupHeader(opts = {showDice:true}) {
         if(this.dom.header) {
+            // Sanitize before any header render
+            app.score = Math.max(0, Number(app.score) || 0);
             this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, opts);
             this.dom.headerInput = this.dom.header.querySelector('input[type="number"]');
             this.dom.headerScore = this.dom.header.querySelector('.score-display');
@@ -356,7 +394,9 @@ class GameMode {
 
     getLevelBadge(item) {
         if (!item) return '';
-        const level = item.level;
+        const jlptLevels = ['N5','N4','N3','N2','N1'];
+        const tags = item.tags || [];
+        const level = tags.find(t => jlptLevels.includes(t));
         if (!level) return '';
         const color = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors[level]) ? LEVEL_CONFIG.colors[level] : '#6366f1';
         return `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold text-white ml-1.5" style="background:${color}">${escapeHtml(level)}</span>`;
@@ -364,10 +404,47 @@ class GameMode {
 
     updateHeader() {
         if(this.dom.headerInput) { this.dom.headerInput.value = this.i + 1; }
-        if(this.dom.headerScore) { this.dom.headerScore.innerText = app.score; }
+        // Scope to current header, refresh ref if needed
+        let scoreEl = this.dom.headerScore;
+        if (!scoreEl && this.dom.header) {
+            scoreEl = this.dom.header.querySelector('.score-display');
+            if (scoreEl) this.dom.headerScore = scoreEl;
+        }
+        if (scoreEl) scoreEl.innerText = app.score;
+    }
+
+    _getSessionAccuracy() {
+        const tracked = this._trackedAnswers || { correct: 0, total: 0 };
+        return tracked.total > 0 ? tracked.correct / tracked.total : 0;
+    }
+
+    // Trackable answer wrapper — child classes call this instead of direct score changes
+    trackAnswer(cardId, correct, userAnswer = null, correctAnswer = null, timeMs = 0) {
+        if (!this._trackedAnswers) this._trackedAnswers = { correct: 0, total: 0 };
+        this._trackedAnswers.total++;
+        if (correct) this._trackedAnswers.correct++;
+        if (app && app.learningLoop) {
+            app.learningLoop.logAnswer(cardId, correct, userAnswer, correctAnswer, timeMs);
+        }
+    }
+
+    trackAIInteraction(role, cardId, critiqueScore = null) {
+        if (app && app.learningLoop) {
+            app.learningLoop.logAIInteraction(role, cardId, critiqueScore);
+        }
+    }
+
+    trackContentView(role, wordIds) {
+        if (app && app.learningLoop) {
+            app.learningLoop.logContentView(role, wordIds);
+        }
     }
 
     destroy() {
+        // Learning Loop — end session before cleanup
+        if (app && app.learningLoop) {
+            app.learningLoop.endSession({ completed: true, accuracy: this._getSessionAccuracy() });
+        }
         if(app.analytics) app.analytics.endSession();
         this.timeouts.forEach(id => clearTimeout(id));
         if(this.uiTimer) clearTimeout(this.uiTimer);

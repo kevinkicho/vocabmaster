@@ -57,7 +57,7 @@ class Quiz extends GameMode {
                     <div id="q-box" class="preserve-3d relative flex-1 w-full transition-transform duration-500 cursor-pointer select-none">
                         <div id="qz-front" class="absolute inset-0 backface-hidden bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex flex-col items-center justify-center overflow-hidden gpu-fix z-10">
                             <div class="fit-box flex-col w-full h-full px-6 py-8">
-                                <span id="qz-q-text" class="fit-target font-black text-slate-800 dark:text-neutral-200 transition-colors duration-300"></span>
+                                <span id="qz-q-text" class="fit-target font-black text-slate-800 dark:text-white transition-colors duration-300"></span>
                             </div>
                         </div>
                         <div id="qz-back" class="absolute inset-0 backface-hidden rotate-y-180 bg-slate-50 dark:bg-neutral-800 text-slate-800 dark:text-white rounded-[2rem] border border-slate-200 dark:border-neutral-700 shadow-xl flex flex-col items-center justify-center p-6 overflow-hidden gpu-fix z-10">
@@ -66,12 +66,22 @@ class Quiz extends GameMode {
                     </div>
                 </div>
                 <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
-                    <div id="qz-audio" class="mt-auto landscape:mt-0"></div>
+                    <div class="flex justify-between items-end w-full px-1 relative">
+                        <div id="qz-audio" class="mt-auto landscape:mt-0"></div>
+                        <div id="qz-feedback" class="absolute bottom-0 right-0 flex items-center gap-1 opacity-50 mb-1">
+                            <button onclick="app.game._sendFeedback('like')" class="w-6 h-6 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-400 hover:text-emerald-500">
+                                <i class="ph-bold ph-thumbs-up" style="font-size:10px"></i>
+                            </button>
+                            <button onclick="app.game._sendFeedback('dislike')" class="w-6 h-6 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-400 hover:text-rose-500">
+                                <i class="ph-bold ph-thumbs-down" style="font-size:10px"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 shrink-0 mb-1 mt-1 flex-1 min-h-0">
                         ${[0,1,2,3].map(i => `
                             <div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-indigo-200 dark:hover:border-indigo-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix">
                                 <button id="qz-btn-${i}" class="absolute inset-0 w-full h-full fit-box px-3 py-2 z-10">
-                                    <span class="fit-target font-black text-slate-600 dark:text-neutral-400 whitespace-nowrap"></span>
+                                    <span class="fit-target font-black text-slate-600 dark:text-white whitespace-nowrap"></span>
                                 </button>
                             </div>`).join('')}
                     </div>
@@ -95,6 +105,11 @@ class Quiz extends GameMode {
         this.busy = false; 
         this.answered = false;
         const c = this.list[this.i];
+        if (!c) {
+            L('[Quiz] No current item (empty list after collection filter?)');
+            if (app && app.goHome) app.goHome(false);
+            return;
+        }
         const p = app.store.prefs;
         const qKey = p.quizQ || 'ja'; 
         const aKey = p.quizA || 'en';
@@ -134,14 +149,17 @@ class Quiz extends GameMode {
 
             this.dom.qBox.onclick = () => {
                 this.dom.qBox.classList.toggle('rotate-y-180');
-                if(p.quizPlayEx) this.playSmartAudio(); 
+                // Allow visual flip to review back content (examples) even after answering.
+                // Skip auto audio play while busy (during post-answer auto-advance) to avoid
+                // state/audio conflicts that could lead to silent crash (global error -> goHome).
+                if(p.quizPlayEx && !this.busy) this.playSmartAudio(); 
             };
         }
         
         if(this.dom.qText) {
              this.dom.qText.textContent = qText; 
              this.dom.qText.classList.remove('text-white');
-             this.dom.qText.classList.add('text-slate-800', 'dark:text-neutral-200');
+             this.dom.qText.classList.add('text-slate-800', 'dark:text-white');
         }
         
         if(this.dom.exContainer) this.dom.exContainer.innerHTML = exHtml;
@@ -160,7 +178,7 @@ class Quiz extends GameMode {
                 wrapper.dataset.wid = pData.id;
 
                 btn.className = "absolute inset-0 w-full h-full fit-box px-3 py-2 z-10";
-                span.className = "fit-target font-black text-slate-600 dark:text-neutral-400 whitespace-nowrap";
+                 span.className = "fit-target font-black text-slate-600 dark:text-white whitespace-nowrap";
                 
                 btn.onclick = () => {
                     const doPlay = app.store.prefs.quizPlayAnswer !== false; 
@@ -188,7 +206,7 @@ class Quiz extends GameMode {
         
         const span = btn.querySelector('span');
         span.classList.replace('text-slate-600', 'text-white');
-        span.classList.replace('dark:text-neutral-400', 'text-white');
+        span.classList.replace('dark:text-white', 'text-white');
         
         if(this.dom.front) {
             this.dom.front.classList.remove('bg-white', 'dark:bg-neutral-900', 'border-slate-100', 'dark:border-neutral-800');
@@ -220,5 +238,25 @@ class Quiz extends GameMode {
             }
             this.waitAndNav(pAudio, 2500); 
         }
+    }
+
+    _sendFeedback(type) {
+        try {
+            const c = this.list[this.i];
+            if (!c) return;
+            const uid = app?.auth?.currentUser?.uid;
+            if (!uid) return;
+            const qKey = app.store.prefs.quizQ || 'ja';
+            const ref = db.ref(`users/${uid}/quiz_feedback`).push();
+            ref.set({
+                question: (c[qKey] || '').slice(0, 200),
+                type,
+                lang: qKey,
+                wordId: c.id,
+                ts: firebase.database.ServerValue.TIMESTAMP
+            });
+            const btn = document.querySelector(`[onclick="app.game._sendFeedback('${type}')"]`);
+            if (btn) { btn.classList.add('scale-150'); setTimeout(() => btn.classList.remove('scale-150'), 250); }
+        } catch(e) {}
     }
 }

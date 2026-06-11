@@ -13,7 +13,7 @@ class Sentences extends GameMode {
                     <div id="sn-header" class="shrink-0"></div>
                     <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center p-4 landscape:p-3 text-center relative mb-2 landscape:mb-0 overflow-hidden min-h-0">
                          <div class="flex-1 w-full flex items-center justify-center overflow-hidden relative min-h-0">
-                            <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-neutral-100 leading-relaxed break-words"></p>
+                            <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-relaxed break-words"></p>
                          </div>
                          <div id="sn-bottom-disp" class="shrink-0 max-h-[30%] overflow-hidden w-full"></div>
                     </div>
@@ -24,7 +24,7 @@ class Sentences extends GameMode {
                         ${[0,1,2,3].map(i => `
                             <div class="w-full h-full rounded-xl bg-white dark:bg-neutral-900 border-2 border-slate-100 dark:border-neutral-800 hover:border-violet-200 dark:hover:border-violet-500/50 transition-colors shadow-sm overflow-hidden relative gpu-fix">
                                 <button id="sn-btn-${i}" class="absolute inset-0 w-full h-full fit-box z-10">
-                                    <span class="fit-target font-black text-slate-600 dark:text-neutral-400"></span>
+                                    <span class="fit-target font-black text-slate-600 dark:text-white"></span>
                                 </button>
                             </div>`).join('')}
                     </div>
@@ -121,6 +121,8 @@ class Sentences extends GameMode {
         this.busy = false;
         this.answered = false;
         this._clearOverlays();
+        // Reset text color from previous correct/incorrect state
+        if (this.dom.text) this.dom.text.classList.remove('text-white', 'dark:text-white');
         const c = this.list[this.i];
         const p = app.store.prefs;
         const qKey = p.sentencesQ || 'ja';
@@ -135,13 +137,21 @@ class Sentences extends GameMode {
         const sentenceRaw = c[exKey] || "No example available.";
         const targetRaw = c[qKey] || "";
 
-        // Phase 1: Regex cloze (instant)
-        const result = this.generateCloze(sentenceRaw, targetRaw, qKey);
-        this.rawAudioText = sentenceRaw;
+        // AI usage is mandatory for AI Cloze activity.
+        const llmReady = app.llm && app.llm.available && app.llm.hasModel;
+        if (!llmReady) {
+            if (this.dom.text) {
+                this.dom.text.innerHTML = `<p class="text-rose-500 font-bold">AI Cloze requires a working AI connection.</p><p class="text-xs text-slate-400 mt-1">Please set up and connect AI in Settings &gt; AI (Cloze &amp; Story).</p>`;
+            }
+            if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c) + this._listenBtnHtml();
+            // Disable answer buttons
+            this.dom.btns.forEach(btn => { btn.onclick = null; });
+            this.afterRender();
+            return;
+        }
 
+        // AI is available and mandatory: use LLM for the cloze (no non-AI regex path for this activity).
         this.updateHeader();
-        this._renderCloze(result, c, qKey, aKey, bottomKey);
-
         if(this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c) + this._listenBtnHtml();
         if(this.dom.sBox) {
             this.highlightQBox(this.dom.sBox, false);
@@ -160,7 +170,7 @@ class Sentences extends GameMode {
 
                  wrap.dataset.wid = o.id;
                  btn.className = "absolute inset-0 w-full h-full fit-box z-10";
-                 span.className = "fit-target font-black text-slate-600 dark:text-neutral-400";
+                 span.className = "fit-target font-black text-slate-600 dark:text-white";
 
                  btn.blur();
 
@@ -169,18 +179,17 @@ class Sentences extends GameMode {
              }
         });
 
+        // Show loading state while AI generates the cloze
+        if (this.dom.text) {
+            this.dom.text.innerHTML = '<span class="text-slate-400">Generating AI cloze...</span>';
+            this.dom.text.classList.add('opacity-60');
+        }
+
         this.afterRender();
         this.runCustomAutoPlay(c);
 
-        // Phase 2: LLM enhancement
-        const hasBlank = result.html.includes('main-blank');
-        const isCJK = ['ja', 'ko', 'zh'].includes(qKey);
-        const llmReady = app.llm && app.llm.available && app.llm.hasModel;
-        L('[Sentences] LLM check: hasBlank=' + hasBlank + ' isCJK=' + isCJK + ' llmReady=' + llmReady + ' available=' + (app.llm && app.llm.available) + ' hasModel=' + (app.llm && app.llm.hasModel));
-        if (llmReady && (!hasBlank || isCJK)) {
-            L('[Sentences] Firing LLM cloze for:', targetRaw, 'in:', sentenceRaw.substring(0, 30));
-            this._tryLLMCloze(sentenceRaw, targetRaw, qKey, c, aKey, bottomKey);
-        }
+        L('[Sentences] Firing mandatory LLM cloze generation for target:', targetRaw);
+        this._tryLLMCloze(targetRaw, qKey, c, aKey, bottomKey);
     }
 
     _renderCloze(result, card, qKey, aKey, bottomKey) {
@@ -240,27 +249,33 @@ class Sentences extends GameMode {
         const sentenceHtml = escapeHtml(sentence);
         const matchHtml = escapeHtml(matchedText);
         const escaped = matchHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const reg = new RegExp(`(${escaped})`, 'g');
+        const reg = new RegExp(`(${escaped})`, 'gi');
         return {
             html: sentenceHtml.replace(reg, (m) => createMask(matchedText)),
-            audio: sentence.replace(new RegExp(`(${matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g'), ' ... ')
+            audio: sentence.replace(new RegExp(`(${matchedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), ' ... ')
         };
     }
 
-    async _tryLLMCloze(sentenceRaw, targetRaw, qKey, card, aKey, bottomKey) {
+    async _tryLLMCloze(targetRaw, qKey, card, aKey, bottomKey) {
         // Subtle loading indicator
         if (this.dom.text) this.dom.text.classList.add('opacity-60');
 
-        const match = await app.llm.findClozeMatch(sentenceRaw, targetRaw, qKey, card.level);
+        const cardLevel = (card.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
+        const generated = await app.llm.generateClozeSentence(targetRaw, qKey, cardLevel);
 
         // Navigation guard: user may have moved to another card
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
 
-        if (match) {
-            const result = this._buildClozeFromMatch(sentenceRaw, match);
+        if (generated && generated.sentence && generated.match) {
+            const result = this._buildClozeFromMatch(generated.sentence, generated.match);
             this._renderCloze(result, card, qKey, aKey, bottomKey);
             // Re-fit text after LLM update
             if (app.fitter && this.dom.text) await app.fitter.fitSmart(this.dom.text);
+        } else {
+            // AI mandatory: failure to get a match from LLM means the activity cannot provide content.
+            if (this.dom.text) {
+                this.dom.text.innerHTML = `<p class="text-rose-500 font-bold">AI failed to produce a suitable cloze for this word.</p>`;
+            }
         }
 
         if (this.dom.text) this.dom.text.classList.remove('opacity-60');
@@ -320,11 +335,19 @@ class Sentences extends GameMode {
     async check(btn, isCorrect) {
         if(this.busy || this.answered) return;
         const btnWrap = btn.parentElement;
+
+        // Learning Loop tracking
+        const c = this.list[this.i];
+        const aKey = app.store.prefs.sentencesA || 'ja';
+        const userAnswer = btn.querySelector('span')?.innerText || '';
+        const correctAnswer = c[aKey] || '';
+        this.trackAnswer(c?.id || 0, isCorrect, userAnswer, correctAnswer, 0);
+
         btn.classList.remove('ring-4', 'ring-indigo-400', 'scale-95');
         btnWrap.className = btnWrap.className.replace(/\b(bg-white|dark:bg-neutral-900|hover:border-violet-200|dark:hover:border-violet-500\/50)\b/g, '');
         const span = btn.querySelector('span');
         span.classList.replace('text-slate-600', 'text-white');
-        span.classList.replace('dark:text-neutral-400', 'text-white');
+        span.classList.replace('dark:text-white', 'text-white');
         this.highlightQBox(this.dom.sBox, isCorrect);
         
         if(isCorrect) {
@@ -342,6 +365,8 @@ class Sentences extends GameMode {
             };
             const mainBlanks = this.root.querySelectorAll('.main-blank');
             mainBlanks.forEach(el => reveal(el, 'text-white'));
+            // Make non-blank text readable on colored background
+            if (this.dom.text) this.dom.text.classList.add('text-white', 'dark:text-white');
             const bottomBlanks = this.dom.bottomDisp.querySelectorAll('span.text-transparent');
             bottomBlanks.forEach(el => {
                 el.classList.remove('text-transparent', 'bg-slate-100', 'dark:bg-neutral-800');
@@ -374,7 +399,8 @@ class Sentences extends GameMode {
                     const sentence = card[exKey] || '';
                     const word = card[qKey] || '';
                     if (sentence && word) {
-                        this._showGrammarLink(word, sentence, qKey, card.level);
+                        const cardLevel = (card.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
+                        this._showGrammarLink(word, sentence, qKey, cardLevel);
                     }
                 }
             }
@@ -467,7 +493,8 @@ class Sentences extends GameMode {
             btn.disabled = true;
         }
 
-        const result = await app.llm.getListeningPassage(words, qKey, card.level);
+        const cardLevel = (card.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
+        const result = await app.llm.getListeningPassage(words, qKey, cardLevel);
 
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
 

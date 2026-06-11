@@ -44,8 +44,8 @@ const CollectionBar = {
         const btns = options.map(opt => {
             const active = opt.key === currentKey;
             const cls = active
-                ? 'bg-violet-500 text-white border-violet-500'
-                : 'bg-white dark:bg-neutral-800 text-slate-600 dark:text-neutral-400 border-slate-200 dark:border-neutral-700';
+? 'bg-violet-500 text-white border-violet-500'
+    : 'bg-white dark:bg-neutral-800 text-slate-600 dark:text-neutral-200 border-slate-200 dark:border-neutral-700';
             return `<button class="${cls} border rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors" onclick="CollectionBar.load('${opt.key}')">${opt.icon} ${opt.label}</button>`;
         }).join('');
         containerEl.innerHTML = `<div class="flex items-center gap-1 overflow-x-auto scrollbar-hide">${btns}</div>`;

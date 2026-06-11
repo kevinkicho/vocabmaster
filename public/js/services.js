@@ -4,6 +4,20 @@ class AudioService {
     constructor() { 
         this.synth = window.speechSynthesis || null; 
         this.useNative = (typeof NativeTTSBridge !== 'undefined') && NativeTTSBridge.isAvailable();
+        // Force native on APK plain WebView (the whole reason for packaging the app):
+        // the injected NativeTTS interface (from TTSBridge.kt) gives access to real device TTS engines
+        // (Google, Samsung etc) instead of the limited WebView/Chrome speechSynthesis.
+        if (!this.useNative && (window.NativeTTS || /VocabMasterApp/i.test(navigator.userAgent || ''))) {
+            this.useNative = true;
+            L('[Audio] Forcing native TTS path (window.NativeTTS injected or VocabMasterApp UA) for device voices');
+        }
+        
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.cancel();
+        });
+        window.addEventListener('pagehide', () => {
+            this.cancel();
+        });
         this.timer = null;
         this.voices = [];
         this.voicesByLang = new Map();
@@ -243,6 +257,16 @@ class AudioService {
                 const matching = freshVoices.filter(v => v.lang === ttsLang || (v.lang.indexOf('-') > 0 && v.lang.toLowerCase().startsWith(ttsLang.split('-')[0])));
                 const googleVoice = matching.find(v => /google/i.test(v.name) || /google/i.test(v.voiceURI || ''));
                 if (googleVoice) u.voice = googleVoice;
+                else if (matching.length > 0) u.voice = matching[0];
+            }
+
+            if (!u.voice) {
+                L('[Audio] No matching voice found for', ttsLang, '- aborting speech to avoid gibberish');
+                if (window.app && window.app.ui && window.app.ui.showToast) {
+                    window.app.ui.showToast(`No TTS voice installed for ${ttsLang}`, 'warning');
+                }
+                if (cb) cb();
+                return;
             }
 
             u.onend = () => { if(cb) cb(); }; u.onerror = () => { if(cb) cb(); };

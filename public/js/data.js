@@ -7,19 +7,105 @@ class DataService {
         this.kanjiCache = {}; 
         this.pendingFetches = {}; 
         this._defaultList = null;
+
+        // Medium-term: active collection for scoping practice (works with getFilteredList)
+        this.currentCollection = 'all';
+    }
+
+    setCollection(id) {
+        this.currentCollection = id || 'all';
+    }
+
+    // Medium-term: Review queue support (combines analytics + adaptive + collections)
+    async getReviewWords(count = 10) {
+        let baseList = this.getFilteredList(); // respects current collection/levels
+        if (!baseList || baseList.length === 0) baseList = this.list;
+
+        let userHistory = {};
+        if (app.analytics) {
+            try {
+                const missed = await app.analytics.getMostMissedWords(count * 3);
+                missed.forEach(m => {
+                    if (m.id && m.vocab) {
+                        const total = (m.c || 0) + (m.w || 0);
+                        userHistory[m.id] = { correct: m.c || 0, total };
+                    }
+                });
+            } catch (e) {}
+        }
+
+        // Use adaptive for scoring
+        if (typeof selectWordsForReview === 'function') {
+            // Map to word objects for adaptive (it expects list of words)
+            const reviewItems = selectWordsForReview(baseList, userHistory, count);
+            return reviewItems;
+        }
+
+        // Fallback: most missed first
+        const missed = await (app.analytics ? app.analytics.getMostMissedWords(count) : []);
+        return missed.map(m => m.vocab).filter(Boolean).slice(0, count);
+    }
+
+    // Temporarily use review list for next game
+    async startReviewSession(count = 10) {
+        const reviewWords = await this.getReviewWords(count);
+        if (reviewWords.length > 0) {
+            this._reviewList = reviewWords;
+            this._originalList = this.list;
+            // Temporarily override for this session
+            this.list = reviewWords;
+            return true;
+        }
+        return false;
+    }
+
+    // Set specific words for review (e.g. from Story)
+    startSpecificReview(words) {
+        if (!words || words.length === 0) return false;
+        this._reviewList = words;
+        this._originalList = this.list;
+        this.list = words;
+        return true;
+    }
+
+    endReviewSession() {
+        if (this._originalList) {
+            this.list = this._originalList;
+            this._originalList = null;
+        }
+        this._reviewList = null;
     }
 
     getFilteredList() {
         const prefs = app && app.store ? app.store.prefs : null;
-        if (!prefs || !prefs.levelFilter || prefs.levelFilter.includes('all')) return this.list;
-        const selected = prefs.levelFilter;
-        const filtered = this.list.filter(item => {
-            if (!item.level && !item.tags) return selected.includes('unassigned');
-            if (item.level && selected.includes(item.level)) return true;
-            if (item.tags && item.tags.some(t => selected.includes(t))) return true;
-            return false;
-        });
-        return filtered.length > 0 ? filtered : this.list;
+        let list = this.list;
+
+        // Level filter (existing)
+        if (prefs && prefs.levelFilter && !prefs.levelFilter.includes('all')) {
+            const selected = prefs.levelFilter;
+            const frameworkTags = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'];
+            list = list.filter(item => {
+                if (selected.includes('unassigned')) {
+                    if (!item.tags || !item.tags.some(t => frameworkTags.includes(t))) return true;
+                }
+                if (item.tags && item.tags.some(t => selected.includes(t))) return true;
+                return false;
+            });
+        }
+
+        // Collection filter (new Medium-term)
+        const collId = (app && app.data && app.data.currentCollection) || (prefs && prefs.currentCollection);
+        if (collId && collId !== 'all' && typeof getWordsForCollection === 'function') {
+            const filtered = getWordsForCollection(list, collId);
+            if (filtered.length === 0 && collId !== 'all') {
+                L(`[Data] Collection '${collId}' produced 0 results from current vocab (no matching tags/lang in loaded data). Falling back to full list.`);
+                // Do not return empty — prevents downstream "item.id of undefined" in games.
+            } else {
+                list = filtered;
+            }
+        }
+
+        return list.length > 0 ? list : this.list;
     }
     
     resetSession() {
@@ -58,6 +144,13 @@ class DataService {
                 if (this.list.length === 0) this.createMockData();
             }
         }
+
+        // Initialize collection from prefs if present (Medium-term)
+        const prefs = app && app.store ? app.store.prefs : null;
+        if (prefs && prefs.currentCollection) {
+            this.currentCollection = prefs.currentCollection;
+        }
+
         return this.list.length;
     }
 
@@ -113,21 +206,24 @@ class DataService {
     }
 
     async recordScore(points, mode) {
-        this.localDailyScore += points; 
-        if (!auth || !auth.currentUser || !db || auth.currentUser.isAnonymous) return;
+        const numPts = Math.max(0, Number(points) || 0);
+        this.localDailyScore = Math.max(0, (Number(this.localDailyScore) || 0) + numPts); 
+        // Allow anonymous users too — they get their own UID bucket in RTDB so "user specific data"
+        // accrues even on plain APK WebView (where only anon login works).
+        if (!auth || !auth.currentUser || !db) return;
 
         const uid = auth.currentUser.uid;
         const todayKey = this.getTodayKey(); 
         const updates = {};
-        updates[`users/${uid}/weekly/total`] = firebase.database.ServerValue.increment(points);
-        updates[`users/${uid}/weekly/modes/${mode}`] = firebase.database.ServerValue.increment(points);
-        updates[`users/${uid}/weekly/daily/${todayKey}/${mode}`] = firebase.database.ServerValue.increment(points);
+        updates[`users/${uid}/weekly/total`] = firebase.database.ServerValue.increment(numPts);
+        updates[`users/${uid}/weekly/modes/${mode}`] = firebase.database.ServerValue.increment(numPts);
+        updates[`users/${uid}/weekly/daily/${todayKey}/${mode}`] = firebase.database.ServerValue.increment(numPts);
 
         try { await db.ref().update(updates); } catch(e) { L("[Data] Scoring failed", e); }
     }
 
     async getStats() {
-        if (!auth || !auth.currentUser || !db || auth.currentUser.isAnonymous) return null;
+        if (!auth || !auth.currentUser || !db) return null;
         try {
             const snap = await db.ref(`users/${auth.currentUser.uid}/weekly`).once('value');
             return snap.val(); 
@@ -135,16 +231,17 @@ class DataService {
     }
 
     async getTodayTotal() {
-        if (this.dailyScoreLoaded) return this.localDailyScore;
-        if (!auth || !auth.currentUser || !db || auth.currentUser.isAnonymous) return 0;
+        if (this.dailyScoreLoaded) return Math.max(0, Number(this.localDailyScore) || 0);
+        // Support anon: if we have a currentUser (anon or real) try RTDB under that UID.
+        if (!auth || !auth.currentUser || !db) return Math.max(0, Number(this.localDailyScore) || 0);
         try {
             const snap = await db.ref(`users/${auth.currentUser.uid}/weekly/daily/${this.getTodayKey()}`).once('value');
             let total = 0;
             if (snap.exists()) total = Object.values(snap.val()).reduce((a, b) => a + b, 0);
-            this.localDailyScore = Math.max(this.localDailyScore, total);
+            this.localDailyScore = Math.max(0, Number(this.localDailyScore) || 0, Number(total) || 0);
             this.dailyScoreLoaded = true;
             return this.localDailyScore;
-        } catch(e) { return 0; }
+        } catch(e) { return Math.max(0, Number(this.localDailyScore) || 0); }
     }
 
     async deleteUserAccount() {
@@ -166,7 +263,7 @@ class DataService {
         const langKey = collection[0] && collection[0].lang ? collection[0].lang : null;
         const exKey = langKey ? langKey + '_ex' : null;
         this.list = collection.map((item, i) => {
-            const entry = { id: item.id !== undefined ? item.id : i, level: item.level || '' };
+            const entry = { id: item.id !== undefined ? item.id : i };
             if (typeof LANG_CONFIG !== 'undefined') {
                 LANG_CONFIG.forEach(c => { entry[c.key] = ''; });
             }
@@ -179,7 +276,6 @@ class DataService {
             }
             if (item.en_ex) entry.en_ex = item.en_ex;
             if (item.tags) entry.tags = item.tags;
-            if (item.level) entry.level = item.level;
             return entry;
         });
         return true;
@@ -204,7 +300,6 @@ class DataService {
             if(typeof LANG_CONFIG !== 'undefined') { LANG_CONFIG.forEach(c => item[c.key] = parts[c.index] ? parts[c.index].trim() : ""); }
             const levelIdx = LANG_CONFIG ? LANG_CONFIG.length : 15;
             const tagIdx = levelIdx + 1;
-            if (parts[levelIdx] && parts[levelIdx].trim()) item.level = parts[levelIdx].trim();
             if (parts[tagIdx] && parts[tagIdx].trim()) item.tags = parts[tagIdx].split(/[;|]/).map(t => t.trim()).filter(Boolean);
             return item;
         });

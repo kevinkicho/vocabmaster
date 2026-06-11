@@ -1,4 +1,4 @@
-function L(...args) { if (window.VM_DEBUG) console.log(...args); }
+function L(...args) { console.log(...args); }  // always buffer via console override; console output only visible in debug or adb logcat
 function escapeHtml(str) {
     if (str == null) return '';
     return String(str)

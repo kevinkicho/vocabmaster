@@ -1,30 +1,134 @@
 /* js/main.js */
 
-// --- Robust Logger (debug only) ---
+// --- Robust Logger (always capture for debug, persistent to localStorage, exportable as file) ---
+// Also mirrors to RTDB under the signed-in (or anon) uid so logs survive app restarts/crashes
+// and are accessible for remote analysis without USB/adb/download friction.
 window.VM_DEBUG = location.search.includes('debug=1');
 window.logBuffer = [];
-if (window.VM_DEBUG) {
-    function logToBuffer(type, args) {
-        try {
-            const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-            window.logBuffer.unshift(`[${type}] ${msg}`);
-            if (window.logBuffer.length > 50) window.logBuffer.pop();
-            const logArea = document.getElementById('debug-log-area');
-            if (logArea) logArea.value = window.logBuffer.join('\n');
-        } catch (e) {}
-    }
-    const _log = console.log; const _err = console.error; const _warn = console.warn;
-    console.log = (...args) => { _log.apply(console, args); logToBuffer('LOG', args); };
-    console.error = (...args) => { _err.apply(console, args); logToBuffer('ERR', args); };
-    console.warn = (...args) => { _warn.apply(console, args); logToBuffer('WRN', args); };
+try {
+    const saved = localStorage.getItem('vm_log_buffer');
+    if (saved) window.logBuffer = JSON.parse(saved).slice(0, 200);
+} catch(e) {}
+
+// Stable session id so logs from one "run" (including restarts) stay grouped in RTDB
+window.VM_SESSION_ID = localStorage.getItem('vm_session_id') || ('s_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7));
+localStorage.setItem('vm_session_id', window.VM_SESSION_ID);
+
+window._logFlushPending = false;
+
+let _autoFlushTimer = null;
+function scheduleAutoFlush() {
+  if (_autoFlushTimer) clearTimeout(_autoFlushTimer);
+  _autoFlushTimer = setTimeout(() => {
+    if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
+  }, 8000); // automatic push ~8s after log activity, no button needed
 }
-window.onerror = (msg, url, line) => { console.error(`Global: ${msg} (${url}:${line})`); };
+
+function logToBuffer(type, args) {
+    try {
+        const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+        window.logBuffer.unshift(`[${type}] ${msg}`);
+        if (window.logBuffer.length > 200) window.logBuffer.length = 200;
+        // persist local
+        try { localStorage.setItem('vm_log_buffer', JSON.stringify(window.logBuffer)); } catch(e){}
+        const logArea = document.getElementById('debug-log-area');
+        if (logArea) logArea.value = window.logBuffer.join('\n');
+        // mark for remote (RTDB) mirror
+        window._logFlushPending = true;
+        scheduleAutoFlush();
+    } catch (e) {}
+}
+
+// Always capture to buffer (even without ?debug=1), so errors in Story/LLM are always logged for export
+const _log = console.log; const _err = console.error; const _warn = console.warn;
+console.log = (...args) => { _log.apply(console, args); logToBuffer('LOG', args); };
+console.error = (...args) => { _err.apply(console, args); logToBuffer('ERR', args); };
+console.warn = (...args) => { _warn.apply(console, args); logToBuffer('WRN', args); };
+
+// Global error hooks also try to flush what we have to RTDB (best-effort)
+window.onerror = (msg, url, line) => {
+  console.error(`Global: ${msg} (${url}:${line})`);
+  if (window.flushDebugLogsToRTDB) setTimeout(() => window.flushDebugLogsToRTDB().catch(()=>{}), 300);
+  if(app && app.goHome) app.goHome(false);
+};
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled Promise:', e.reason);
+  if (window.flushDebugLogsToRTDB) setTimeout(() => window.flushDebugLogsToRTDB().catch(()=>{}), 300);
+  if(app && app.goHome) app.goHome(false);
+});
+
+// --- RTDB remote logging (per-user, bounded, safe for anon + real accounts) ---
+// Schema: debug_logs/{uid}/sessions/{VM_SESSION_ID}/
+//   meta: {started, ua, version, platform}
+//   batches: push({at: serverTs, n, lines: [...]})   // we push compact recent batches
+// Pruning keeps only the last ~15 batches per session (tiny data, easy to browse in console).
+window.flushDebugLogsToRTDB = async function() {
+  try {
+    if (!db || !auth || !auth.currentUser) return false;
+    const uid = auth.currentUser.uid;
+    const sess = window.VM_SESSION_ID || 'default';
+    const base = db.ref(`users/${uid}/debug_logs/sessions/${sess}`);
+
+    // Write meta once per session (non-blocking for future)
+    try {
+      const metaSnap = await base.child('meta').once('value');
+      if (!metaSnap.exists()) {
+        await base.child('meta').set({
+          started: Date.now(),
+          ua: String(navigator.userAgent || '').slice(0, 180),
+          version: (document.title || 'VocabMaster').slice(0, 40),
+          platform: (window.NativeTTS ? 'android-webview-native' : (window.Capacitor ? 'capacitor' : 'web'))
+        });
+      }
+    } catch(_) {}
+
+    const buffer = (window.logBuffer || []).slice();
+    if (buffer.length === 0) return true;
+
+    // Push a single compact batch with the most recent lines (oldest-first inside the batch)
+    const recent = buffer.slice(0, 60).reverse();
+    await base.child('batches').push({
+      at: firebase.database.ServerValue.TIMESTAMP,
+      n: recent.length,
+      lines: recent
+    });
+
+    // Light prune: keep last ~15 batches only
+    try {
+      const snap = await base.child('batches').once('value');
+      const val = snap.val() || {};
+      const keys = Object.keys(val);
+      if (keys.length > 15) {
+        const drop = keys.slice(0, keys.length - 15);
+        const updateObj = {};
+        drop.forEach(k => { updateObj['batches/' + k] = null; });
+        await base.update(updateObj);
+      }
+    } catch(_) {}
+
+    try { localStorage.setItem('vm_last_rtdb_push', String(Date.now())); } catch(_) {}
+    window._logFlushPending = false;
+
+    // Let UI refresh status if the settings pane is open
+    if (window.app && window.app.ui && typeof window.app.ui.updateRemoteLogStatus === 'function') {
+      try { window.app.ui.updateRemoteLogStatus(); } catch(_) {}
+    }
+    return true;
+  } catch (e) {
+    // Logging must never crash the app
+    try { console.warn('[RTDB-LOG] flush skipped:', (e && e.message) || e); } catch(_) {}
+    return false;
+  }
+};
 
 class App {
     constructor() {
         L("App Constructing...");
         this.score = 0; 
         this.dailyScore = 0; 
+        // Ensure clean non-negative numbers from start to prevent display corruption in PTS/daily
+        this.score = Math.max(0, Number(this.score) || 0);
+        this.dailyScore = Math.max(0, Number(this.dailyScore) || 0);
         try {
             this.store = new Store();
             this.ui = new UIManager(this.store);
@@ -44,6 +148,40 @@ class App {
         }
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
         else { this.init(); }
+    }
+
+    applyUrlParameters() {
+        if (!window.location.search) return;
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const targetLang = params.get('lang');
+            const sourceLang = params.get('source') || 'en';
+            const coll = params.get('coll');
+
+            let configChanged = false;
+
+            if (targetLang && this.presets) {
+                L(`[CLI] Applying preset: ${sourceLang} -> ${targetLang}`);
+                // This updates app.store.prefs across all modes
+                this.presets.apply(sourceLang, targetLang);
+                configChanged = true;
+            }
+
+            if (coll && this.store) {
+                L(`[CLI] Setting active collection to: ${coll}`);
+                this.store.prefs.currentCollection = coll;
+                if (this.data) this.data.setCollection(coll);
+                // Force a save so data.js loads it
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(this.store.prefs));
+                configChanged = true;
+            }
+
+            if (configChanged) {
+                L("[CLI] Configuration injected via URL parameters.");
+            }
+        } catch (e) {
+            L("URL Parse Error:", e);
+        }
     }
 
     async init() {
@@ -83,12 +221,21 @@ class App {
                     // Safe State: Always re-enable button when state settles
                     loginBtn.disabled = false;
                     
-                    if (user && !user.isAnonymous) {
-                        // Logged In View
-                        loginBtn.innerHTML = `<img src="${escapeHtml(user.photoURL)}" class="w-full h-full rounded-full border-2 border-indigo-200 p-0.5">`;
-                        loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
+                    if (user) {
+                        // Any authenticated user (real Google OR anonymous) counts as logged in.
+                        // This lets APK users (who are anon) see they have an identity for RTDB data.
+                        if (user.isAnonymous) {
+                            loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`; // anon badge could be added
+                            loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
+                        } else if (user.photoURL) {
+                            loginBtn.innerHTML = `<img src="${escapeHtml(user.photoURL)}" class="w-full h-full rounded-full border-2 border-indigo-200 p-0.5">`;
+                            loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
+                        } else {
+                            loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+                            loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
+                        }
                     } else {
-                        // Guest/Anon View
+                        // No user yet
                         loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
                         loginBtn.onclick = (e) => { e.stopPropagation(); this.handleAuthClick(); };
                     }
@@ -102,6 +249,9 @@ class App {
         try {
             // 1. Wait for Auth (Anonymous or Real)
             const user = await this.auth.waitForAuth();
+            
+            // 1b. CLI Interface: Parse URL params
+            this.applyUrlParameters();
             
             // 2. Load Data (Requires Auth)
             const count = await this.data.load();
@@ -123,6 +273,49 @@ class App {
             } else { 
                 statusBar.innerText = `${count} Words Ready`; 
                 statusBar.classList.remove('text-rose-500'); 
+            }
+
+            // Start periodic RTDB log mirroring (every ~20s when there is new activity).
+            // This + error hooks + settings-close + goHome means logs are usually in the cloud even if
+            // the user never taps "Download .log File".
+            this._logFlushTimer = setInterval(() => {
+                if (window._logFlushPending && window.flushDebugLogsToRTDB) {
+                    window.flushDebugLogsToRTDB().catch(() => {});
+                }
+            }, 20000);
+
+            // Automatic RTDB log connect + flush on initialization (after auth ready).
+            // Logs are pushed automatically on start and ~8s after any activity via scheduleAutoFlush.
+            // No manual "Push" required; use Fetch/Download in Developer to export for analysis.
+            setTimeout(() => {
+                if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
+            }, 2000);
+            setTimeout(() => {
+                if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
+            }, 5000);
+
+            // Improve initial experience: on very first run, open Settings so user can pick preset/collection quickly (suggestion from setup modal review)
+            if (!localStorage.getItem('vm_first_run_done')) {
+                localStorage.setItem('vm_first_run_done', '1');
+                setTimeout(() => {
+                    if (this.modal) this.modal(true);
+                    // Polish: after open, inject a friendly one-time guidance near presets (data-driven settings entry point)
+                    setTimeout(() => {
+                        const presetBox = document.getElementById('preset-container');
+                        if (presetBox && !document.getElementById('first-run-hint')) {
+                            const hint = document.createElement('div');
+                            hint.id = 'first-run-hint';
+                            hint.className = 'mt-2 text-[10px] text-indigo-600 dark:text-indigo-400 font-bold';
+                            hint.textContent = '👋 First time? Use a Preset above (or Collections) to tailor languages fast. Close to save.';
+                            presetBox.appendChild(hint);
+                            setTimeout(() => { if (hint && hint.parentNode) hint.parentNode.removeChild(hint); }, 6500);
+                        }
+                        // Also ensure collections section is visible in the freshly opened settings
+                        if (this.ui && typeof this.ui.renderCollectionsInSettings === 'function') {
+                            try { this.ui.renderCollectionsInSettings(); } catch(e){}
+                        }
+                    }, 350);
+                }, 1200);
             }
 
             // 4. Enable Start
@@ -171,26 +364,70 @@ class App {
 
     handleAuthClick() {
         const loginBtn = document.getElementById('btn-login');
-        if(loginBtn) {
-            // Disable immediately to prevent double-click crash
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = `<i class="ph-bold ph-spinner animate-spin text-xl"></i>`;
-        }
-        
-        const provider = new firebase.auth.GoogleAuthProvider();
-        auth.signInWithPopup(provider).catch(e => {
-            L("Login Error:", e);
+        try {
             if(loginBtn) {
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = `<i class="ph-bold ph-spinner animate-spin text-xl"></i>`;
+            }
+            
+            // Robust WebView detection for plain Android WebView (no Capacitor).
+            // NativeTTS is injected by the Kotlin wrapper; also accept common WebView UA markers.
+            const ua = (navigator.userAgent || '').toLowerCase();
+            const isWebView = !!(window.NativeTTS) || !!(window.Capacitor) ||
+                              ua.includes('webview') || ua.includes('wv') ||
+                              ua.includes('vocabmasterapp') || ua.includes('android');
+            if (isWebView) {
+                // On APK we use anonymous auth (Google popup doesn't work in WebView).
+                // This still gives a stable UID so user-specific RTDB data (scores, analytics) can accrue.
+                auth.signInAnonymously().then(() => {
+                    L("Signed in anonymously (WebView/APK)");
+                    if(loginBtn) {
+                        loginBtn.disabled = false;
+                        // Show a "logged" state even for anon so user knows auth "succeeded"
+                        loginBtn.innerHTML = `<i class="ph-bold ph-user-check text-xl"></i>`;
+                    }
+                    // Re-evaluate header state shortly (auth listener may not re-fire for re-anon)
+                    setTimeout(() => {
+                        if (window.app && window.app.auth) {
+                            // Force a UI refresh of the login button by touching currentUser
+                            const u = auth.currentUser;
+                            if (u && window.app.auth) window.app.auth.currentUser = u;
+                        }
+                    }, 300);
+                }).catch(e => {
+                    L("Anon sign-in failed (WebView):", e);
+                    if(loginBtn) {
+                        loginBtn.disabled = false;
+                        loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+                    }
+                });
+                return;
+            }
+            
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(e => {
+                L("Login Error:", e);
+                if(loginBtn) {
+                    loginBtn.disabled = false;
+                    loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+                }
+                if (e.code !== 'auth/popup-closed-by-user') {
+                    alert("Login Failed: " + e.message);
+                }
+            });
+        } catch (e) {
+            L("handleAuthClick crashed:", e);
+            if (loginBtn) {
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
             }
-            if (e.code !== 'auth/popup-closed-by-user') {
-                alert("Login Failed: " + e.message);
-            }
-        });
+        }
     }
 
     async goHome(pushState = true) {
+        // Push whatever we have to RTDB before tearing down the current game (Story/LLM failures etc. will be captured)
+        if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
+
         if(this.game) this.game.destroy();
         this.game = null;
         if(app.audio) app.audio.cancel(); 
@@ -204,14 +441,21 @@ class App {
         if(!view) return;
         view.classList.remove('visible');
         
-        this.dailyScore = await this.data.getTodayTotal();
+        this.dailyScore = Math.max(0, Number(await this.data.getTodayTotal()) || 0);
 
         requestAnimationFrame(() => {
             view.innerHTML = `
                 <div class="flex flex-col gap-4 sm:gap-6 w-full h-full pb-8 overflow-y-auto pt-2 px-2">
                     <div onclick="app.ui.openStatsModal()" class="bg-gradient-to-r from-white to-slate-100 dark:from-neutral-900 dark:to-black rounded-[2rem] p-8 shadow-sm border border-slate-200 dark:border-neutral-800 flex justify-between relative overflow-hidden w-full shrink-0 group cursor-pointer active:scale-95 transition-transform">
                         <div class="relative z-10 w-full h-full flex flex-col justify-center">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Daily Score</p>
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                Daily Score
+                                ${ (auth && auth.currentUser) 
+                                    ? (auth.currentUser.isAnonymous 
+                                        ? `<span class="text-[8px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">device</span>` 
+                                        : `<span class="text-[8px] px-1 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400">synced</span>`) 
+                                    : '' }
+                            </p>
                             <p class="${this.dailyScore > 0 ? 'text-7xl' : 'text-4xl uppercase'} font-black text-slate-800 dark:text-neutral-200 tracking-tighter leading-none">${this.dailyScore > 0 ? this.dailyScore : "Let's Go!"}</p>
                         </div>
                         <div class="text-9xl opacity-10 grayscale absolute -right-6 -bottom-6 rotate-12 select-none group-hover:scale-110 transition-transform duration-500">🏆</div>
@@ -235,15 +479,55 @@ class App {
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
                     </div>
 
-                    ${app.llm && app.llm.available && app.llm.hasModel ? `
+                    <!-- AI section is *always* rendered (no app.llm guard) so that Story Mode and AI Cloze
+                         (the mandatory-AI no-fallback versions) are available identically whether the
+                         webapp is loaded from public/ in a browser or from the Android WebView assets.
+                         The games themselves enforce "AI required" + clean errors (see game_story.js
+                         and game_sentences.js). Web users configure their backend (local ollama or proxy+cloud)
+                         in Settings > AI. Keep this unconditional for web/Android parity. -->
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
-                    </div>` : ''}
+                        ${this.btn('AI Cloze', 'ph-sparkle', 'cyan', ()=>new Sentences('sentences'))}
+                    </div>
+
+                    <!-- Medium-term: Collection / Tier picker (Phase 1) -->
+                    <div class="mt-2 px-2">
+                        <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Collection / Tier</div>
+                        <select id="collection-picker" class="w-full text-sm font-bold bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-3 py-2" 
+                                onchange="app.setCollection(this.value)">
+                            <!-- Populated dynamically from vocabulary-collections if available -->
+                            <option value="all">All Words</option>
+                            <option value="es-a1">Spanish A1</option>
+                            <option value="jlpt-n5">JLPT N5</option>
+                            <option value="jlpt-n3">JLPT N3 (enriched)</option>
+                            <option value="jlpt-n2">JLPT N2 (enriched)</option>
+                            <option value="jlpt-n1">JLPT N1 (enriched)</option>
+                        </select>
+                    </div>
+
+                    <!-- Medium-term: Smart Review (Phase 2) -->
+                    <div class="mt-1 px-2">
+                        <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
+                    </div>
                 </div>`;
 
             if(this.fitter) this.fitter.fitAll().then(() => view.classList.add('visible')).catch(()=>view.classList.add('visible'));
             else view.classList.add('visible');
+
+            // Sync collection picker with current state + make dynamic if collections module present
+            setTimeout(() => {
+                const picker = document.getElementById('collection-picker');
+                if (picker) {
+                    if (typeof listCollections === 'function') {
+                        const cols = listCollections();
+                        picker.innerHTML = cols.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                    }
+                    if (this.data) {
+                        picker.value = this.data.currentCollection || 'all';
+                    }
+                }
+            }, 0);
         });
     }
 
@@ -264,20 +548,68 @@ class App {
 
     launch(fn) { 
         try {
+            if(this.audio) this.audio.cancel();
             if(this.game) this.game.destroy(); 
             this.game = fn(); 
             history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
         } catch(e) {
-            L("Launch Error:", e);
-            alert("Failed to start game: " + e.message);
+            L("Launch Error:", e.stack || e);
+            alert("Failed to start game: " + e.message + "\n\nCheck console for details.");
+            this.goHome(false);
+        }
+    }
+
+    // Medium-term collections support (Phase 1)
+    setCollection(id) {
+        if (this.data) this.data.setCollection(id);
+        // Persist simply in prefs for now (can move to registry)
+        if (this.store && this.store.prefs) {
+            this.store.prefs.currentCollection = id;
+            // light save without full modal cycle
+            try { localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(this.store.prefs)); } catch(e){}
+        }
+        // Re-render home so filters feel live
+        this.goHome(false);
+    }
+
+    // Medium-term: Smart Review queue (Phase 2) - uses analytics + adaptive + current collection
+    async launchSmartReview() {
+        if (!this.data) return;
+        const started = await this.data.startReviewSession(12);
+        if (started) {
+            // Launch a mixed or preferred mode with review list, e.g. Quiz for good feedback
+            this.game = new Quiz('quiz');
+            history.pushState({ view: 'game', mode: 'review', index: this.game.i }, '');
+            // End review session when game ends (in game destroy or nav end)
+            const origDestroy = this.game.destroy.bind(this.game);
+            this.game.destroy = () => {
+                if (this.data) this.data.endReviewSession();
+                origDestroy();
+            };
+        } else {
+            alert("Not enough data for review yet. Play some games first!");
+            this.goHome(false);
         }
     }
     toggleFull() { !document.fullscreenElement ? document.documentElement.requestFullscreen().catch(()=>{}) : document.exitFullscreen(); }
     modal(show) { 
         if(this.ui) this.ui.hideTooltip();
         const el = document.getElementById('modal-settings');
-        if (show) { el.classList.remove('hidden'); if(this.ui) this.ui.loadSettings(); } 
-        else { if(this.store) this.store.saveSettings(); el.classList.add('hidden'); }
+        if (show) { 
+            el.classList.remove('hidden'); 
+            if(this.ui) this.ui.loadSettings(); 
+        } else { 
+            if(this.store) this.store.saveSettings(); 
+            // Flush any new logs when user closes Settings (common place they reproduce issues then want to capture)
+            if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
+            el.classList.add('hidden'); 
+        }
+    }
+
+    // Public wrapper so UI / other modules can call app.flushLogsToRTDB()
+    async flushLogsToRTDB() {
+        if (window.flushDebugLogsToRTDB) return window.flushDebugLogsToRTDB();
+        return false;
     }
 }
 

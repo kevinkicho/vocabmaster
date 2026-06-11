@@ -1,27 +1,40 @@
 /* js/store.js */
 class Store {
     constructor() {
-        const defaults = (typeof GET_DEFAULTS === 'function') ? GET_DEFAULTS() : {};
         this.STORAGE_KEY = 'vm_prefs_v1195_STABLE'; 
 
-const customDefaults = {
-        ...defaults,
-        flashAudioSrc: 'ja', 
-        sentencesBottomLang: 'en',
-        sentencesBottomDisp: 'sentence',
-        font: 'sans',
-        quizPlayAnswer: true,
-        showAudioBtns: true,
-        quizShowEx: false,
-        sentencesReadWhole: false,
-        selectedVoices: {}
-    };
+        // Build defaults from the preference registry (preferences_registry.js)
+        const defaults = (typeof buildDefaultsFromSchema === 'function' && typeof LANG_CONFIG !== 'undefined')
+            ? buildDefaultsFromSchema(LANG_CONFIG)
+            : (typeof GET_DEFAULTS === 'function' ? GET_DEFAULTS() : {});
 
-        try {
-            const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
-            this.prefs = stored ? { ...customDefaults, ...stored } : customDefaults;
-        } catch (e) {
-            this.prefs = customDefaults;
+        if (typeof buildDefaultsFromSchema !== 'function') {
+            // Fallback: legacy customDefaults (will be removed after registry migration)
+            const customDefaults = {
+                ...defaults,
+                flashAudioSrc: 'ja',
+                sentencesBottomLang: 'en',
+                sentencesBottomDisp: 'sentence',
+                font: 'sans',
+                quizPlayAnswer: true,
+                showAudioBtns: true,
+                quizShowEx: false,
+                sentencesReadWhole: false,
+                selectedVoices: {}
+            };
+            try {
+                const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
+                this.prefs = stored ? { ...customDefaults, ...stored } : customDefaults;
+            } catch (e) {
+                this.prefs = customDefaults;
+            }
+        } else {
+            try {
+                const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
+                this.prefs = stored ? { ...defaults, ...stored } : defaults;
+            } catch (e) {
+                this.prefs = defaults;
+            }
         }
 
         try { this.locs = JSON.parse(localStorage.getItem('vm_locs')) || {}; } catch (e) { this.locs = {}; }
@@ -33,137 +46,53 @@ const customDefaults = {
     cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
     saveSettings() {
-        const getChk = (id, currentVal) => { 
-            const el = document.getElementById(id); 
-            return el ? el.checked : currentVal; 
-        };
-        const getVal = (id, currentVal) => { 
-            const el = document.getElementById(id); 
-            return el ? el.value : currentVal; 
-        };
-        const getRad = (name, currentVal) => { 
-            const checked = document.querySelector(`input[name="${name}"]:checked`);
-            return checked ? checked.value : currentVal;
-        };
-
         const prevClickMode = this.prefs.globalClickMode;
 
-        // Global
-        this.prefs.globalClickMode = getRad('global-click-mode', this.prefs.globalClickMode);
-        this.prefs.dark = getChk('toggle-dark', this.prefs.dark);
-        this.prefs.anim = getChk('toggle-anim', this.prefs.anim);
-        this.prefs.showAudioBtns = getChk('toggle-show-audio-btns', this.prefs.showAudioBtns);
-        this.prefs.masterAudio = getChk('toggle-master-audio', this.prefs.masterAudio);
-        this.prefs.audioWait = getChk('toggle-audio-wait', this.prefs.audioWait);
-        this.prefs.font = getVal('app-font', this.prefs.font);
-        this.prefs.fontStyle = getVal('app-font-style', this.prefs.fontStyle);
-        this.prefs.fontWeight = getVal('app-font-weight', this.prefs.fontWeight);
+        // Read all DOM-bound preferences using the registry (single source via readPrefFromDom)
+        if (typeof getAllPrefs === 'function') {
+            const allPrefs = getAllPrefs(typeof LANG_CONFIG !== 'undefined' ? LANG_CONFIG : []);
+            for (const entry of allPrefs) {
+                try {
+                    if (!entry.domId) continue;
+                    let val;
+                    if (typeof readPrefFromDom === 'function') {
+                        val = readPrefFromDom(entry);
+                    } else {
+                        const el = document.getElementById(entry.domId);
+                        if (!el) continue;
+                        switch (entry.type) {
+                            case 'bool':   val = el.checked; break;
+                            case 'radio': {
+                                const checked = document.querySelector('input[name="' + entry.domId + '"]:checked');
+                                val = checked ? checked.value : this.prefs[entry.key];
+                                break;
+                            }
+                            default:       val = el.value; break;
+                        }
+                    }
+                    if (val !== null && val !== undefined) {
+                        this.prefs[entry.key] = val;
+                    }
+                } catch (e) { /* per-entry robustness */ }
+            }
+        }
 
-        // Flash
-        this.prefs.flashSpeed = getVal('flash-speed', this.prefs.flashSpeed);
-        this.prefs.flashRandom = getChk('flash-random', this.prefs.flashRandom);
-        this.prefs.flashAuto = getChk('flash-auto', this.prefs.flashAuto);
-        this.prefs.flashFront = getVal('flash-front', this.prefs.flashFront);
-        this.prefs.flashBack1 = getVal('flash-back-1', this.prefs.flashBack1);
-        this.prefs.flashBack2 = getVal('flash-back-2', this.prefs.flashBack2);
-        this.prefs.flashBack3 = getVal('flash-back-3', this.prefs.flashBack3); 
-        this.prefs.flashBack4 = getVal('flash-back-4', this.prefs.flashBack4); 
-        this.prefs.flashAudioSrc = getVal('flash-audio-src', this.prefs.flashAudioSrc);
-
-        // Quiz
-        this.prefs.quizQ = getVal('quiz-q-type', this.prefs.quizQ);
-        this.prefs.quizA = getVal('quiz-a-type', this.prefs.quizA);
-        this.prefs.quizRandom = getChk('quiz-random', this.prefs.quizRandom);
-        this.prefs.quizAuto = getChk('quiz-auto', this.prefs.quizAuto);
-        this.prefs.quizAudioSrc = getVal('quiz-audio-src', this.prefs.quizAudioSrc);
-        this.prefs.quizShowEx = getChk('quiz-show-ex', this.prefs.quizShowEx);
-        this.prefs.quizExMain = getVal('quiz-ex-main', this.prefs.quizExMain);
-        this.prefs.quizExSub = getVal('quiz-ex-sub', this.prefs.quizExSub);
-        this.prefs.quizPlayEx = getChk('quiz-play-ex', this.prefs.quizPlayEx); 
-        this.prefs.quizPlayCorrect = getChk('quiz-play-correct', this.prefs.quizPlayCorrect);
-        this.prefs.quizPlayAnswer = getChk('quiz-play-answer', this.prefs.quizPlayAnswer);
-
-        // TF
-        this.prefs.tfRandom = getChk('tf-random', this.prefs.tfRandom);
-        this.prefs.tfAuto = getChk('tf-auto', this.prefs.tfAuto);
-        this.prefs.tfFront = getVal('tf-front', this.prefs.tfFront);
-        this.prefs.tfBack = getVal('tf-back', this.prefs.tfBack);
-        this.prefs.tfAudioSrc = getVal('tf-audio-src', this.prefs.tfAudioSrc);
-        this.prefs.tfShowEx = getChk('tf-show-ex', this.prefs.tfShowEx);
-        this.prefs.tfExMain = getVal('tf-ex-main', this.prefs.tfExMain);
-        this.prefs.tfExSub = getVal('tf-ex-sub', this.prefs.tfExSub);
-        this.prefs.tfPlayEx = getChk('tf-play-ex', this.prefs.tfPlayEx);
-        this.prefs.tfPlayCorrect = getChk('tf-play-correct', this.prefs.tfPlayCorrect);
-
-        // Match
-        if(typeof LANG_CONFIG !== 'undefined') {
+        // Voice Selection (not in registry — dynamic per-language selects)
+        if (typeof LANG_CONFIG !== 'undefined') {
             LANG_CONFIG.forEach(l => {
-                const showKey = `matchShow${this.cap(l.key)}`;
-                this.prefs[showKey] = getChk(`match-show-${l.key}`, this.prefs[showKey]);
-                if(!l.visualOnly) {
-                    const audKey = `matchAudio_${l.key}`;
-                    const btnKey = `btnAudio_${l.key}`;
-                    this.prefs[audKey] = getChk(`matchAudio-${l.key}`, this.prefs[audKey]);
-                    this.prefs[btnKey] = getChk(`btnAudio-${l.key}`, this.prefs[btnKey]);
+                if (!l.visualOnly) {
+                    const el = document.getElementById('voice-select-' + l.key);
+                    if (el) this.prefs.selectedVoices[l.key] = el.value;
                 }
             });
         }
-        this.prefs.matchHint = getChk('match-hint', this.prefs.matchHint);
 
-        // Voice
-        this.prefs.voiceAuto = getChk('voice-auto', this.prefs.voiceAuto);
-        this.prefs.voiceRandom = getChk('voice-random', this.prefs.voiceRandom); 
-        this.prefs.voiceDispFront = getVal('voice-disp-front', this.prefs.voiceDispFront);
-        this.prefs.voiceDispBack = getVal('voice-disp-back', this.prefs.voiceDispBack);
-        this.prefs.voiceAudioTarget = getVal('voice-audio-target', this.prefs.voiceAudioTarget);
-        this.prefs.voicePlayEx = getChk('voice-play-ex', this.prefs.voicePlayEx);
-        this.prefs.voiceExMain = getVal('voice-ex-main', this.prefs.voiceExMain);
-        this.prefs.voicePlayCorrect = getChk('voice-play-correct', this.prefs.voicePlayCorrect);
-        
-        // Sentences
-        this.prefs.sentencesQ = getVal('sentences-q', this.prefs.sentencesQ);
-        this.prefs.sentencesA = getVal('sentences-a', this.prefs.sentencesA);
-        this.prefs.sentencesTrans = getVal('sentences-trans', this.prefs.sentencesTrans);
-        this.prefs.sentencesBottomDisp = getVal('sentences-bottom-disp', this.prefs.sentencesBottomDisp);
-        this.prefs.sentencesBottomLang = getVal('sentences-bottom-lang', this.prefs.sentencesBottomLang);
-        
-        this.prefs.sentencesAuto = getChk('sentences-auto', this.prefs.sentencesAuto);
-        this.prefs.sentencesRandom = getChk('sentences-random', this.prefs.sentencesRandom);
-        this.prefs.sentencesAudioSrc = getVal('sentences-audio-src', this.prefs.sentencesAudioSrc);
-        this.prefs.sentencesPlayCorrect = getChk('sentences-play-correct', this.prefs.sentencesPlayCorrect);
-        
-        // NEW: Save the toggle
-        this.prefs.sentencesReadWhole = getChk('sentences-read-whole', this.prefs.sentencesReadWhole);
-
-        // Hanzi
-        this.prefs.hanziEnableTooltip = getChk('hanzi-enable-tooltip', this.prefs.hanziEnableTooltip !== false);
-        this.prefs.hanziAutoClose = getVal('hanzi-tooltip-timer', this.prefs.hanziAutoClose);
-        this.prefs.hanziShowTrad = getChk('hanzi-show-trad', this.prefs.hanziShowTrad !== false);
-        this.prefs.hanziShowSimp = getChk('hanzi-show-simp', this.prefs.hanziShowSimp !== false);
-        this.prefs.hanziShowPinyin = getChk('hanzi-show-pinyin', this.prefs.hanziShowPinyin !== false);
-        this.prefs.hanziShowKr = getChk('hanzi-show-kr', this.prefs.hanziShowKr !== false);
-        this.prefs.hanziShowEn = getChk('hanzi-show-en', this.prefs.hanziShowEn !== false);
-
-        // LLM
-        this.prefs.llmEndpoint = getVal('llm-endpoint', this.prefs.llmEndpoint);
-        this.prefs.llmModel = getVal('llm-model', this.prefs.llmModel);
-        this.prefs.storyAutoRead = getChk('story-auto-read', this.prefs.storyAutoRead !== false);
+        // LLM model re-sync
         if (window.app && window.app.llm) {
             app.llm.loadPrefs();
             app.llm.checkConnection().then(ok => {
                 if (ok) app.llm.hasModel = app.llm.availableModels.some(m => m.startsWith(app.llm.model.split(':')[0]));
                 if (app.ui) app.ui.updateLLMStatus(ok && app.llm.hasModel);
-            });
-        }
-
-        // Voice Selection
-        if (typeof LANG_CONFIG !== 'undefined') {
-            LANG_CONFIG.forEach(l => {
-                if (!l.visualOnly) {
-                    const voiceKey = `selectedVoice_${l.key}`;
-                    const el = document.getElementById(`voice-select-${l.key}`);
-                    if (el) this.prefs.selectedVoices[l.key] = el.value;
-                }
             });
         }
 

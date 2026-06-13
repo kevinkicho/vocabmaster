@@ -12,8 +12,16 @@ Currently, all scripts are injected via `<script>` tags in `index.html`.
 
 ## 3. Local AI Integration (Ollama4Android)
 - `LLMService` defaults to `http://127.0.0.1:11434` when Native/Capacitor environment is detected.
-- This allows 100% free, private local LLM generation for features like Flashcards context, Story generation, and Quiz questions.
+- This allows 100% free, private local LLM generation for features like Flashcards context, Story generation, Grammar Gym, and Quiz questions.
 - A Learning Loop (`learning_loop.js`) pushes session outcomes and ratings to Firebase RTDB under `users/{uid}/learning_loop_sessions`.
+
+## 4. Native Google Sign-In (Android)
+- `MainActivity.kt` integrates Firebase Auth + Google Sign-In SDKs for native OAuth.
+- `NativeAuthJSInterface` exposes `signIn()` / `signOut()` via `@JavascriptInterface`.
+- `onActivityResult` receives the Google account, extracts ID token + photo URL + display name, passes them Base64-encoded to JS.
+- `native_auth.js` (`window.__nativeAuth`) receives the token, calls `signInWithCredential` + `updateProfile()` to authenticate in the WebView's Firebase instance and populate the profile image.
+- `handleAuthClick()` in `main.js` uses native sign-in when `window.NativeAuth` is available and origin is `file:`.
+- Package name: `com.kevinkicho.vocabmaster` (matches Firebase Android app in `google-services.json`).
 
 ## 4. E2E Sanity Testing
 - We instituted Playwright tests running on `pre-commit` to prevent pushing code with unhandled console errors or `ReferenceError` crashes.

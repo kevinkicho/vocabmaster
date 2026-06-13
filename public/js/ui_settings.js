@@ -2,7 +2,12 @@
 Object.assign(UIManager.prototype, {
     loadSettings() {
         const p = this.store.prefs;
-        try { 
+        try {
+            // Inject static settings HTML if needed (from settings_html.js)
+            const settingsList = document.getElementById('settings-list');
+            if (settingsList && settingsList.innerHTML.trim() === '' && window.SETTINGS_HTML) {
+                settingsList.innerHTML = window.SETTINGS_HTML;
+            }
             this.renderPresetsUI(); this.renderThemeGrid(); this.renderLevelFilter();
             this.renderCollectionsInSettings();  // surface collections inside settings (suggestion)
             this.renderFontsAccordion();
@@ -74,7 +79,7 @@ Object.assign(UIManager.prototype, {
             div.id = 'accordion-fonts';
             div.className = "border border-slate-200 dark:border-neutral-700 rounded-2xl overflow-hidden mb-4 bg-white dark:bg-neutral-800";
             div.innerHTML = `
-                <button onclick="this.parentElement.classList.toggle('open')" class="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-neutral-800/50 hover:bg-slate-100 dark:hover:bg-neutral-700 transition-colors">
+                <button onclick="this.parentElement.classList.toggle('open')" class="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-neutral-800 hover:bg-slate-100 dark:hover:bg-neutral-700 transition-colors">
                     <span class="text-sm font-bold text-slate-600 dark:text-neutral-300 uppercase tracking-wide flex items-center gap-2"><i class="ph-bold ph-text-aa"></i> Fonts</span>
                     <i class="ph-bold ph-caret-down text-slate-400 transition-transform duration-300 transform group-open:rotate-180"></i>
                 </button>
@@ -279,13 +284,18 @@ Object.assign(UIManager.prototype, {
         }
     },
 
+    renderGrammarSettings(p) {
+        this.createOpts('grammar-q', p.grammarQ);
+        this.createOpts('grammar-a', p.grammarA);
+    },
+
     renderMatchSettings(p) {
         const matchFilterContainer = document.getElementById('container-match-filters');
         if (matchFilterContainer) {
             matchFilterContainer.innerHTML = LANG_CONFIG.map(l => {
                 const id = `match-show-${l.key}`;
                 const prefKey = `matchShow${this.store.cap(l.key)}`;
-                return `<label class="p-2 bg-white dark:bg-neutral-700/30 rounded border border-slate-200 dark:border-neutral-700 flex flex-col items-center cursor-pointer select-none active:scale-95 transition-transform">
+                return `<label class="p-2 bg-white dark:bg-neutral-700 rounded border border-slate-200 dark:border-neutral-700 flex flex-col items-center cursor-pointer select-none active:scale-95 transition-transform">
                     <span class="text-[9px] font-bold mb-1 truncate w-full text-center">${l.label}</span>
                     <input type="checkbox" id="${id}" class="accent-slate-600 w-3 h-3" ${p[prefKey] ? 'checked' : ''}>
                 </label>`;
@@ -312,6 +322,7 @@ Object.assign(UIManager.prototype, {
             { section: 'match', title: 'Matching', icon: 'ph-squares-four', rep: 'match-hint' },
             { section: 'voice', title: 'Voice', icon: 'ph-microphone', rep: 'voice-disp-front' },
             { section: 'sentences', title: 'Sentences', icon: 'ph-text-t', rep: 'sentences-q' },
+            { section: 'grammar', title: 'Grammar Gym', icon: 'ph-lightbulb', rep: 'grammar-q' },
         ];
         activities.forEach(act => {
             let existing = document.getElementById(`section-${act.section}`);
@@ -322,7 +333,7 @@ Object.assign(UIManager.prototype, {
 
             const prefs = (typeof getPrefsBySection === 'function') ? getPrefsBySection(act.section).filter(p => p.domId) : [];
             let html = `<details id="section-${act.section}" class="group bg-slate-50 dark:bg-neutral-800 rounded-2xl border border-slate-100 dark:border-neutral-700 overflow-hidden">`;
-            html += `<summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700/50 transition-colors"><h3 class="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ${act.icon}"></i> ${act.title}</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary>`;
+            html += `<summary class="flex justify-between items-center p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-700 transition-colors"><h3 class="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><i class="ph-bold ${act.icon}"></i> ${act.title}</h3><i class="ph-bold ph-caret-down group-open:rotate-180 transition-transform"></i></summary>`;
             html += `<div class="p-4 pt-0 space-y-3 border-t border-slate-100 dark:border-neutral-700 mt-2">`;
             prefs.forEach(p => {
                 if (p.type === 'select') {
@@ -398,6 +409,7 @@ Object.assign(UIManager.prototype, {
         this.renderTFSettings(p);
         this.renderVoiceSettings(p);
         this.renderSentencesSettings(p);
+        this.renderGrammarSettings(p);
         this.renderMatchSettings(p);
         this.renderGlobalAudioGrid(p);
 
@@ -427,23 +439,24 @@ Object.assign(UIManager.prototype, {
         }
 
         const devDetails = document.getElementById('details-developer');
-        if (devDetails && !document.getElementById('rtdb-log-status')) {
-            const container = devDetails.querySelector('.p-4');
-            if (container) {
-                // Only append the compact RTDB controls (logs section is handled by static HTML or prior enhancement).
-                // Guard on rtdb id to ensure added even if debug-log-area id exists in static.
-                // This prevents duplicate content and vertical crushing of bottom <details> accordions.
-                const debugHTML = `<div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-1"></div>
-<div class="text-[7px] leading-none flex flex-wrap items-center gap-x-1">
-  <span class="uppercase font-bold text-emerald-500">RTDB (auto)</span>
+        if (devDetails) {
+            const isAdmin = window.app && window.app.auth && window.app.auth.userRole === 'admin';
+            if (isAdmin) devDetails.classList.remove('hidden');
+            if (!document.getElementById('rtdb-log-status')) {
+                const container = devDetails.querySelector('.p-4');
+                if (container) {
+                    const debugHTML = `<div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-1"></div>
+<div class="text-[9px] leading-snug flex flex-wrap items-center gap-x-2 gap-y-1 ${isAdmin ? '' : 'hidden'}">
+  <span class="uppercase font-bold text-emerald-500">RTDB</span>
   <button onclick="if(app) app.flushLogsToRTDB && app.flushLogsToRTDB()" class="underline text-emerald-600 active:text-emerald-800">push</button>
   <button onclick="app.ui && app.ui.fetchAndShowRTDBLogs && app.ui.fetchAndShowRTDBLogs()" class="underline text-slate-500 active:text-slate-700">fetch</button>
   <button onclick="app.ui && app.ui.downloadRTDBLogs && app.ui.downloadRTDBLogs()" class="underline text-indigo-600 active:text-indigo-800">dl</button>
   <button onclick="app.ui && app.ui.clearRemoteLogs && app.ui.clearRemoteLogs()" class="underline text-rose-600 active:text-rose-800">clear</button>
   <span id="rtdb-log-status" class="text-slate-500 dark:text-neutral-400 font-mono">loading…</span>
 </div>
-<textarea id="rtdb-log-area" readonly class="w-full h-12 bg-black text-emerald-400 text-[7px] font-mono p-0.5 rounded border border-slate-700 resize-y focus:outline-none hidden mt-0.5"></textarea>`;
-                container.insertAdjacentHTML('beforeend', debugHTML);
+<textarea id="rtdb-log-area" readonly class="w-full h-16 bg-black text-emerald-400 text-[8px] font-mono p-1 rounded border border-slate-700 resize-y focus:outline-none hidden mt-1"></textarea>`;
+                    container.insertAdjacentHTML('beforeend', debugHTML);
+                }
             }
         }
 

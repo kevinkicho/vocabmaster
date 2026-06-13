@@ -1,6 +1,62 @@
 # Current Status & Roadmap (Post Short-Term + Web AI Parity Work)
 
-**Last major update**: 2026-06 (this session)
+**Last major update**: 2026-06-13 (this session)
+
+## Recent Work: Grammar Gym RTDB Cache + TTS Enhancements (2026-06-13)
+
+### Cache Layer
+- AI-generated Grammar Gym exercises are saved to RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}` (public read, write requires `auth != null`).
+- Live app checks cache first via `loadCachedGrammarExercise(vocabId, langCode)`; on miss it generates and auto-saves.
+- Tagged as "Loaded from cache" in the explanation view when served from RTDB.
+
+### TTS Interactions
+- **Vocab portion** in the header is clickable → plays TTS in the target language engine (e.g., Chinese engine when learning Chinese).
+- **Sentence example** above the explanation is clickable → plays TTS with target language engine.
+- **Example sentence** in the explanation card is clickable → plays TTS in target language.
+- **Answer choices**: first click plays TTS reading only `ch.text` (data portion, not the `labelA`/`labelB` like "send this" / "sounds wrong"). Second click submits as the answer. Ring highlight indicates the active choice. Radio-button behavior — clicking a new choice deselects the previous one.
+
+### Generate Anew
+- Button shown during loading and on the summary screen, below "Try Again".
+- Skips the RTDB cache and forces a fresh LLM generation.
+
+### Pre-generation Script
+- `scripts/pregenerate-grammar.js` reads all vocab from RTDB and generates exercises in bulk, saving to the same `grammar_exercises/` path. Supports `--dry-run`, `--limit`, `--lang`, `--vocab-id`, `--skip-existing`, `--ollama`, `--model`, `--service-account`. Validates 12 exercises, all 12 type variants, and 6A/6B answer balance.
+
+### Settings Fix
+- `renderGrammarSettings()` method was missing from `ui_settings.js`. Grammar Gym's `grammar-q` and `grammar-a` `<select>` elements had no options populated, so closing Settings read empty values and reverted `grammarQ`/`grammarA` to `'ja'` default. Now populated via `createOpts` like other modes.
+
+## Recent Work: Native Google Sign-In (2026-06-13)
+
+### Problem
+The auth button in the Android APK silently did nothing. Google OAuth popup/redirect both fail from `file:///android_asset/` origin. Previous workaround (navigate to Firebase Hosting URL) was a dead end — the hosting page had stale code and auth state didn't carry back to the APK.
+
+### Solution
+Integrated native Google Sign-In directly into the Android WebView wrapper:
+
+- **Kotlin side** (`MainActivity.kt`): Added Firebase Auth + Google Sign-In SDKs (`com.google.firebase:firebase-auth`, `com.google.android.gms:play-services-auth`). `NativeAuthJSInterface` exposes `signIn(callbackId)` and `signOut()` via `@JavascriptInterface`. `onActivityResult` receives the Google account, extracts ID token + photo URL + display name, and passes them (Base64-encoded) to JS via `evaluateJavascript`.
+- **JS bridge** (`native_auth.js`): `window.__nativeAuth` receives the ID token + profile, calls `firebase.auth.GoogleAuthProvider.credential(idToken)` + `auth.signInWithCredential()`, then `user.updateProfile({ photoURL, displayName })` to populate the profile image.
+- **`handleAuthClick()`** (`main.js`): When `window.location.protocol === 'file:'` and `window.NativeAuth` is available, uses native sign-in. Falls back to hosting redirect if native bridge unavailable.
+- **Package name**: Changed from `com.vocabmaster.app` to `com.kevinkicho.vocabmaster` to match the Firebase Android app in `google-services.json`.
+- **SHA-1**: Debug keystore fingerprint `96:5B:C6:8A:B2:BB:5E:FB:09:93:05:F5:7A:FE:42:06:EB:27:ED:E8` registered in Firebase Console.
+
+### Result
+Auth button now triggers native Google Sign-In directly from the APK. User sees Google account picker, signs in, and profile image appears in the topbar button. No hosting redirect needed.
+
+### Relevant Files
+- `android/app/src/main/java/com/vocabmaster/app/MainActivity.kt` — native sign-in implementation
+- `public/js/native_auth.js` — JS bridge for native auth
+- `public/js/main.js` — `handleAuthClick()` with native auth path
+- `public/index.html` — script loading order (native_auth.js before capacitor_tts_bridge.js)
+- `android/app/build.gradle.kts` — Firebase + Google Sign-In SDK dependencies, `applicationId = "com.kevinkicho.vocabmaster"`
+- `android/build.gradle.kts` — `com.google.gms.google-services` plugin
+- `google-services.json` — Firebase Android app config (also copied to `android/app/google-services.json`)
+
+### Prior Auth Work (also 2026-06-13)
+- **Auth button spinner-stuck bug fixed**: Two code paths (early return for anonymous + `.then()` callback) didn't reset button HTML after showing spinner. Both now reset to user icon.
+- **`getRedirectResult()` added** in `init()` to handle redirect auth results on app reload.
+- **Auth listener** keeps `onclick` handler for anonymous users (was `null` before, making button do nothing).
+
+---
 
 This document exists so future agents (and humans) can pick up context quickly without reading every past chat or old AGENTS.md files.
 

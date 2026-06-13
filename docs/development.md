@@ -16,6 +16,7 @@ vocabmaster-master/
 │   │   ├── analytics.js     # Per-word accuracy tracking
 │   │   ├── llm.js           # Ollama LLM integration
 │   │   ├── native_tts.js    # Android native TTS bridge
+│   │   ├── native_auth.js    # Android native Google Sign-In bridge
 │   │   ├── android_bridge.js # Android LLM bridge
 │   │   ├── game_core.js     # GameMode base class
 │   │   ├── game_flashcard.js
@@ -138,6 +139,21 @@ Deploy functions after changes to the proxy:
 cd functions && npm run build
 firebase deploy --only functions
 ```
+
+## Pre-generating AI Content
+
+### Grammar Gym (`scripts/pregenerate-grammar.js`)
+
+Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}`. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm.js`) to avoid ~30-100s waits on first visit.
+
+```bash
+cd scripts
+node pregenerate-grammar.js --service-account ../vocabmaster112225-1e8a10d5f0a9.json --skip-existing
+node pregenerate-grammar.js --service-account ../serviceAccountKey.json --dry-run --limit 5
+node pregenerate-grammar.js --service-account ../serviceAccountKey.json --lang ja --vocab-id 1759
+```
+
+Flags: `--dry-run`, `--limit N`, `--lang ja`, `--vocab-id N`, `--skip-existing`, `--ollama URL`, `--model NAME`, `--service-account PATH`. Validates 12 exercises, all type variants, and 6A/6B answer balance. 500ms delay between calls.
 
 ## CI/CD
 

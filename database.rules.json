@@ -27,6 +27,17 @@
         ".write": "auth != null",
         ".validate": "newData.hasChildren(['storyText', 'questions', 'lang', 'ts']) && newData.child('lang').isString() && newData.child('storyText').isString()"
       }
+    },
+    "grammar_exercises": {
+      ".read": true,
+      "$vocabId": {
+        "$lang": {
+          "$token": {
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['grammar', 'usage', 'example', 'exercises', 'model', 'ts'])"
+          }
+        }
+      }
     }
   }
 }

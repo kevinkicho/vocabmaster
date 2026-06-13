@@ -61,8 +61,8 @@ Auth button now triggers native Google Sign-In directly from the APK. User sees 
 This document exists so future agents (and humans) can pick up context quickly without reading every past chat or old AGENTS.md files.
 
 **See also**:
-- `docs/midterm-review-and-implementation-plan.md` — the dedicated honest checkpoint + prioritized forward plan.
-- `docs/retrospective-past-20-chats-story-llm-logging.md` — comprehensive documentation of work across the recent ~20 chats (Story/LLM debugging, logging implementation + limits, multiple deploys/verification cycles, RTDB analysis via service account, screenshots, user's ollama4android cloud revelation, why circles occurred, and honest assessment of process). Created at user's explicit request to stop quick fixes and consolidate history.
+- `docs/lessons-learned.md` — guardrails from past vocabulary generation failures.
+- `docs/medium-term-roadmap.md` — collections, review queue, Story + higher tiers.
 
 **Agency decision (2026-06)**: I have taken the lead and chosen the execution order:
 1. **Story fallback quality first** (improve the safety-net content that the RTDB logs proved is 100% of what users currently see — target-language micro-stories + real questions + honest "basic mode" indicator). This directly fixes the "quality so bad" experience with data we gathered.
@@ -748,7 +748,11 @@ Visual extraction (via multimodal read_file):
 - Web AI Proxy details: `docs/web-ai-parity-proxy-implementation.md`
 - Development commands & Android workflow: `docs/development.md`
 - Architecture overview: `docs/architecture.md`
-- Vocabulary enrichment history & lessons: `docs/lessons-learned.md` + `docs/implementation-plan-v2.md`
+- Vocabulary enrichment lessons: `docs/lessons-learned.md`
+- Medium-term roadmap (collections, review, higher tiers): `docs/medium-term-roadmap.md`
+- Audio & TTS architecture: `docs/audio-tts-architecture.md`
+- Telemetry & remote logging: `docs/telemetry-feedback.md`
+- Codebase modularization: `docs/codebase-modularization.md`
 - Main app entry: `public/js/main.js`, `public/index.html`
 - LLM core: `public/js/llm.js`
 - Settings: `public/js/preferences_registry.js`, `public/js/store.js`, `public/js/ui.js`

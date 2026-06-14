@@ -50,7 +50,7 @@ vocabmaster-master/
 
 **Tests are now automatically enforced before every APK/web asset build (prepare:android, sync, build:android):**
 - `package.json` now prefixes `prepare:android` (and thus `build:android` / `sync:android`) with `npm run validate`.
-- This runs the full suite (`node tests/check_critical.js && npm test`) — critical pre-build checks (syntax, class definitions, script load order in index.html, template balance, no stale references, JSON/HTML sanity, Android manifest notes, etc.) + all Vitest tests (310+ across llm, vocabulary, adaptive, collections/review, escape, config, etc.).
+- This runs the full suite (`node test/tools/check_critical.js && npm test`) — critical pre-build checks (syntax, class definitions, script load order in index.html, template balance, no stale references, JSON/HTML sanity, Android manifest notes, etc.) + all Vitest tests (310+ across llm, vocabulary, adaptive, collections/review, escape, config, etc.).
 - `build:android` now actually executes: validate + prepare (CSS + assets sync to android/app/src/main/assets/) + `cd android && ./gradlew clean assembleDebug --no-daemon` (expect "34 actionable tasks: 34 executed").
 
 ```bash

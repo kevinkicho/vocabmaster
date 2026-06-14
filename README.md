@@ -197,6 +197,24 @@ The Android wrapper (`android/`) loads from Firebase hosting by default. To use 
 
 ---
 
+## Test Structure
+
+```
+test/
+├── e2e/         # Playwright browser specs
+├── unit/        # Vitest unit tests
+├── audit/       # Standalone audit scripts (run with `npm run audit`)
+└── tools/       # One-off scripts (check_critical, ocr, etc.)
+```
+
+The `test/` folder is gitignored — generate it locally by following the layout above. Playwright config points to `test/e2e/`; unit tests run from `test/unit/`.
+
+## Firebase Android Setup (gitignored)
+
+`android/app/google-services.json` is **not** committed (contains API keys). For local builds, copy `android/app/google-services.json.example` and fill in your Firebase project credentials.
+
+---
+
 ## Documentation for Agents & Continuity
 
 See the `docs/` folder for living plans:

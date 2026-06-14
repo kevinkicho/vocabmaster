@@ -2,7 +2,7 @@
 Object.assign(Story.prototype, {
 
 // --- Main flow ---
-async startStory() {
+async startStory(forceAnew = false) {
         this.storyNum++;
         this._updateProgress();
 
@@ -43,30 +43,36 @@ async startStory() {
             return;
         }
 
-        // Priority 1: prefetched story (already generated in background via AI)
-        if (this._prefetched) {
-            L('[Story] Using prefetched story');
-            const p = this._prefetched;
+        // If user explicitly wants a fresh AI story, skip prefetch + cache and go straight to generation
+        if (forceAnew) {
+            L('[Story] User requested fresh AI generation (forceAnew)');
             this._prefetched = null;
-            this.storyWords = p.storyWords;
-            this.questions = p.questions;
-            this.qIndex = 0;
-            this._showStoryWithQuestions(p.storyPart, p.lang);
-            if (!p.fromCache) this._saveStoryToRTDB(p.storyPart, p.questions, p.storyWords, p.lang, p.rawText);
-            this._prefetchNext();
-            return;
-        }
+        } else {
+            // Priority 1: prefetched story (already generated in background via AI)
+            if (this._prefetched) {
+                L('[Story] Using prefetched story');
+                const p = this._prefetched;
+                this._prefetched = null;
+                this.storyWords = p.storyWords;
+                this.questions = p.questions;
+                this.qIndex = 0;
+                this._showStoryWithQuestions(p.storyPart, p.lang);
+                if (!p.fromCache) this._saveStoryToRTDB(p.storyPart, p.questions, p.storyWords, p.lang, p.rawText).catch(e => L('[Story] Save to RTDB error:', e));
+                this._prefetchNext();
+                return;
+            }
 
-        // Priority 2: cached story from RTDB (pre-generated via AI)
-        const cached = this._nextCachedStory();
-        if (cached) {
-            L('[Story] Serving cached story from RTDB');
-            this.storyWords = cached.storyWords;
-            this.questions = cached.questions;
-            this.qIndex = 0;
-            this._showStoryWithQuestions(cached.storyPart, cached.lang);
-            this._prefetchNext();
-            return;
+            // Priority 2: cached story from RTDB (pre-generated via AI)
+            const cached = this._nextCachedStory();
+            if (cached) {
+                L('[Story] Serving cached story from RTDB');
+                this.storyWords = cached.storyWords;
+                this.questions = cached.questions;
+                this.qIndex = 0;
+                this._showStoryWithQuestions(cached.storyPart, cached.lang);
+                this._prefetchNext();
+                return;
+            }
         }
 
         // Priority 3: generate fresh story via AI (mandatory)
@@ -162,10 +168,11 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
             }
 
             const onToken = (token) => {
+                if (this._destroyed) return;
                 storyText += token;
                 if (streamEl) {
                     streamEl.textContent = storyText.replace(/^STORY:\s*/i, '').trim();
-                    this.dom.body.scrollTop = this.dom.body.scrollHeight;
+                    if (this.dom.body) this.dom.body.scrollTop = this.dom.body.scrollHeight;
                 }
             };
 
@@ -184,6 +191,8 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
                 L('[Story] streamGenerate story error:', e);
                 this._swapModelIfNeeded();
             }
+
+            if (this._destroyed) return;
 
             if (storyText.trim().length < 5) this._swapModelIfNeeded();
 
@@ -263,17 +272,19 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
             btn.classList.remove('opacity-70', 'cursor-not-allowed', 'animate-pulse');
         }
 
-        this._saveStoryToRTDB(cleanStory, this.questions, storyWordsObjs, lang, storyText + '\\n\\n' + qText);
+        this._saveStoryToRTDB(cleanStory, this.questions, storyWordsObjs, lang, storyText + '\\n\\n' + qText).catch(e => L('[Story] Save to RTDB error:', e));
         this._prefetchNext();
     },
 
     _swapModelIfNeeded() {
-        if (app.llm && !app.llm.useCloud) {
-            L('[Story] Swapping local model for next retry.');
-            const cands = app.llm._getLocalCandidates ? app.llm._getLocalCandidates() : [];
+        const cands = (app.llm && app.llm.availableModels) || [];
+        if (cands.length > 1) {
             const current = app.llm.resolvedModel;
-            const next = cands.find(m => m !== current) || 'gemma';
-            app.llm.resolvedModel = next;
+            const next = cands.find(m => m !== current);
+            if (next) {
+                L('[Story] Swapping to next model:', next);
+                app.llm.resolvedModel = next;
+            }
         }
     },
 

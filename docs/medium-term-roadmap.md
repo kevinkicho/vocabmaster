@@ -175,14 +175,14 @@
 - **Phase 3 Story Polish**: _reviewStoryWords() after last question offers direct "Review words from this story" which seeds specific review + launches Quiz. Higher tiers visible via collection filter in word picking. Ties review queue + collections + Story.
 - **Verification (self-run)**: `npm run prepare:android` and `npm run build` executed successfully (Tailwind compiled, public/ synced to android/assets/). Code inspection (grep/read) confirms: collection-picker dropdown (dynamic via listCollections), launchSmartReview button+method, _reviewStoryWords integration, getReviewWords/start*Review in data.js. Data files (tier1_enriched.json, jlpt-words-full.json) contain "level" and "tags" arrays with N5/N3 etc. values. Assets present post-sync. Full interactive UI testing (clicks, Story flow) requires manual launch (npx serve public or APK) as no browser runtime here.
 - **New Test Suites (added this session per request)**: 
-  - Enhanced `tests/check_critical.js` (node pre-build smoke): now covers vocabulary-collections (tiers + API), data review methods (getReviewWords, start/end/specific), Story _reviewStoryWords + _pickWords collection support + dark container fix, prefs_registry, main inits, etc. Catches init syntax/defs/order/missing criticals + key runtime patterns before any deploy.
+  - Enhanced `test/tools/check_critical.js` (node pre-build smoke): now covers vocabulary-collections (tiers + API), data review methods (getReviewWords, start/end/specific), Story _reviewStoryWords + _pickWords collection support + dark container fix, prefs_registry, main inits, etc. Catches init syntax/defs/order/missing criticals + key runtime patterns before any deploy.
   - New `tests/collections_review.test.js` (Vitest): unit tests for collections filtering by tier, listCollections, getWordsForCollection, DataService getFilteredList+review queue (with mocks for analytics/adaptive), startReviewSession, Story integration paths.
   - `package.json`: added `validate` and `validate:critical`.
   - `docs/development.md`: recommend `npm run validate` before prepare:android / firebase / gradle.
   - These will prevent pushing broken inits (missing classes, bad load order, missing collections) or runtime (broken review, collection scoping, Story word pick) without catching them first.
 
 **Validation Run Results (executed live, including user's run and post-fix tool runs)**:
-- `npm run validate:critical` (node tests/check_critical.js): **ALL CHECKS PASSED** ("ALL CHECKS PASSED — No critical errors detected."). 
+- `npm run validate:critical` (node test/tools/check_critical.js): **ALL CHECKS PASSED** ("ALL CHECKS PASSED — No critical errors detected."). 
   - Syntax + critical defs for all new medium-term (collections, review queue, Story _review + dark fix + pickWords) + legacy: green.
 - `npm test` (Vitest): In user's paste: 3 failures in collections_review.test.js + llm.test.js ReferenceError (L not defined) + many skipped.
   - Root causes (in test code only): 

@@ -9,7 +9,6 @@ Object.assign(UIManager.prototype, {
                 settingsList.innerHTML = window.SETTINGS_HTML;
             }
             this.renderPresetsUI(); this.renderThemeGrid(); this.renderLevelFilter();
-            this.renderCollectionsInSettings();  // surface collections inside settings (suggestion)
             this.renderFontsAccordion();
             this.renderAISettings();
             this.ensureActivitySections();  // generate from schema to reduce HTML bloat
@@ -48,10 +47,6 @@ Object.assign(UIManager.prototype, {
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
-            // Robustness + collections always fresh on open (even if settings re-rendered)
-            if (typeof this.renderCollectionsInSettings === 'function') {
-                try { this.renderCollectionsInSettings(); } catch(e){}
-            }
         } catch(e) { L("Error loading settings UI:", e); }
     },
 
@@ -359,45 +354,6 @@ Object.assign(UIManager.prototype, {
         });
     },
 
-    renderCollectionsInSettings() {
-        const list = document.getElementById('settings-list');
-        if (!list) return;
-        // Re-use or recreate for freshness (picker options may be dynamic)
-        let div = document.getElementById('collections-in-settings');
-        if (div) div.remove();
-        div = document.createElement('div');
-        div.id = 'collections-in-settings';
-        div.className = 'bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 mb-2';
-        let html = `<p class="text-xs font-black text-emerald-500 uppercase tracking-widest mb-2"><i class="ph-bold ph-list"></i> Collections (Medium-term)</p>`;
-        const cols = (typeof listCollections === 'function') ? listCollections() : [];
-        html += `<select id="settings-collection-picker" class="w-full text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1">`;
-        cols.forEach(c => {
-            html += `<option value="${c.id}">${c.name} — ${c.description || ''}</option>`;
-        });
-        html += `</select><p class="text-[9px] text-emerald-600 mt-1">Active collection scopes games, review queue and Story word selection. Change also from home screen. (Persisted via prefs + registry default.)</p>`;
-        div.innerHTML = html;
-        // insert after level filter (or global visual) for prominence
-        const level = document.getElementById('level-filter-container');
-        const anchor = level && level.parentNode ? level : document.querySelector('#settings-list > div.bg-slate-100');
-        if (anchor && anchor.parentNode) {
-            anchor.parentNode.insertBefore(div, anchor.nextSibling);
-        } else {
-            list.appendChild(div);
-        }
-        const sel = document.getElementById('settings-collection-picker');
-        const current = (this.data && this.data.currentCollection) || (this.store && this.store.prefs && this.store.prefs.currentCollection) || 'all';
-        if (sel) {
-            sel.value = current;
-            sel.onchange = () => {
-                if (app && app.setCollection) {
-                    app.setCollection(sel.value);
-                    // keep home picker in sync if present
-                    const homePicker = document.getElementById('collection-picker');
-                    if (homePicker) homePicker.value = sel.value;
-                }
-            };
-        }
-    },
 
     renderSettingsUI() {
         const p = this.store.prefs;

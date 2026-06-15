@@ -42,7 +42,7 @@ class AnalyticsService {
     // --- Flushing ---
     async flush() {
         if (!this.buffer.length && !this.sessions.length) return;
-        if (!auth || !auth.currentUser || auth.currentUser.isAnonymous) {
+        if (!auth || !auth.currentUser) {
             this._saveBuffer();
             return;
         }
@@ -209,7 +209,7 @@ class AnalyticsService {
 
     // --- Stats Retrieval (only called from stats modal) ---
     async getWordStats() {
-        if (!auth || !auth.currentUser || !db || auth.currentUser.isAnonymous) return null;
+        if (!auth || !auth.currentUser || !db) return null;
         try {
             const snap = await db.ref(`users/${auth.currentUser.uid}/words`).once('value');
             return snap.val();
@@ -217,7 +217,7 @@ class AnalyticsService {
     }
 
     async getAnalytics() {
-        if (!auth || !auth.currentUser || !db || auth.currentUser.isAnonymous) return null;
+        if (!auth || !auth.currentUser || !db) return null;
         try {
             const snap = await db.ref(`users/${auth.currentUser.uid}/analytics`).once('value');
             return snap.val();

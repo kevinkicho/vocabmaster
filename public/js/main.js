@@ -132,7 +132,7 @@ class App {
 
         try { this.store = new Store(); } catch (e) {
             L("FATAL: Store constructor failed:", e);
-            alert("Fatal Error: Cannot load settings. " + e.message);
+            try { this.ui.showToast("Fatal Error: Cannot load settings. " + e.message, 'error'); } catch(_) { console.error("Fatal:", e); }
             this._fatalError = true;
             return;
         }
@@ -390,7 +390,7 @@ class App {
                     L("Native Auth Error:", e);
                     resetBtn();
                     if (e.message && !e.message.includes('12501')) {
-                        alert("Login Failed: " + e.message);
+                        app.ui.showToast("Login Failed: " + e.message, 'error');
                     }
                 });
             } else if (isFileOrigin) {
@@ -400,7 +400,7 @@ class App {
                     L("Login Error:", e);
                     resetBtn();
                     if (e.code !== 'auth/popup-closed-by-user') {
-                        alert("Login Failed: " + e.message);
+                        app.ui.showToast("Login Failed: " + e.message, 'error');
                     }
                 });
             }
@@ -541,7 +541,7 @@ class App {
             history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
         } catch(e) {
             L("Launch Error:", e.stack || e);
-            alert("Failed to start game: " + e.message + "\n\nCheck console for details.");
+            if (app.ui && app.ui.showToast) app.ui.showToast("Failed to start game: " + e.message, 'error');
             this.goHome(false);
         }
     }
@@ -574,7 +574,7 @@ class App {
                 origDestroy();
             };
         } else {
-            alert("Not enough data for review yet. Play some games first!");
+            if (app.ui && app.ui.showToast) app.ui.showToast("Not enough data for review yet. Play some games first!", 'warning');
             this.goHome(false);
         }
     }

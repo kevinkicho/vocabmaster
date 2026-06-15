@@ -470,7 +470,7 @@ Object.assign(UIManager.prototype, {
     },
     copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; el.select(); document.execCommand('copy'); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); },
     downloadLogs() {
-        if (!window.logBuffer || window.logBuffer.length === 0) { alert('No logs captured yet.'); return; }
+        if (!window.logBuffer || window.logBuffer.length === 0) { app.ui.showToast('No logs captured yet.', 'warning'); return; }
         const content = window.logBuffer.join('\n') + '\n\n--- End of VocabMaster debug log (' + new Date().toISOString() + ') ---';
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -510,7 +510,7 @@ Object.assign(UIManager.prototype, {
         const area = document.getElementById('rtdb-log-area');
         const statusEl = document.getElementById('rtdb-log-status');
         if (!area || !db || !auth || !auth.currentUser) {
-            alert('RTDB logs not available (no auth or no db).');
+            app.ui.showToast('RTDB logs not available (no auth or no db).', 'warning');
             return;
         }
         try {
@@ -536,7 +536,7 @@ Object.assign(UIManager.prototype, {
     },
 
     async downloadRTDBLogs() {
-        if (!db || !auth || !auth.currentUser) { alert('Cannot reach RTDB (no current user).'); return; }
+        if (!db || !auth || !auth.currentUser) { app.ui.showToast('Cannot reach RTDB (no current user).', 'error'); return; }
         try {
             const uid = auth.currentUser.uid;
             const sess = window.VM_SESSION_ID || 'default';
@@ -563,7 +563,7 @@ Object.assign(UIManager.prototype, {
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch(e) {
-            alert('RTDB download failed: ' + (e.message || e));
+            app.ui.showToast('RTDB download failed: ' + (e.message || e), 'error');
         }
     },
 
@@ -579,7 +579,7 @@ Object.assign(UIManager.prototype, {
             if (st) st.textContent = 'Remote logs cleared for this uid.';
             try { localStorage.removeItem('vm_last_rtdb_push'); } catch(e) {}
         } catch(e) {
-            alert('Clear remote failed: ' + (e.message || e));
+            app.ui.showToast('Clear remote failed: ' + (e.message || e), 'error');
         }
     },
 

@@ -46,7 +46,7 @@ Object.assign(UIManager.prototype, {
 
     dumpVoices() {
         const voices = app.audio ? app.audio.voices : [];
-        if (voices.length === 0) { alert('No voices loaded yet. Tap Detect first, then Dump.'); return; }
+        if (voices.length === 0) { app.ui.showToast('No voices loaded yet. Tap Detect first, then Dump.', 'warning'); return; }
         const sample = voices.slice(0, 10).map(v => ({
             name: v.name,
             lang: v.lang,
@@ -309,7 +309,7 @@ Object.assign(UIManager.prototype, {
 
     async runAIAnalysis() {
         if (!app.llm || !app.llm.available || !app.llm.hasModel) {
-            alert('AI not connected. For local ollama4android set OLLAMA_ENDPOINT=http://127.0.0.1:11434 in ollama_config.js (no key). For cloud use the key. Then tap Retry or reopen Settings.');
+            app.ui.showToast('AI not connected. For local ollama4android set OLLAMA_ENDPOINT=http://127.0.0.1:11434 in ollama_config.js (no key). For cloud use the key. Then tap Retry or reopen Settings.', 'error');
             return;
         }
         const btn = document.getElementById('btn-run-ai-analysis');
@@ -317,7 +317,7 @@ Object.assign(UIManager.prototype, {
         try {
             const analysis = await app.llm.analyzeLearningPatterns();
             if (!analysis) {
-                alert('Not enough data yet. Keep using the app for at least 3 sessions.');
+                app.ui.showToast('Not enough data yet. Keep using the app for at least 3 sessions.', 'warning');
                 return;
             } else if(analysis.recommendations && analysis.recommendations.length > 0) {
                 const promptAdjustments = {};
@@ -326,13 +326,13 @@ Object.assign(UIManager.prototype, {
                     promptAdjustments[role] = r.description;
                 });
                 await app.llm.applyPromptAdjustments(promptAdjustments);
-                alert(`Analysis complete! ${analysis.recommendations.length} suggestions ready for your review.`);
+                app.ui.showToast(`Analysis complete! ${analysis.recommendations.length} suggestions ready for your review.`, 'success');
             } else {
-                alert('Analysis ran but no adjustments needed. Your AI prompts are well-tuned!');
+                app.ui.showToast('Analysis ran but no adjustments needed. Your AI prompts are well-tuned!', 'info');
             }
         } catch(e) {
             L('[AI Settings] Analysis failed:', e);
-            alert('Analysis failed: ' + e.message);
+            app.ui.showToast('Analysis failed: ' + e.message, 'error');
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magnifying-glass mr-1"></i> Analyze Now'; }
             this.renderAISettings();
@@ -356,7 +356,7 @@ Object.assign(UIManager.prototype, {
         if (!app.learningLoop) return;
         await app.learningLoop.resetAllTemplates();
         this.renderAISettings();
-        alert('AI templates reset to defaults.');
+        app.ui.showToast('AI templates reset to defaults.', 'success');
     },
 
     showPromptTuningBanner(changes) {

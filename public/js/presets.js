@@ -8,7 +8,7 @@ class PresetManager {
 
     apply(sourceKey, targetKey) {
         if (!sourceKey || !targetKey || sourceKey === targetKey) {
-            alert("Please select two different languages.");
+            app.ui.showToast("Please select two different languages.", 'warning');
             return;
         }
         const source = this.getLang(sourceKey);

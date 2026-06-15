@@ -1,72 +1,41 @@
 /* js/llm.js */
 class LLMService {
     constructor() {
-        // Support local Ollama (e.g. ollama4android on http://127.0.0.1:11434) or cloud.
-        // Set in ollama_config.js:
-        //   window.OLLAMA_ENDPOINT = "http://127.0.0.1:11434";   // for local on-device
-        //   window.OLLAMA_USE_CLOUD = false;
-        // or for cloud:
-        //   window.OLLAMA_USE_CLOUD = true; window.OLLAMA_API_KEY = "...";
-        const explicitEndpoint = (typeof window !== 'undefined') ? window.OLLAMA_ENDPOINT : null;
-        this.useCloud = !explicitEndpoint && !!(typeof window !== 'undefined' && window.OLLAMA_USE_CLOUD && window.OLLAMA_API_KEY);
-        this.endpoint = explicitEndpoint || (this.useCloud ? (window.OLLAMA_CLOUD_ENDPOINT || 'https://api.ollama.com') : 'http://127.0.0.1:11434');
-        // On Android APK (with native TTS bridge), strongly prefer local ollama4android on 11434
-        // so we don't accidentally hit cloud or require model selection in the app.
-        if (!explicitEndpoint && (window.NativeTTS || window.Capacitor) && !this.useCloud) {
-            this.endpoint = 'http://127.0.0.1:11434';
-            this.useCloud = false;
-        }
-        this.apiKey = this.useCloud ? window.OLLAMA_API_KEY : null;
+        // Always local: ollama4android on http://127.0.0.1:11434
+        // ollama_config.js sets window.OLLAMA_ENDPOINT, but we always default to local for APK
+        this.endpoint = 'http://127.0.0.1:11434';
+        this.useCloud = false;
+        this.apiKey = null;
         this.model = '';
         this.available = false;
         this.availableModels = [];
         this.hasModel = false;
-        this.useDirectHTTP = true;
-        this.useNativeBridge = false;
-        this.isWebOrigin = (typeof location !== 'undefined' && location.protocol === 'https:' && location.hostname !== 'localhost');
-        this.proxyUrl = (typeof window !== 'undefined' && (window.OLLAMA_PROXY_URL || window.OLLAMA_CLOUD_PROXY_URL))
-            || 'https://us-central1-vocabmaster112225.cloudfunctions.net/ollamaProxy'; // default for this project — override via window.OLLAMA_PROXY_URL if region differs
+        this.resolvedModel = null;
         this.cache = new Map();
         this.db = null;
         this._queue = Promise.resolve();
         this._initDB();
         if (typeof this.initValidator === 'function') this.initValidator();
-        L('[LLM] Endpoint configured:', this.endpoint, this.useCloud ? '(cloud)' : '(local)');
-    }
-
-    _getLocalCandidates() {
-        const all = this.availableModels || [];
-        if (this.useCloud) return all;
-        // When forcing local (ollama4android on 11434), skip any cloud-proxied models
-        // that ollama4android may advertise (they require subscription on their cloud).
-        return all.filter(m => {
-            const s = String(m || '').toLowerCase();
-            return !s.includes('cloud') && !s.includes('ollama.com');
-        });
+        L('[LLM] Endpoint configured:', this.endpoint);
     }
 
     _pickBestLocalModel() {
-        const cands = this._getLocalCandidates();
-        if (cands.length === 0) return null;
-        // Prefer known-good local models that are likely to be actually loaded and runnable locally in ollama4android.
-        const preferred = ['gemma2:27b', 'gemma2:9b', 'llama3.1:70b', 'llama3.1:8b', 'mistral-nemo:12b', 'qwen2.5', 'gemma'];
-        for (const p of preferred) {
-            const found = cands.find(m => m.toLowerCase().includes(p.toLowerCase()));
-            if (found) return found;
+        const cands = this.availableModels || [];
+        const preferred = 'gemma4:31b-cloud';
+        const found = cands.find(m => m.toLowerCase() === preferred);
+        if (found) return found;
+        if (cands.length === 0) return preferred;
+        if (this.resolvedModel && this.resolvedModel === preferred) return preferred;
+        const localCands = cands.filter(m => !m.toLowerCase().includes('cloud') && !m.includes('ollama.com'));
+        if (localCands.length > 0) {
+            const prefOrder = ['gemma2:27b', 'llama3.1:70b', 'mistral-nemo:12b'];
+            for (const p of prefOrder) {
+                const match = localCands.find(m => m.toLowerCase() === p);
+                if (match) return match;
+            }
+            return localCands[0];
         }
         return cands[0];
-    }
-
-    _getSafeLocalModel() {
-        // Always return a safe non-cloud model name for local ollama4android requests.
-        // Prefer gemma2:27b (common in ollama4android local setups), fall back to first local cand or 'gemma'.
-        const cands = this._getLocalCandidates();
-        const preferred = ['gemma2:27b', 'gemma2:9b', 'llama3.1:8b', 'gemma'];
-        for (const p of preferred) {
-            const found = cands.find(m => m.toLowerCase().includes(p.toLowerCase()));
-            if (found) return found;
-        }
-        return cands[0] || 'gemma';
     }
 
     // Native HTTP proxy — bypasses CORS in Capacitor WebView
@@ -97,18 +66,15 @@ class LLMService {
     }
 
     _isBrowserWeb() {
-        if (typeof window === 'undefined') return false;
-        if (window.NativeTTS || window.Capacitor) return false; // native bridge wins (Android)
-        const host = (typeof location !== 'undefined') ? location.hostname : '';
-        return location.protocol === 'https:' && host !== 'localhost' && host !== '127.0.0.1';
+        // Always false for APK — we connect directly to ollama4android
+        return false;
     }
 
     /**
-     * Unified Ollama call that routes through Firebase proxy on pure web
-     * (for full AI parity between web and Android).
+     * Unified Ollama call — direct HTTP to local endpoint
      */
     async _ollamaRequest(path, payload, { stream = false, timeout = 45000, method = null } = {}) {
-        const useProxy = this._isBrowserWeb() && this.proxyUrl;
+        const useProxy = false;
 
         // For local Ollama, /api/tags must be GET (no body). Cloud/proxy paths stay POST-wrapped.
         const isTags = path === '/api/tags' || path.endsWith('/tags');
@@ -159,73 +125,54 @@ class LLMService {
         return resp.json();
     }
 
-
     // --- Preferences ---
     loadPrefs() {
-        const p = app.store.prefs;
-        // Respect explicit OLLAMA_ENDPOINT for local (ollama4android etc.)
-        const explicitEndpoint = (typeof window !== 'undefined') ? window.OLLAMA_ENDPOINT : null;
-        this.endpoint = explicitEndpoint || window.OLLAMA_CLOUD_ENDPOINT || (window.OLLAMA_USE_CLOUD ? 'https://api.ollama.com' : 'http://127.0.0.1:11434');
-        this.useCloud = !explicitEndpoint && !!(window.OLLAMA_USE_CLOUD && window.OLLAMA_API_KEY);
-        this.apiKey = this.useCloud ? window.OLLAMA_API_KEY : null;
-        // On Android APK, force local
-        if (!explicitEndpoint && (window.NativeTTS || window.Capacitor) && !this.useCloud) {
-            this.endpoint = 'http://127.0.0.1:11434';
-            this.useCloud = false;
-        }
+        this.endpoint = 'http://127.0.0.1:11434';
+        this.useCloud = false;
+        this.apiKey = null;
+        const p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
         this.model = p.llmModel || '';
-        // Only force cloud free-tier models if using cloud and no explicit model
-        if (this.useCloud && (!p.llmModel || !['gemma4:31b', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3:1b'].includes(p.llmModel))) {
-            this.model = '';
-        }
     }
 
     // --- Auto-detect: always probe on startup ---
     async autoDetect() {
-        L('[LLM] autoDetect for', this.useCloud ? 'Cloud' : 'Local', 'endpoint:', this.endpoint);
+        L('[LLM] autoDetect endpoint:', this.endpoint);
 
         const ok = await this.checkConnection();
         L('[LLM] checkConnection result:', ok, 'models:', JSON.stringify(this.availableModels));
+
+        const preferred = 'gemma4:31b-cloud';
+        const inTags = this.availableModels.some(m => m.toLowerCase() === preferred);
+
         if (ok && this.availableModels.length > 0) {
-            const norm = (n) => (n || '').replace(/[:\-_]/g, '').toLowerCase();
-            let chosen = null;
-
-            if (this.useCloud) {
-                // Cloud: prefer free tier models
-                const FREE_TIER = ['gemma4:31b', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3:1b'];
-                if (this.model) {
-                    const wanted = norm(this.model);
-                    chosen = this.availableModels.find(m => norm(m) === wanted && FREE_TIER.some(ft => norm(ft) === norm(m)));
-                }
-                if (!chosen) {
-                    for (const ft of FREE_TIER) {
-                        chosen = this.availableModels.find(m => norm(m).includes(norm(ft)));
-                        if (chosen) break;
-                    }
-                }
+            if (inTags) {
+                this.resolvedModel = preferred;
+                this.hasModel = true;
+                L('[LLM] Found', preferred, 'in tags');
             } else {
-                // Local (e.g. ollama4android): prefer known good local models, skip cloud.
-                if (this.model) {
-                    const c = this._getLocalCandidates();
-                    chosen = c.find(m => norm(m) === norm(this.model));
+                // gemma4 not listed in tags. Try generating with it directly
+                // (ollama4android cloud models may be loaded in memory but not listed)
+                L('[LLM]', preferred, 'not in tags — probing directly...');
+                try {
+                    const resp = await this._ollamaRequest('/api/generate', {
+                        model: preferred,
+                        prompt: 'Say ok',
+                        stream: false
+                    }, { stream: false, timeout: 10000 });
+                    if (resp && resp.response) {
+                        this.resolvedModel = preferred;
+                        this.hasModel = true;
+                        L('[LLM]', preferred, 'responds — using it');
+                    } else {
+                        throw new Error('empty response');
+                    }
+                } catch (e) {
+                    L('[LLM]', preferred, 'not reachable, falling back to local model');
+                    this.resolvedModel = this._pickBestLocalModel();
+                    this.hasModel = true;
                 }
-                if (!chosen) chosen = this._pickBestLocalModel();
             }
-            if (!chosen) {
-                chosen = this._getSafeLocalModel();
-            }
-
-            // Defensive: never allow a cloud model to be resolved in local mode
-            if (chosen && !this.useCloud && /cloud|ollama\.com/i.test(String(chosen))) {
-                chosen = this._getSafeLocalModel();
-            }
-
-            this.resolvedModel = chosen;
-            this.hasModel = true;
             L('[LLM] Ready with model:', this.resolvedModel);
-            if (!this.useCloud) {
-                L('[LLM] Local mode - filtered non-cloud candidates:', this._getLocalCandidates());
-            }
             this._showAIWelcome();
             if (app && app.ui) app.ui.renderAISettings();
             if (app && !app.game) app.goHome(false);
@@ -256,90 +203,67 @@ class LLMService {
         return this._queue;
     }
 
-    // --- Non-streaming generation (direct HTTP preferred) ---
+    // --- Non-streaming generation ---
     async generate(opts) {
         let model = this.resolvedModel || this.model;
-        
-        // For local (ollama4android etc.), respect the model chosen by user in ollama4android or first available.
-        // Only force cloud free-tier when using cloud and no suitable model yet.
-        if (this.useCloud) {
-            const FREE_TIER = ['gemma4:31b', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3:1b'];
-            const norm = (n) => (n || '').replace(/[:\-_]/g, '').toLowerCase();
-            if (!model || !FREE_TIER.some(ft => norm(ft) === norm(model))) {
-                const available = this.availableModels || [];
-                model = available.find(m => FREE_TIER.some(ft => norm(ft) === norm(m))) || FREE_TIER[0];
-                this.resolvedModel = model;
-            }
-        } else if (!model && this.availableModels && this.availableModels.length > 0) {
-            // Local: prefer known good local model (user manages in ollama4android)
-            model = this._getSafeLocalModel();
+        if (!model && this.availableModels && this.availableModels.length > 0) {
+            model = this._pickBestLocalModel();
             this.resolvedModel = model;
-        }
-
-        if (!this.useCloud) {
-            // Force a safe local model name for the actual request body. This prevents ollama4android from seeing a cloud name and proxying.
-            model = this._getSafeLocalModel();
         }
         
         const body = {
-            model: model || 'gemma', // last resort fallback
+            model: model || 'gemma4:31b-cloud',
             prompt: opts.prompt,
             stream: false,
             ...(opts.system && { system: opts.system }),
             ...(opts.options && { options: opts.options })
         };
 
-        L('[LLM] generate sending to', this.endpoint, 'model=', body.model, 'useCloud=', this.useCloud);
+        L('[LLM] generate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
 
         return this._enqueue(async () => {
-            const data = await this._ollamaRequest('/api/generate', body, {
-                stream: false,
-                timeout: opts.timeout || 45000
-            });
-            return data.response || '';
+            try {
+                const data = await this._ollamaRequest('/api/generate', body, {
+                    stream: false,
+                    timeout: opts.timeout || 45000
+                });
+                return data.response || '';
+            } catch (err) {
+                L('[LLM] Ollama generate failed:', err.message);
+                throw err;
+            }
         });
     }
 
     // --- Streaming generation (for Story mode) ---
     async streamGenerate(opts, onToken) {
         let model = this.resolvedModel || this.model;
-        
-        if (this.useCloud) {
-            const FREE_TIER = ['gemma4:31b', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3:1b'];
-            const norm = (n) => (n || '').replace(/[:\-_]/g, '').toLowerCase();
-            if (!model || !FREE_TIER.some(ft => norm(ft) === norm(model))) {
-                model = FREE_TIER[0];
-                this.resolvedModel = model;
-            }
-        } else if (!model && this.availableModels && this.availableModels.length > 0) {
-            // Local ollama4android: prefer known good local model (user selects inside ollama4android)
-            model = this._getSafeLocalModel();
+        if (!model && this.availableModels && this.availableModels.length > 0) {
+            model = this._pickBestLocalModel();
             this.resolvedModel = model;
         }
 
-        if (!this.useCloud) {
-            // Force a safe local model name for the actual request body. This prevents ollama4android from seeing a cloud name and proxying.
-            model = this._getSafeLocalModel();
-        }
-
         const body = {
-            model: model || 'gemma',
+            model: model || 'gemma4:31b-cloud',
             prompt: opts.prompt,
             stream: true,
             ...(opts.system && { system: opts.system }),
             ...(opts.options && { options: opts.options })
         };
 
-        L('[LLM] streamGenerate sending to', this.endpoint, 'model=', body.model, 'useCloud=', this.useCloud);
+        L('[LLM] streamGenerate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
 
         return this._enqueue(async () => {
-            const resp = await this._ollamaRequest('/api/generate', body, {
-                stream: true,
-                timeout: opts.timeout || 180000
-            });
-            if (!resp.ok) {
-                L('[LLM] streamGenerate HTTP error', resp.status);
-                throw new Error('HTTP ' + resp.status);
+            let resp;
+            try {
+                resp = await this._ollamaRequest('/api/generate', body, {
+                    stream: true,
+                    timeout: opts.timeout || 180000
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            } catch (err) {
+                L('[LLM] Ollama streamGenerate failed:', err.message);
+                throw err;
             }
 
             const reader = resp.body.getReader();
@@ -391,75 +315,10 @@ class LLMService {
     }
 
     _showAIWelcome() {
-        if (localStorage.getItem('vm_ai_welcomed')) {
-            const label = this.useCloud ? this.resolvedModel : 'local (ollama4android)';
-            this._showToast(`AI enabled — ${label}`, 'ph-check-circle', 'text-emerald-500');
-            return;
-        }
-
-        const modelName = this.resolvedModel || this.model;
-        const isLocal = !this.useCloud;
-        const poweredBy = isLocal ? 'Local AI (ollama4android)' : `Cloud (${escapeHtml(modelName)})`;
-
-        const el = document.createElement('div');
-        el.id = 'ai-welcome';
-        el.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
-        el.innerHTML = `
-            <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="document.getElementById('ai-welcome').remove()"></div>
-            <div class="relative surface-primary rounded-3xl shadow-2xl w-full max-w-sm overflow-y-auto max-h-[85vh] transform transition-all duration-300 scale-95 opacity-0" id="ai-welcome-inner">
-
-                <!-- Header gradient -->
-                <div class="bg-gradient-to-br from-cyan-500 via-indigo-500 to-purple-500 p-5 text-center">
-                    <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center mx-auto mb-2 shadow-lg">
-                        <i class="ph-duotone ph-brain text-3xl text-white"></i>
-                    </div>
-                    <h2 class="text-lg font-black text-on-color">AI Enabled</h2>
-                    <p class="text-xs text-white/80 mt-1">${poweredBy}</p>
-                </div>
-
-                <div class="p-4 space-y-3">
-
-                    <!-- Feature: Smart Cloze -->
-                    <div class="flex items-start gap-3">
-                        <div class="shrink-0 w-7 h-7 rounded-xl bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
-                            <i class="ph-bold ph-text-aa text-cyan-500"></i>
-                        </div>
-                        <div>
-                            <p class="text-xs font-bold text-primary">Smart Cloze</p>
-                            <p class="text-[10px] text-secondary mt-0.5">AI identifies conjugated words in sentences for accurate fill-in-the-blank.</p>
-                        </div>
-                    </div>
-
-                    <!-- Privacy note -->
-                    <div class="surface-secondary rounded-xl p-2 flex items-start gap-2">
-                        <i class="ph-bold ph-shield-check text-xs text-muted mt-0.5 shrink-0"></i>
-                        <p class="text-[10px] text-muted">AI via configured endpoint (local 11434 or cloud). See ollama_config.js.</p>
-                    </div>
-                </div>
-
-                <!-- CTA -->
-                <div class="px-4 pb-4">
-                    <button id="ai-welcome-ok" class="w-full py-2.5 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
-                        Got it, let's go!
-                    </button>
-                </div>
-            </div>`;
-
-        document.body.appendChild(el);
-
-        document.getElementById('ai-welcome-ok').onclick = () => {
-            localStorage.setItem('vm_ai_welcomed', '1');
-            const inner = document.getElementById('ai-welcome-inner');
-            if (inner) { inner.style.scale = '0.95'; inner.style.opacity = '0'; }
-            el.querySelector('.bg-black\\/40').style.opacity = '0';
-            setTimeout(() => el.remove(), 300);
-        };
-
-        // Animate in
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            const inner = document.getElementById('ai-welcome-inner');
-            if (inner) { inner.style.scale = '1'; inner.style.opacity = '1'; }
-        }));
+        // Brief toast only — the full-screen welcome dialog is too intrusive on first launch
+        // and appears behind the splash overlay (z-[100]) then becomes visible after it fades.
+        const label = this.useCloud ? this.resolvedModel : 'local (ollama4android)';
+        this._showToast(`AI enabled — ${label}`, 'ph-check-circle', 'text-emerald-500');
     }
 
     static LEVEL_DIFFICULTY_MAP = {
@@ -473,6 +332,28 @@ class LLMService {
         'B2': 'upper intermediate (B2)', 'C1': 'advanced (C1)', 'C2': 'proficient (C2)'
     };
 
+    static GRAMMAR_LABEL_PAIRS = {
+        text_dm: ['Send this', 'Sounds wrong'],
+        you_decide: ['Say this', 'Too risky'],
+        fix_sign: ['Fixed!', 'Leave it'],
+        translation_fail: ['Fix it', 'Keep it'],
+        culture_check: ['Polite', 'Too blunt'],
+        declarative: ['Sounds right', 'Wrong form'],
+        interrogative: ['Good question', 'Not quite'],
+        imperative: ['Say this', 'Too bossy'],
+        exclamative: ['Nice!', 'Odd'],
+        operative: ['Sounds right', 'Wrong tone'],
+        conditional: ['Makes sense', "Doesn't fit"],
+        exhortation: ['Encouraging', 'Too pushy'],
+    };
+
+    static resolveLabels(type, answer) {
+        const pair = LLMService.GRAMMAR_LABEL_PAIRS[type];
+        if (!pair) return { labelA: '', labelB: '' };
+        const [pos, neg] = pair;
+        if (answer === 'A') return { labelA: pos, labelB: neg };
+        return { labelA: neg, labelB: pos };
+    }
 
     // --- Helpers ---
     _getLangName(code) {
@@ -846,12 +727,15 @@ class LLMResponseValidator {
                     if (rules.maxItems && val.length > rules.maxItems) {
                         return { valid: false, error: `${key} exceeds max ${rules.maxItems} items` };
                     }
-                    // Validate array items
+                    // Validate array items (only check required fields + present fields)
                     if (rules.items && rules.items.properties) {
+                        const itemRequired = rules.items.required || [];
                         for (let i = 0; i < val.length; i++) {
                             const item = val[i];
                             for (const [itemKey, itemRules] of Object.entries(rules.items.properties)) {
-                                if (!(itemKey in item)) return { valid: false, error: `${key}[${i}].${itemKey} missing` };
+                                const isRequired = itemRequired.includes(itemKey);
+                                if (isRequired && !(itemKey in item)) return { valid: false, error: `${key}[${i}].${itemKey} missing` };
+                                if (!(itemKey in item)) continue;
                                 if (itemRules.enum && !itemRules.enum.includes(item[itemKey])) {
                                     return { valid: false, error: `${key}[${i}].${itemKey} must be ${itemRules.enum.join('/')}` };
                                 }
@@ -924,7 +808,8 @@ class LLMResponseValidator {
     async generateValidated(schemaName, promptBuilder, ...promptArgs) {
         let lastError = '';
         const isStory = schemaName === 'storyWithQuestions';
-        const baseTokens = isStory ? 1024 : 384;
+        const isGrammar = schemaName === 'grammarExercise';
+        const baseTokens = isStory ? 1024 : isGrammar ? 2048 : 384;
 
         for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
             const isRetry = attempt > 0;
@@ -1043,16 +928,22 @@ RULES:
     async generateWithCritic(schemaName, promptBuilder, level, langCode, ...promptArgs) {
         let bestData = null;
         let bestScore = 0;
+        const onProgress = promptArgs[promptArgs.length - 1];
+        const actualArgs = typeof onProgress === 'function' ? promptArgs.slice(0, -1) : promptArgs;
 
         for (let criticAttempt = 0; criticAttempt <= this.maxCriticRetries; criticAttempt++) {
-            // Generate with syntactic validation
-            const data = await this.generateValidated(schemaName, promptBuilder, ...promptArgs);
+            if (typeof onProgress === 'function') {
+                onProgress(`Generating (attempt ${criticAttempt + 1}/${this.maxCriticRetries + 1})...`);
+            }
+            const data = await this.generateValidated(schemaName, promptBuilder, ...actualArgs);
             if (!data) {
                 L(`[Critic] Attempt ${criticAttempt + 1}: Generation failed`);
                 continue;
             }
 
-            // Critic evaluates
+            if (typeof onProgress === 'function') {
+                onProgress(`Critic evaluating...`);
+            }
             const critique = await this.criticEvaluate(data, schemaName, level, langCode);
             L(`[Critic] Attempt ${criticAttempt + 1}: score=${critique.overallScore}, approve=${critique.approve}`);
 
@@ -1066,13 +957,12 @@ RULES:
                 return { data, critiqueScore: critique.overallScore, attempts: criticAttempt + 1 };
             }
 
-            // Prepare critic feedback for next generation
             const criticFeedback = critique.issues.length > 0
                 ? critique.issues.join('; ') + ' | ' + critique.suggestedFix
                 : critique.suggestedFix;
 
-            // Add critic feedback to prompt args for retry
-            promptArgs = [...promptArgs.slice(0, -2), true, criticFeedback]; // Replace isRetry, lastError
+            actualArgs[actualArgs.length - 2] = true;
+            actualArgs[actualArgs.length - 1] = criticFeedback;
         }
 
         L(`[Critic] All ${this.maxCriticRetries + 1} attempts below threshold (best: ${bestScore}). Returning best with warning.`);
@@ -1117,6 +1007,47 @@ LLMResponseValidator.SCHEMAS = {
                 example: { type: 'string', minLength: 1 }
             },
             required: ['grammar', 'usage', 'example'],
+            additionalProperties: false
+        },
+
+        // Grammar Gym: explanation + 12 exercises (5 scenario + 7 sentence mood)
+        grammarExercise: {
+            type: 'object',
+            properties: {
+                grammar: { type: 'string', minLength: 1 },
+                usage: { type: 'string', minLength: 1 },
+                example: { type: 'string', minLength: 1 },
+                exercises: {
+                    type: 'array',
+                    minItems: 12,
+                    maxItems: 12,
+                    items: {
+                        type: 'object',
+                        properties: {
+                            type: { type: 'string', enum: ['text_dm', 'you_decide', 'fix_sign', 'translation_fail', 'culture_check', 'declarative', 'interrogative', 'imperative', 'exclamative', 'operative', 'conditional', 'exhortation'] },
+                            question: { type: 'string', minLength: 5 },
+                            choices: {
+                                type: 'array',
+                                minItems: 2,
+                                maxItems: 4,
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        letter: { type: 'string', enum: ['A', 'B', 'C', 'D'] },
+                                        text: { type: 'string', minLength: 1 }
+                                    },
+                                    required: ['letter', 'text'],
+                                    additionalProperties: false
+                                }
+                            },
+                            answer: { type: 'string', enum: ['A', 'B'] },
+                            explanation: { type: 'string', minLength: 5 }
+                        },
+                        required: ['type', 'question', 'choices', 'answer', 'explanation']
+                    }
+                }
+            },
+            required: ['grammar', 'usage', 'example', 'exercises'],
             additionalProperties: false
         },
 
@@ -1532,6 +1463,50 @@ Rules:
 - Answer: single letter A/B/C matching correct choice`;
     },
 
+    buildGrammarExercisePrompt(word, context, langCode, level) {
+        const langName = this.llm._getLangName(langCode);
+        let levelHint = '';
+        if (level && LLMService.LEVEL_DIFFICULTY_MAP[level]) {
+            const d = LLMService.LEVEL_DIFFICULTY_MAP[level];
+            const tone = d.startsWith('beginner') || d.startsWith('elementary')
+                ? 'light, simple, focused on surviving daily situations (ordering food, asking for prices, greetings)'
+                : d.includes('intermediate')
+                    ? 'natural conversations, cultural situations, handling minor conflicts or misunderstandings'
+                    : 'sophisticated interactions, professional contexts, humor and wordplay';
+            levelHint = `\nLearner is ${d}. Tone should match — ${tone}.`;
+        }
+        return `You are a ${langName} language coach. Generate 12 exercises for the grammar rule "${word}" from "${context}".${levelHint}
+
+Each exercise type must be used exactly once: text_dm, you_decide, fix_sign, translation_fail, culture_check, declarative, interrogative, imperative, exclamative, operative, conditional, exhortation.
+
+Rules:
+- The correct answer MUST contain or demonstrate the grammar rule.
+- The two choices MUST be different.
+- Give each exercise a unique, real-life scenario with stakes.
+- Questions and explanations in English. Choices in ${langName}.
+- Wrong choices must be plausible.
+- ANSWER BALANCE: Exactly 6 of the 12 exercises must have answer="A" and exactly 6 must have answer="B".
+
+Output only JSON with no extra text:
+{
+  "grammar": "friendly name of the grammar rule",
+  "usage": "how the word works (1-2 sentences, English)",
+  "example": "one ${langName} example NOT used in any exercise",
+  "exercises": [
+    {
+      "type": "text_dm",
+      "question": "Scenario in English (1-3 sentences)",
+      "choices": [
+        {"letter": "A", "text": "option A in ${langName}"},
+        {"letter": "B", "text": "option B in ${langName}"}
+      ],
+      "answer": "A",
+      "explanation": "Why the correct choice works, then the grammar rule in 1 sentence."
+    }
+  ]
+}`;
+    },
+
     buildStoryPrompt(storyWords, langCode, level, isRetry = false, previousError = '') {
         const langName = this.llm._getLangName(langCode);
         const wordList = storyWords.map(w => w[langCode] || w.ja || w.en).filter(Boolean).join(', ');
@@ -1857,6 +1832,85 @@ LLMService.prototype.getListeningPassage = async function(words, langCode, level
         raw: JSON.stringify(result.data),
         critiqueScore: result.critiqueScore
     };
+};
+
+LLMService.prototype.getGrammarExercise = async function(word, context, langCode, level) {
+    if (!this.validator) this.initValidator();
+    if (!this.available || !this.hasModel) return null;
+    const onProgress = arguments[4];
+    const vocabId = arguments[5];
+    const result = await this.validator.generateWithCritic(
+        'grammarExercise',
+        this.validator.buildGrammarExercisePrompt.bind(this.validator),
+        level, langCode,
+        word, context, langCode, level, onProgress
+    );
+    if (!result.data) return null;
+    const exercises = (result.data.exercises || []).map(ex => {
+        const { labelA, labelB } = LLMService.resolveLabels(ex.type, ex.answer);
+        return { ...ex, labelA, labelB };
+    });
+    const data = {
+        grammar: result.data.grammar,
+        usage: result.data.usage,
+        example: result.data.example,
+        exercises,
+        raw: JSON.stringify(result.data),
+        critiqueScore: result.critiqueScore
+    };
+    if (vocabId && langCode) {
+        this.saveGrammarExercise(vocabId, langCode, data).catch(e => L('[Grammar] RTDB save failed:', e.message));
+    }
+    return data;
+};
+
+LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, data) {
+    if (!db) { L('[Grammar] Save skipped: no db'); return; }
+    if (!auth) { L('[Grammar] Save skipped: no auth'); return; }
+    if (!auth.currentUser) { L('[Grammar] Save skipped: no currentUser'); return; }
+    const token = Math.random().toString(36).slice(2, 8);
+    const entry = {
+        grammar: data.grammar,
+        usage: data.usage,
+        example: data.example,
+        exercises: data.exercises,
+        model: this.resolvedModel || 'unknown',
+        ts: firebase.database.ServerValue.TIMESTAMP
+    };
+    try {
+        await db.ref(`grammar_exercises/${vocabId}/${langCode}/${token}`).set(entry);
+        L('[Grammar] Saved to RTDB:', vocabId, langCode, token);
+    } catch(e) {
+        L('[Grammar] RTDB save error:', e.message, 'code:', e.code);
+    }
+};
+
+LLMService.prototype.loadCachedGrammarExercise = async function(vocabId, langCode) {
+    if (!db) return null;
+    try {
+        const snap = await db.ref(`grammar_exercises/${vocabId}/${langCode}`).limitToLast(1).once('value');
+        if (!snap.exists()) return null;
+        let entry = null;
+        snap.forEach(child => { entry = child.val(); });
+        if (!entry || !entry.exercises || entry.exercises.length === 0) return null;
+        const exercises = entry.exercises.map(ex => {
+            const { labelA, labelB } = LLMService.resolveLabels(ex.type, ex.answer);
+            return { ...ex, labelA, labelB };
+        });
+        L('[Grammar] Loaded cached from RTDB:', vocabId, langCode);
+        return {
+            grammar: entry.grammar,
+            usage: entry.usage,
+            example: entry.example,
+            exercises,
+            raw: JSON.stringify(entry),
+            critiqueScore: null,
+            fromCache: true
+        };
+    } catch(e) {
+        L('[Grammar] Cache load failed:', e.message);
+        return null;
+    }
 };
 
 LLMService.prototype.generateStory = async function(storyWords, langCode, level) {

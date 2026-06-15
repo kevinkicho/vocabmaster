@@ -153,7 +153,7 @@ Object.assign(UIManager.prototype, {
             btn.classList.add('bg-emerald-500');
             setTimeout(() => { btn.innerText = origText; btn.classList.remove('bg-emerald-500'); }, 1500);
         } catch(e) {
-            alert("Save failed");
+            app.ui.showToast("Save failed", 'error');
             btn.innerText = origText;
         }
     },
@@ -161,7 +161,7 @@ Object.assign(UIManager.prototype, {
     closeEditModal() { document.getElementById('modal-edit').classList.add('hidden'); },
     async saveEdit() { if(!app.game || app.game.i === undefined) return; const currentItem = app.data.list[app.game.i]; const updates = { ...currentItem }; if(typeof LANG_CONFIG !== 'undefined') { LANG_CONFIG.forEach(conf => { const el = document.getElementById(`edit-field-${conf.key}`); if(el) updates[conf.key] = el.value.trim(); if(conf.exKey) { const elEx = document.getElementById(`edit-field-${conf.exKey}`); if(elEx) updates[conf.exKey] = elEx.value.trim(); } }); } const btn = document.querySelector('#modal-edit button[onclick="app.ui.saveEdit()"]'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i> Saving...`; btn.disabled = true; try { await app.data.saveCorrection(updates); this.closeEditModal(); 
         if (app.game && typeof app.game.update === 'function') { app.game.update(); } 
-        const bar = document.getElementById('status-bar'); bar.innerText = "Correction Saved!"; bar.classList.add('text-emerald-500'); setTimeout(() => bar.classList.remove('text-emerald-500'), 2000); } catch(e) { alert("Save failed: " + e.message); } finally { btn.innerHTML = origText; btn.disabled = false; } },
+        const bar = document.getElementById('status-bar'); bar.innerText = "Correction Saved!"; bar.classList.add('text-emerald-500'); setTimeout(() => bar.classList.remove('text-emerald-500'), 2000); } catch(e) { app.ui.showToast("Save failed: " + e.message, 'error'); } finally { btn.innerHTML = origText; btn.disabled = false; } },
 
     openProfileModal() { if (!auth.currentUser) return; const user = auth.currentUser; const modal = document.getElementById('modal-profile'); const container = document.getElementById('profile-content'); const created = new Date(user.metadata.creationTime).toLocaleDateString(); container.innerHTML = `<div class="flex flex-col items-center mb-6"><img src="${escapeHtml(user.photoURL)}" class="w-24 h-24 rounded-full shadow-lg border-4 border-white dark:border-neutral-700 mb-3"><h3 class="text-xl font-black text-slate-800 dark:text-white">${escapeHtml(user.displayName)}</h3><p class="text-xs font-bold text-slate-400">${escapeHtml(user.email)}</p></div><div class="bg-slate-50 dark:bg-neutral-800 rounded-2xl p-4 border border-slate-100 dark:border-neutral-700 mb-6 space-y-2"><div class="flex justify-between text-sm"><span class="text-slate-500 font-bold">Active Since</span><span class="font-bold text-slate-800 dark:text-neutral-300">${escapeHtml(created)}</span></div></div><button onclick="app.auth.logout(); document.getElementById('modal-profile').classList.add('hidden');" class="w-full bg-slate-200 dark:bg-neutral-700 hover:bg-slate-300 text-slate-700 dark:text-neutral-300 font-bold py-3 rounded-xl mb-3">Log Out</button><button onclick="app.data.deleteUserAccount()" class="w-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200 font-bold py-3 rounded-xl">Delete Account</button>`; modal.classList.remove('hidden'); }
 

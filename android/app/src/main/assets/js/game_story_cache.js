@@ -54,10 +54,23 @@ async _loadCacheThenStart() {
         // Reconstruct storyWords from wordIds
         const words = (cached.wordIds || []).map(id => app.data.list.find(w => w.id === id)).filter(Boolean);
         if (words.length === 0 || !cached.questions || cached.questions.length === 0) return this._nextCachedStory(); // skip bad entries
+        // Shuffle question order so the same cached story feels fresh on replay.
+        // Also shuffle the choices within each question (correct letter stays the same since the
+        // choice object itself carries its letter — we just reorder the array).
+        const shuffledQuestions = (cached.questions || [])
+            .map(q => ({ q, k: Math.random() }))
+            .sort((a, b) => a.k - b.k)
+            .map(({ q }) => ({
+                ...q,
+                choices: (q.choices || [])
+                    .map(c => ({ c, k: Math.random() }))
+                    .sort((a, b) => a.k - b.k)
+                    .map(({ c }) => c)
+            }));
         return {
             storyWords: words,
             storyPart: cached.storyText,
-            questions: cached.questions,
+            questions: shuffledQuestions,
             lang: cached.lang,
             fromCache: true
         };
@@ -92,7 +105,17 @@ async _prefetchNext() {
             const storyLevel = words.map(w => w.level).find(Boolean) || null;
             if (wordList.length === 0) { this._prefetching = false; return; }
 
-            const prompt = this._buildStoryPrompt(wordList, langName, storyLevel);
+            const joined = wordList.join(', ');
+            let levelInstruction = '';
+            if (storyLevel) {
+                const diffMap = (typeof LLMService !== 'undefined' && LLMService.LEVEL_DIFFICULTY_MAP) ? LLMService.LEVEL_DIFFICULTY_MAP : {};
+                const difficulty = diffMap[storyLevel];
+                if (difficulty) {
+                    levelInstruction = `\nThe learner's proficiency level is ${difficulty}. Adjust vocabulary complexity and grammar accordingly — use simpler structures for lower levels and more natural, nuanced expressions for higher levels.`;
+                }
+            }
+            const prompt = `Write a short story (3-5 sentences) in ${langName} using exactly these words: ${joined}${levelInstruction}\n\nDo not include any questions or translations, just write the story text directly.`;
+
             let fullText = await app.llm.streamGenerate({
                 prompt,
                 system: 'You are a language learning assistant. Write simple, clear text suitable for learners.'

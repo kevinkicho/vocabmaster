@@ -165,6 +165,6 @@ const GET_DEFAULTS = () => {
         storyAutoRead: true,
 
         // LLM (Smart Cloze / Story Mode)
-        llmModel: 'gemma4:31b',
+        llmModel: 'gemma4:31b-cloud',
     };
 };

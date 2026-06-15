@@ -126,26 +126,28 @@ class App {
         L("App Constructing...");
         this.score = 0; 
         this.dailyScore = 0; 
-        // Ensure clean non-negative numbers from start to prevent display corruption in PTS/daily
         this.score = Math.max(0, Number(this.score) || 0);
         this.dailyScore = Math.max(0, Number(this.dailyScore) || 0);
-        try {
-            this.store = new Store();
-            this.ui = new UIManager(this.store);
-            this.auth = new AuthManager(); 
-            this.audio = new AudioService();
-            this.data = new DataService();
-            this.notes = new NoteService(); 
-            this.fitter = new TextFitter();
-            this.celebration = new CelebrationService();
-            this.analytics = new AnalyticsService();
-            this.llm = new LLMService();
-            this.presets = new PresetManager(); 
-            this.game = null;
-        } catch (e) {
-            L("Constructor Fail:", e);
-            alert("Critical Init Error: " + e.message);
+        this.game = null;
+
+        try { this.store = new Store(); } catch (e) {
+            L("FATAL: Store constructor failed:", e);
+            try { this.ui.showToast("Fatal Error: Cannot load settings. " + e.message, 'error'); } catch(_) { console.error("Fatal:", e); }
+            this._fatalError = true;
+            return;
         }
+        try { this.ui = new UIManager(this.store); } catch(e) { L("UI constructor failed:", e); }
+        try { this.auth = new AuthManager(); } catch(e) { L("Auth constructor failed:", e); }
+        try { this.audio = new AudioService(); } catch(e) { L("Audio constructor failed:", e); }
+        try { this.data = new DataService(); } catch(e) { L("Data constructor failed:", e); }
+        try { this.notes = new NoteService(); } catch(e) { L("Notes constructor failed:", e); }
+        try { this.fitter = new TextFitter(); } catch(e) { L("Fitter constructor failed:", e); }
+        try { this.celebration = new CelebrationService(); } catch(e) { L("Celebration constructor failed:", e); }
+        try { this.analytics = new AnalyticsService(); } catch(e) { L("Analytics constructor failed:", e); }
+        try { this.llm = new LLMService(); } catch(e) { L("LLM constructor failed:", e); }
+        try { this.presets = new PresetManager(); } catch(e) { L("Presets constructor failed:", e); }
+
+        if (typeof window._initLearningLoop === 'function') window._initLearningLoop();
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
         else { this.init(); }
     }
@@ -172,7 +174,7 @@ class App {
                 this.store.prefs.currentCollection = coll;
                 if (this.data) this.data.setCollection(coll);
                 // Force a save so data.js loads it
-                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(this.store.prefs));
+                this.store.saveSettings();
                 configChanged = true;
             }
 
@@ -185,6 +187,7 @@ class App {
     }
 
     async init() {
+        if (this._fatalError) return;
         L("App Init Start");
         const btn = document.getElementById('btn-init');
         const statusBar = document.getElementById('status-bar');
@@ -211,9 +214,22 @@ class App {
 
         // --- AUTH & UI LISTENER (Central Control Tower) ---
         if(typeof firebase !== 'undefined' && typeof auth !== 'undefined') {
+            // Handle OAuth redirect result (from signInWithRedirect in WebView)
+            auth.getRedirectResult().catch(e => {
+                // Redirect OAuth not supported from file:// origin (APK WebView)
+                // This is expected; silently ignore
+            });
             auth.onAuthStateChanged(user => {
                 L("Auth State Changed:", user ? user.email : "None");
-                if(this.auth) this.auth.currentUser = user;
+                if(this.auth) {
+                    this.auth.currentUser = user;
+                    if(user) {
+                        const isAdmin = user.email && user.email.toLowerCase() === 'kevinkicho@gmail.com';
+                        this.auth.userRole = user.isAnonymous ? 'anonymous' : isAdmin ? 'admin' : 'user';
+                    } else {
+                        this.auth.userRole = 'anonymous';
+                    }
+                }
                 if(this.notes) this.notes.setUser(user);
                 
                 const loginBtn = document.getElementById('btn-login');
@@ -222,11 +238,9 @@ class App {
                     loginBtn.disabled = false;
                     
                     if (user) {
-                        // Any authenticated user (real Google OR anonymous) counts as logged in.
-                        // This lets APK users (who are anon) see they have an identity for RTDB data.
                         if (user.isAnonymous) {
-                            loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`; // anon badge could be added
-                            loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
+                            loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+                            loginBtn.onclick = (e) => { e.stopPropagation(); app.handleAuthClick(); };
                         } else if (user.photoURL) {
                             loginBtn.innerHTML = `<img src="${escapeHtml(user.photoURL)}" class="w-full h-full rounded-full border-2 border-indigo-200 p-0.5">`;
                             loginBtn.onclick = (e) => { e.stopPropagation(); app.ui.openProfileModal(); };
@@ -261,19 +275,12 @@ class App {
             // 2b. Init LLM — auto-detect Ollama (non-blocking)
             if (this.llm) {
                 this.llm.loadPrefs();
-                this.llm.autoDetect();
+                this.llm.autoDetect().catch(e => L('[Main] autoDetect error:', e));
             }
 
-            // 3. Mock Data Check (Matches data.js logic)
-            const isMock = this.data.list.length > 0 && this.data.list[0].ja === "Test 0";
-            
-            if (isMock) { 
-                statusBar.innerText = "Database Connection Failed (Using Mock)"; 
-                statusBar.classList.add('text-rose-500'); 
-            } else { 
-                statusBar.innerText = `${count} Words Ready`; 
-                statusBar.classList.remove('text-rose-500'); 
-            }
+            statusBar.innerText = count > 0 ? `${count} Words Ready` : 'No vocabulary loaded';
+            if (count === 0) statusBar.classList.add('text-rose-500');
+            else statusBar.classList.remove('text-rose-500');
 
             // Start periodic RTDB log mirroring (every ~20s when there is new activity).
             // This + error hooks + settings-close + goHome means logs are usually in the cloud even if
@@ -294,27 +301,24 @@ class App {
                 if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
             }, 5000);
 
-            // Improve initial experience: on very first run, open Settings so user can pick preset/collection quickly (suggestion from setup modal review)
+            // On first run, add a subtle gear-pulse hint instead of opening the full modal
             if (!localStorage.getItem('vm_first_run_done')) {
-                localStorage.setItem('vm_first_run_done', '1');
+                try { localStorage.setItem('vm_first_run_done', '1'); } catch (e) {}
                 setTimeout(() => {
-                    if (this.modal) this.modal(true);
-                    // Polish: after open, inject a friendly one-time guidance near presets (data-driven settings entry point)
-                    setTimeout(() => {
-                        const presetBox = document.getElementById('preset-container');
-                        if (presetBox && !document.getElementById('first-run-hint')) {
-                            const hint = document.createElement('div');
-                            hint.id = 'first-run-hint';
-                            hint.className = 'mt-2 text-[10px] text-indigo-600 dark:text-indigo-400 font-bold';
-                            hint.textContent = '👋 First time? Use a Preset above (or Collections) to tailor languages fast. Close to save.';
-                            presetBox.appendChild(hint);
-                            setTimeout(() => { if (hint && hint.parentNode) hint.parentNode.removeChild(hint); }, 6500);
-                        }
-                        // Also ensure collections section is visible in the freshly opened settings
-                        if (this.ui && typeof this.ui.renderCollectionsInSettings === 'function') {
-                            try { this.ui.renderCollectionsInSettings(); } catch(e){}
-                        }
-                    }, 350);
+                    const gearBtn = document.querySelector('[onclick*="modal(true)"]');
+                    if (gearBtn) {
+                        gearBtn.classList.add('ring-2', 'ring-indigo-400', 'ring-offset-2', 'dark:ring-offset-neutral-900', 'animate-pulse');
+                        setTimeout(() => gearBtn.classList.remove('ring-2', 'ring-indigo-400', 'ring-offset-2', 'dark:ring-offset-neutral-900', 'animate-pulse'), 8000);
+                    }
+                    const presetBox = document.getElementById('preset-container');
+                    if (presetBox && !document.getElementById('first-run-hint')) {
+                        const hint = document.createElement('div');
+                        hint.id = 'first-run-hint';
+                        hint.className = 'mt-2 text-[10px] text-indigo-600 dark:text-indigo-400 font-bold';
+                        hint.textContent = '👋 Tap gear icon to pick a language preset!';
+                        presetBox.appendChild(hint);
+                        setTimeout(() => { if (hint && hint.parentNode) hint.parentNode.removeChild(hint); }, 6500);
+                    }
                 }, 1200);
             }
 
@@ -364,63 +368,45 @@ class App {
 
     handleAuthClick() {
         const loginBtn = document.getElementById('btn-login');
+        const resetBtn = () => {
+            if(loginBtn) {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+            }
+        };
         try {
             if(loginBtn) {
                 loginBtn.disabled = true;
                 loginBtn.innerHTML = `<i class="ph-bold ph-spinner animate-spin text-xl"></i>`;
             }
-            
-            // Robust WebView detection for plain Android WebView (no Capacitor).
-            // NativeTTS is injected by the Kotlin wrapper; also accept common WebView UA markers.
-            const ua = (navigator.userAgent || '').toLowerCase();
-            const isWebView = !!(window.NativeTTS) || !!(window.Capacitor) ||
-                              ua.includes('webview') || ua.includes('wv') ||
-                              ua.includes('vocabmasterapp') || ua.includes('android');
-            if (isWebView) {
-                // On APK we use anonymous auth (Google popup doesn't work in WebView).
-                // This still gives a stable UID so user-specific RTDB data (scores, analytics) can accrue.
-                auth.signInAnonymously().then(() => {
-                    L("Signed in anonymously (WebView/APK)");
-                    if(loginBtn) {
-                        loginBtn.disabled = false;
-                        // Show a "logged" state even for anon so user knows auth "succeeded"
-                        loginBtn.innerHTML = `<i class="ph-bold ph-user-check text-xl"></i>`;
-                    }
-                    // Re-evaluate header state shortly (auth listener may not re-fire for re-anon)
-                    setTimeout(() => {
-                        if (window.app && window.app.auth) {
-                            // Force a UI refresh of the login button by touching currentUser
-                            const u = auth.currentUser;
-                            if (u && window.app.auth) window.app.auth.currentUser = u;
-                        }
-                    }, 300);
+
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const isFileOrigin = window.location.protocol === 'file:';
+
+            if (isFileOrigin && window.NativeAuth) {
+                window.__nativeAuth.signIn().then(() => {
+                    resetBtn();
                 }).catch(e => {
-                    L("Anon sign-in failed (WebView):", e);
-                    if(loginBtn) {
-                        loginBtn.disabled = false;
-                        loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
+                    L("Native Auth Error:", e);
+                    resetBtn();
+                    if (e.message && !e.message.includes('12501')) {
+                        app.ui.showToast("Login Failed: " + e.message, 'error');
                     }
                 });
-                return;
+            } else if (isFileOrigin) {
+                window.location.href = 'https://vocabmaster112225.web.app/';
+            } else {
+                auth.signInWithPopup(provider).catch(e => {
+                    L("Login Error:", e);
+                    resetBtn();
+                    if (e.code !== 'auth/popup-closed-by-user') {
+                        app.ui.showToast("Login Failed: " + e.message, 'error');
+                    }
+                });
             }
-            
-            const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider).catch(e => {
-                L("Login Error:", e);
-                if(loginBtn) {
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
-                }
-                if (e.code !== 'auth/popup-closed-by-user') {
-                    alert("Login Failed: " + e.message);
-                }
-            });
         } catch (e) {
             L("handleAuthClick crashed:", e);
-            if (loginBtn) {
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = `<i class="ph-bold ph-user text-xl"></i>`;
-            }
+            resetBtn();
         }
     }
 
@@ -488,7 +474,7 @@ class App {
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
-                        ${this.btn('AI Cloze', 'ph-sparkle', 'cyan', ()=>new Sentences('sentences'))}
+                        ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
                     </div>
 
                     <!-- Medium-term: Collection / Tier picker (Phase 1) -->
@@ -544,6 +530,7 @@ class App {
         else if (mode === 'voice') this.game = new Voice('voice');
         else if (mode === 'sentences') this.game = new Sentences('sentences');
         else if (mode === 'story') this.game = new Story('story');
+        else if (mode === 'grammar') this.game = new Grammar('grammar');
     }
 
     launch(fn) { 
@@ -554,7 +541,7 @@ class App {
             history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
         } catch(e) {
             L("Launch Error:", e.stack || e);
-            alert("Failed to start game: " + e.message + "\n\nCheck console for details.");
+            if (app.ui && app.ui.showToast) app.ui.showToast("Failed to start game: " + e.message, 'error');
             this.goHome(false);
         }
     }
@@ -587,7 +574,7 @@ class App {
                 origDestroy();
             };
         } else {
-            alert("Not enough data for review yet. Play some games first!");
+            if (app.ui && app.ui.showToast) app.ui.showToast("Not enough data for review yet. Play some games first!", 'warning');
             this.goHome(false);
         }
     }
@@ -595,6 +582,7 @@ class App {
     modal(show) { 
         if(this.ui) this.ui.hideTooltip();
         const el = document.getElementById('modal-settings');
+        if (!el) return;
         if (show) { 
             el.classList.remove('hidden'); 
             if(this.ui) this.ui.loadSettings(); 

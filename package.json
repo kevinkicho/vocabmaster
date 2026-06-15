@@ -17,7 +17,6 @@
     "prebuild:android": "npm run validate",
     "build:android": "npm run prepare:android && cd android && gradlew clean assembleDebug --no-daemon",
     "test:runtime:emulator": "bash scripts/verify-runtime-emulator.sh",
-    "sync:env": "node scripts/sync-env.js",
     "audit": "node test/audit/grammar_audit.mjs",
     "feedback": "node test/audit/grammar_feedback.mjs",
     "feedback:summary": "node test/audit/grammar_feedback.mjs --summary",

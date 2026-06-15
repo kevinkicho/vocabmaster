@@ -64,7 +64,7 @@ class Story extends GameMode {
                 const escapedHtml = escapeHtml(v);
                 const escaped = escapedHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 const re = new RegExp(escaped, 'g');
-                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${escapedHtml}</mark>`);
+                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${escapedHtml}</mark>`);
             }
         }
         return this.wrapHanziOnEscaped(html);
@@ -108,17 +108,19 @@ class Story extends GameMode {
     }
 
     destroy() {
+        this._destroyed = true;
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         super.destroy();
     }
 
-    nav(d) {
+    // Separate from GameMode.nav — Story navigates questions, not word list index
+    navQuestion(d) {
         if (this.streaming) return;
         this._loadNext();
     }
 
     triggerAction(action) {
-        if (action === 'next' || action === 'up') this.nav(1);
+        if (action === 'next' || action === 'up') this.navQuestion(1);
     }
 
     update() { this.render(); }

@@ -5,6 +5,8 @@ class Grammar extends GameMode {
         this.exerciseData = null;
         this.currentExercise = 0;
         this.exerciseResults = [];
+        this.busy = false;
+        this._abortFlag = false;
         this.setup();
         this.update();
     }
@@ -15,7 +17,7 @@ class Grammar extends GameMode {
                 <div id="gr-header" class="shrink-0"></div>
                 <div id="gr-card" class="flex-1 flex flex-col min-h-0 overflow-y-auto px-4 py-2">
                     <div id="gr-word" class="text-center mb-2">
-                        <p class="text-2xl font-black text-slate-800 dark:text-white"></p>
+                        <p class="gr-vocab text-2xl font-black text-slate-800 dark:text-white cursor-pointer select-none" title="Tap to hear"></p>
                         <p id="gr-sentence" class="text-sm text-slate-500 dark:text-neutral-400 mt-1 italic"></p>
                     </div>
                     <div id="gr-content" class="flex-1 flex flex-col items-center justify-center"></div>
@@ -25,12 +27,45 @@ class Grammar extends GameMode {
             </div>`;
         this.dom.header = this.root.querySelector('#gr-header');
         this.dom.card = this.root.querySelector('#gr-card');
-        this.dom.word = this.root.querySelector('#gr-word p:first-child');
+        this.dom.word = this.root.querySelector('.gr-vocab');
         this.dom.sentence = this.root.querySelector('#gr-sentence');
         this.dom.content = this.root.querySelector('#gr-content');
         this.dom.audio = this.root.querySelector('#gr-audio');
         this.root.querySelector('#gr-nav').innerHTML = app.ui.nav();
         this.setupHeader();
+
+        if (this.dom.word) {
+            this.dom.word.onclick = () => this._playVocab();
+        }
+    }
+
+    _playVocab() {
+        const c = this.list[this.i];
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
+        const word = c[qKey] || '';
+        if (word && app.audio) app.audio.play(word, qKey, null, 0);
+    }
+
+    _playExample() {
+        if (!this.exerciseData || !this.exerciseData.example) return;
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
+        if (app.audio) app.audio.play(this.exerciseData.example, qKey, null, 0);
+    }
+
+    _playSentence() {
+        const c = this.list[this.i];
+        if (!c) return;
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
+        let exKey = '';
+        if (typeof LANG_CONFIG !== 'undefined') {
+            const conf = LANG_MAP.get(qKey);
+            if (conf && conf.exKey) exKey = conf.exKey;
+        }
+        const sentence = c[exKey] || '';
+        if (sentence && app.audio) app.audio.play(sentence, qKey, null, 0);
     }
 
     update() {
@@ -52,7 +87,11 @@ class Grammar extends GameMode {
         const sentenceRaw = c[exKey] || '';
         const cardLevel = (c.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
         if (this.dom.word) this.dom.word.textContent = word;
-        if (this.dom.sentence) this.dom.sentence.textContent = sentenceRaw;
+        if (this.dom.sentence) {
+            this.dom.sentence.textContent = sentenceRaw;
+            this.dom.sentence.onclick = () => this._playSentence();
+            this.dom.sentence.classList.add('cursor-pointer', 'select-none');
+        }
         const llmReady = app.llm && app.llm.available && app.llm.hasModel;
         if (!llmReady) {
             if (this.dom.content) {
@@ -64,24 +103,65 @@ class Grammar extends GameMode {
         }
         this.updateHeader();
         if (this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
-        if (this.dom.content) {
-            this.dom.content.innerHTML = `<div class="flex items-center justify-center h-full"><p class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating grammar exercises...</p></div>`;
-        }
-        this.afterRender();
-        this._fetchGrammarExercise(word, sentenceRaw, qKey, cardLevel, c).catch(e => {
+        this._showGenerating(false);
+        this._fetchGrammarExercise(word, sentenceRaw, qKey, cardLevel, c, false).catch(e => {
             L('[Grammar] Fetch error:', e);
-            if (this.dom.content) {
-                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Failed to generate grammar exercise.</p><p class="text-xs text-slate-400 mt-2">${escapeHtml(e.message || 'Unknown error')}</p></div>`;
-            }
         });
     }
 
-    async _fetchGrammarExercise(word, sentence, qKey, level, card) {
-        const result = await app.llm.getGrammarExercise(word, sentence, qKey, level);
+    _showGenerating(allowAnew) {
+        if (!this.dom.content) return;
+        const anewBtn = allowAnew ? `<button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button>` : '';
+        this.dom.content.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p id="gr-gen-text" class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating grammar exercises...</p>${anewBtn}</div>`;
+        const anewBtnEl = document.getElementById('gr-anew-btn');
+        if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();
+    }
+
+    _generateAnew() {
+        const c = this.list[this.i];
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
+        let exKey = '';
+        if (typeof LANG_CONFIG !== 'undefined') {
+            const conf = LANG_MAP.get(qKey);
+            if (conf && conf.exKey) exKey = conf.exKey;
+        }
+        const word = c[qKey] || '';
+        const sentenceRaw = c[exKey] || '';
+        const cardLevel = (c.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
+        this._showGenerating(true);
+        this._fetchGrammarExercise(word, sentenceRaw, qKey, cardLevel, c, true).catch(e => {
+            L('[Grammar] Anew fetch error:', e);
+        });
+    }
+
+    async _fetchGrammarExercise(word, sentence, qKey, level, card, forceAnew) {
+        const vocabId = card.id;
+        if (!forceAnew) {
+            const cached = await app.llm.loadCachedGrammarExercise(vocabId, qKey);
+            if (cached) {
+                if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+                this.exerciseData = cached;
+                this._showExplanation();
+                return;
+            }
+        }
+        if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+        this._showGenerating(true);
+        const onProgress = (msg) => {
+            const textEl = document.getElementById('gr-gen-text');
+            if (textEl && this.list[this.i] && this.list[this.i].id === card.id) {
+                textEl.innerHTML = `<i class="ph-bold ph-spinner animate-spin mr-2"></i>${escapeHtml(msg)}`;
+            }
+        };
+        const result = await app.llm.getGrammarExercise(word, sentence, qKey, level, onProgress, vocabId);
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
         if (!result || !result.exercises || result.exercises.length === 0) {
             if (this.dom.content) {
-                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Could not generate grammar exercises.</p><p class="text-xs text-slate-400 mt-2">The AI returned an empty response. Try again with a different card.</p></div>`;
+                const modelName = (app.llm && app.llm.resolvedModel) || 'unknown';
+                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Could not generate grammar exercises.</p><p class="text-xs text-slate-400 mt-2">Model <strong>${escapeHtml(modelName)}</strong> returned an empty response. Try again or check AI settings.</p><button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button></div>`;
+                const anewBtnEl = document.getElementById('gr-anew-btn');
+                if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();
             }
             return;
         }
@@ -92,27 +172,32 @@ class Grammar extends GameMode {
     _showExplanation() {
         const d = this.exerciseData;
         if (!d) return;
+        const fromCache = d.fromCache;
         if (this.dom.content) {
             this.dom.content.innerHTML = `
                 <div class="w-full max-w-md mx-auto">
-                    <div class="bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl p-4 border border-indigo-200 dark:border-indigo-800 text-left">
+                    <div class="bg-indigo-50 dark:bg-indigo-900 rounded-2xl p-4 border border-indigo-200 dark:border-indigo-800 text-left">
                         <p class="font-bold text-indigo-700 dark:text-indigo-300 text-xs mb-1"><i class="ph-bold ph-book-open mr-1"></i>Grammar</p>
                         <p class="text-slate-700 dark:text-neutral-200 text-sm mb-3">${escapeHtml(d.grammar)}</p>
                         <p class="font-bold text-indigo-700 dark:text-indigo-300 text-xs mb-1"><i class="ph-bold ph-chat-centered-text mr-1"></i>Usage</p>
                         <p class="text-slate-700 dark:text-neutral-200 text-sm mb-3">${escapeHtml(d.usage)}</p>
-                        <p class="font-bold text-indigo-700 dark:text-indigo-300 text-xs mb-1"><i class="ph-bold ph-pencil-simple mr-1"></i>Example</p>
-                        <p class="text-slate-700 dark:text-neutral-200 text-sm italic">${escapeHtml(d.example)}</p>
+                        <p class="font-bold text-indigo-700 dark:text-indigo-300 text-xs mb-1"><i class="ph-bold ph-pencil-simple mr-1"></i>Example <span class="text-[9px] text-slate-400 font-normal">(tap to hear)</span></p>
+                        <p id="gr-example" class="gr-example text-slate-700 dark:text-neutral-200 text-sm italic cursor-pointer select-none active:opacity-70">${escapeHtml(d.example)}</p>
                     </div>
                     <button id="gr-start-btn" class="mt-4 w-full py-3 rounded-2xl font-bold text-sm bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg active:scale-95 transition-all"><i class="ph-bold ph-lightbulb mr-1"></i>Start Practice — ${d.exercises.length} Questions</button>
+                    ${fromCache ? '<p class="text-[9px] text-slate-400 text-center mt-1">Loaded from cache</p>' : ''}
                 </div>`;
             const btn = document.getElementById('gr-start-btn');
             if (btn) btn.onclick = () => this._startPractice();
+            const exEl = document.getElementById('gr-example');
+            if (exEl) exEl.onclick = () => this._playExample();
         }
     }
 
     _startPractice() {
         this.currentExercise = 0;
         this.exerciseResults = [];
+        this.answered = false;
         this._showExercise();
     }
 
@@ -137,11 +222,13 @@ class Grammar extends GameMode {
         const total = this.exerciseData.exercises.length;
         const idx = this.currentExercise;
         const typeInfo = Grammar.TYPE_LABELS[ex.type] || { icon: 'ph-question', label: ex.type };
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
         if (this.dom.content) {
             const letterLabels = { A: ex.labelA, B: ex.labelB };
             const choicesHtml = ex.choices.map(ch => {
                 const lbl = letterLabels[ch.letter];
-                return `<button data-letter="${ch.letter}" class="gr-choice w-full text-left p-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 font-bold text-sm text-slate-700 dark:text-neutral-200 hover:border-amber-300 dark:hover:border-amber-600 active:scale-[0.98] transition-all"><span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-black mr-2 shrink-0">${lbl ? '' : ch.letter}</span>${lbl ? '<span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mr-1">' + escapeHtml(lbl) + '</span> ' : ''}${escapeHtml(ch.text)}</button>`;
+                return `<button data-letter="${ch.letter}" data-text="${escapeHtml(ch.text)}" data-played="0" class="gr-choice w-full text-left p-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 font-bold text-sm text-slate-700 dark:text-neutral-200 hover:border-amber-300 dark:hover:border-amber-600 active:scale-[0.98] transition-all"><span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-black mr-2 shrink-0">${lbl ? '' : ch.letter}</span>${lbl ? '<span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mr-1">' + escapeHtml(lbl) + '</span> ' : ''}${escapeHtml(ch.text)}</button>`;
             }).join('');
             this.dom.content.innerHTML = `
                 <div class="w-full max-w-md mx-auto">
@@ -150,15 +237,40 @@ class Grammar extends GameMode {
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center gap-1"><i class="ph-bold ${typeInfo.icon} text-[10px]"></i>${typeInfo.label}</span>
                     </div>
                     <p class="text-sm font-bold text-slate-800 dark:text-white mb-4 leading-relaxed">${escapeHtml(ex.question)}</p>
+                    <p class="text-[9px] text-slate-400 mb-2">Tap a choice to hear it, tap again to submit</p>
                     <div id="gr-choices" class="flex flex-col gap-2">${choicesHtml}</div>
                     <div id="gr-feedback" class="mt-3"></div>
                     <button id="gr-next-btn" class="mt-4 w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all hidden">Next</button>
                 </div>`;
             const choices = this.root.querySelectorAll('.gr-choice');
             choices.forEach(el => {
-                el.onclick = () => this._answerExercise(el, ex);
+                el.onclick = () => this._handleChoiceClick(el, ex);
             });
         }
+    }
+
+    _handleChoiceClick(el, ex) {
+        if (this.answered) return;
+        const played = el.dataset.played === '1';
+        const text = el.dataset.text || '';
+        const p = app.store.prefs;
+        const qKey = p.grammarQ || 'ja';
+        if (!played) {
+            this._deselectAllChoices();
+            el.dataset.played = '1';
+            if (app.audio && text) app.audio.play(text, qKey, null, 0);
+            el.classList.add('ring-2', 'ring-amber-300', 'dark:ring-amber-600');
+            return;
+        }
+        this._answerExercise(el, ex);
+    }
+
+    _deselectAllChoices() {
+        const allChoices = this.root.querySelectorAll('.gr-choice');
+        allChoices.forEach(ch => {
+            ch.dataset.played = '0';
+            ch.classList.remove('ring-2', 'ring-amber-300', 'dark:ring-amber-600');
+        });
     }
 
     _answerExercise(el, ex) {
@@ -171,7 +283,7 @@ class Grammar extends GameMode {
         allChoices.forEach(ch => {
             const letter = ch.dataset.letter;
             ch.onclick = null;
-            ch.classList.remove('hover:border-amber-300', 'dark:hover:border-amber-600', 'active:scale-[0.98]');
+            ch.classList.remove('hover:border-amber-300', 'dark:hover:border-amber-600', 'active:scale-[0.98]', 'ring-2', 'ring-amber-300', 'dark:ring-amber-600');
             if (letter === ex.answer) {
                 ch.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30');
             } else if (letter === selected && !correct) {
@@ -211,9 +323,12 @@ class Grammar extends GameMode {
                         <div class="h-full rounded-full transition-all duration-500 ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-rose-500'}" style="width:${pct}%"></div>
                     </div>
                     <button id="gr-retry-btn" class="mt-6 w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Try Again</button>
+                    <button id="gr-anew-btn" class="mt-3 w-full py-3 rounded-2xl font-bold text-sm bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-sparkle mr-1"></i>Generate Anew</button>
                 </div>`;
             const retryBtn = document.getElementById('gr-retry-btn');
             if (retryBtn) retryBtn.onclick = () => { this.currentExercise = 0; this.exerciseResults = []; this.answered = false; this._showExercise(); };
+            const anewBtn = document.getElementById('gr-anew-btn');
+            if (anewBtn) anewBtn.onclick = () => this._generateAnew();
         }
         if (correct > 0) {
             this.score(10 * correct);

@@ -253,7 +253,7 @@ class DataService {
             if(db) await db.ref('users/' + uid).remove();
             await user.delete();
             location.reload();
-        } catch(e) { alert("Error: " + e.message); }
+        } catch(e) { app.ui.showToast("Error: " + e.message, 'error'); }
     }
 
     loadCollection(collectionKey) {

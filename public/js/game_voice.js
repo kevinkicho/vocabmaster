@@ -39,7 +39,7 @@ class Voice extends GameMode {
     }
     
     toggleSpeech() {
-        if(!this.recognition) { alert("Voice not supported in this browser."); return; }
+        if(!this.recognition) { app.ui.showToast("Voice not supported in this browser.", 'error'); return; }
         if(this.isListening) this.recognition.stop();
         else {
             const p = app.store.prefs;

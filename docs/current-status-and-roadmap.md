@@ -1,6 +1,12 @@
-# Current Status & Roadmap (Post Short-Term + Web AI Parity Work)
+# Current Status & Roadmap
 
-**Last major update**: 2026-06-13 (this session)
+**Last major update**: 2026-06 (Current Session)
+
+## Current Status (v1195)
+- **Phase C Complete**: Full support for Collections (JLPT N5-N1, HSK levels, Spanish A1-C1). Tiers are now dynamically selectable and natively scope practice modes.
+- **Review Queue Added**: Adaptive learning loop prioritizes missed words across all modes.
+- **LLM/Ollama Backend**: Improved caching, robust error handling, rate-limiting fixes, and seamless integration with `ollama4android`.
+- **Bug Fixes & Refactors**: Cleaned up the project structure, migrated orphaned scripts to `/scripts`, optimized loading times, improved dark mode responsiveness, and addressed N1-N15 UX bugs.
 
 ## Recent Work: Grammar Gym RTDB Cache + TTS Enhancements (2026-06-13)
 

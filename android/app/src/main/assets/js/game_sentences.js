@@ -162,6 +162,7 @@ class Sentences extends GameMode {
         this.dom.btns.forEach((btn, idx) => {
              const o = distractors[idx];
              if(o) {
+                 btn.parentElement.style.display = '';
                  const span = btn.querySelector('span');
                  span.innerText = o[aKey];
                  const wrap = btn.parentElement;
@@ -176,6 +177,8 @@ class Sentences extends GameMode {
 
                  const answerText = o[aKey];
                  btn.onclick = () => app.game.handleInput(wrap, answerText, aKey, () => app.game.check(btn, o.id===c.id));
+             } else {
+                 btn.parentElement.style.display = 'none';
              }
         });
 
@@ -259,12 +262,13 @@ class Sentences extends GameMode {
     async _tryLLMCloze(targetRaw, qKey, card, aKey, bottomKey) {
         // Subtle loading indicator
         if (this.dom.text) this.dom.text.classList.add('opacity-60');
+        this.busy = true;
 
         const cardLevel = (card.tags || []).find(t => ['N5','N4','N3','N2','N1'].includes(t)) || '';
         const generated = await app.llm.generateClozeSentence(targetRaw, qKey, cardLevel);
 
-        // Navigation guard: user may have moved to another card
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+        this.busy = false;
 
         if (generated && generated.sentence && generated.match) {
             const result = this._buildClozeFromMatch(generated.sentence, generated.match);

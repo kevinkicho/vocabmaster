@@ -105,7 +105,8 @@ class Match extends GameMode {
         }
 
         const pool = []; const indices = new Set();
-        while(indices.size < count) indices.add(Math.floor(Math.random() * this.list.length));
+        const maxCount = Math.min(count, this.list.length);
+        while(indices.size < maxCount) indices.add(Math.floor(Math.random() * this.list.length));
         indices.forEach(idx => pool.push(this.list[idx]));
         
         const typeOptions = LANG_CONFIG.filter(l => app.store.prefs[`matchShow${app.store.cap(l.key)}`]).map(l=>l.key);

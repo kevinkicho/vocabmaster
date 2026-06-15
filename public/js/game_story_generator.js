@@ -290,7 +290,7 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
 
     _validateStoryOnly(fullText, targetWords, lang) {
         let storyPart = fullText.replace(/^STORY:\s*/i, '').trim();
-        const sentences = storyPart.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const sentences = storyPart.split(/[.!?。！？\n]+/).filter(s => s.trim().length > 2);
         if (sentences.length < 2) {
             return { valid: false, error: 'Story is too short. It must be at least 3 sentences long.' };
         }

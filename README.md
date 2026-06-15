@@ -39,6 +39,21 @@
   </tr>
 </table>
 
+### AI Activities (Story Mode & Grammar Gym)
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/story_05_answered.png" width="200" alt="Story Mode Answered" /><br/>Story Mode (Answered)</td>
+    <td align="center"><img src="screenshots/grammar_gym_fr_ex_operative.png" width="200" alt="Grammar Gym French" /><br/>Grammar Gym (French)</td>
+    <td align="center"><img src="screenshots/grammar_gym_ai_output.png" width="200" alt="Grammar Gym Output" /><br/>Grammar Gym (Output)</td>
+  </tr>
+</table>
+
+## Current Status (v1195)
+- **Phase C Complete**: Full support for Collections (JLPT N5-N1, HSK levels, Spanish A1-C1). Tiers are now dynamically selectable and natively scope practice modes.
+- **Review Queue Added**: Adaptive learning loop prioritizes missed words across all modes.
+- **LLM/Ollama Backend**: Improved caching, robust error handling, rate-limiting fixes, and seamless integration with `ollama4android`.
+- **Bug Fixes & Refactors**: Cleaned up the project structure, migrated orphaned scripts to `/scripts`, optimized loading times, improved dark mode responsiveness, and addressed N1-N15 UX bugs.
+
 ---
 
 | Mode | Description |

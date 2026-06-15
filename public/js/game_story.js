@@ -74,7 +74,7 @@ class Story extends GameMode {
         // Respect active collection / level filter (Medium-term collections + tiers)
         const list = (app.data && typeof app.data.getFilteredList === 'function')
             ? app.data.getFilteredList()
-            : (app.data ? app.data.list : []);
+            : (app.data ? app.data.activeList : []);
 
         if (!list || list.length === 0) return [];
 

@@ -1,8 +1,9 @@
 /* js/adaptive.js */
 
 function getWordDifficulty(word, userHistory) {
-    if (!userHistory || !userHistory[word]) return 'medium';
-    const h = userHistory[word];
+    const key = (word && word.id) ? word.id : word;
+    if (!userHistory || !userHistory[key]) return 'medium';
+    const h = userHistory[key];
     if (typeof h === 'object' && h.correct !== undefined && h.total !== undefined) {
         const rate = h.total > 0 ? h.correct / h.total : 0;
         if (rate >= 0.8) return 'easy';

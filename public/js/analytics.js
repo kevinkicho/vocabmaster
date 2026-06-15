@@ -59,7 +59,7 @@ class AnalyticsService {
             if (Object.keys(updates).length > 0) {
                 await db.ref().update(updates);
             }
-            sessionStorage.removeItem(this.SESSION_KEY);
+            localStorage.removeItem(this.SESSION_KEY);
             if (!this.streakChecked) {
                 this.streakChecked = true;
                 await this.updateStreak(uid);
@@ -187,22 +187,31 @@ class AnalyticsService {
     }
 
     _saveBuffer() {
-        if (this.buffer.length === 0) return;
+        if (this.buffer.length === 0 && this.sessions.length === 0) return;
         try {
-            sessionStorage.setItem(this.SESSION_KEY, JSON.stringify(this.buffer));
-        } catch (e) { /* sessionStorage full or unavailable */ }
+            localStorage.setItem(this.SESSION_KEY, JSON.stringify({ buffer: this.buffer, sessions: this.sessions }));
+        } catch (e) { /* localStorage full or unavailable */ }
     }
 
     _recoverBuffer() {
         try {
-            const saved = sessionStorage.getItem(this.SESSION_KEY);
+            const saved = localStorage.getItem(this.SESSION_KEY);
             if (saved) {
                 const recovered = JSON.parse(saved);
                 if (Array.isArray(recovered) && recovered.length > 0) {
                     this.buffer = [...recovered, ...this.buffer];
-                    L(`[Analytics] Recovered ${recovered.length} buffered events`);
+                    L(`[Analytics] Recovered ${recovered.length} buffered events (legacy)`);
+                } else if (recovered && typeof recovered === 'object') {
+                    if (Array.isArray(recovered.buffer) && recovered.buffer.length > 0) {
+                        this.buffer = [...recovered.buffer, ...this.buffer];
+                    }
+                    if (Array.isArray(recovered.sessions) && recovered.sessions.length > 0) {
+                        this.sessions = [...recovered.sessions, ...this.sessions];
+                    }
+                    L(`[Analytics] Recovered buffered events and sessions`);
                 }
-                sessionStorage.removeItem(this.SESSION_KEY);
+                localStorage.removeItem(this.SESSION_KEY);
+                sessionStorage.removeItem(this.SESSION_KEY); // Clean up old legacy keys
             }
         } catch (e) { /* ignore parse errors */ }
     }

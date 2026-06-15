@@ -19,7 +19,7 @@ class GameMode {
         // fall back to the full list so the game can at least start (prevents "item.id undefined" crashes).
         if (!this.list || this.list.length === 0) {
             L(`[GameMode] Filtered list empty for ${key} (collection=${app.data && app.data.currentCollection}); falling back to full list`);
-            this.list = (app.data && app.data.list) ? app.data.list : [];
+            this.list = (app.data && app.data.activeList) ? app.data.activeList : [];
         }
 
         // Clamp index in case persisted loc is stale for current (filtered) list
@@ -129,7 +129,7 @@ class GameMode {
         }
 
         this.save();
-        history.pushState({ view: 'game', mode: this.key, index: this.i }, '');
+        history.replaceState({ view: 'game', mode: this.key, index: this.i }, '');
 
         this.root.classList.remove('visible');
         if (typeof this.update === 'function') {
@@ -143,7 +143,7 @@ class GameMode {
         const n = parseInt(val);
         if(n>0 && n<=this.list.length) {
             this.i = n-1; this.save();
-            history.pushState({ view: 'game', mode: this.key, index: this.i }, '');
+            history.replaceState({ view: 'game', mode: this.key, index: this.i }, '');
             this.root.classList.remove('visible');
             if (typeof this.update === 'function') this.update(); else this.render();
         }

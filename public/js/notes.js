@@ -83,12 +83,10 @@ class NoteService {
 
     copyToClipboard(text) {
         if (!text) return;
-        if (!navigator.clipboard) {
-            const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
-        } else { navigator.clipboard.writeText(text); }
+        navigator.clipboard.writeText(text);
         const bar = document.getElementById('status-bar'); const orig = bar.innerText; bar.innerText = `Copied: ${text}`; bar.classList.add('text-indigo-500'); setTimeout(() => { bar.innerText = orig; bar.classList.remove('text-indigo-500'); }, 1500);
     }
-    playAudio(text) { if (!text) return; if (window.app && window.app.audio) { window.app.audio.play(text, 'zh', null, 0); } }
+    playAudio(text) { if (!text) return; if (window.app && window.app.audio) { const lang = window.app.store?.prefs?.quizQ || 'ja'; window.app.audio.play(text, lang, null, 0); } }
 
     openModal() { app.ui.openEditModal(); } 
     closeModal() { app.ui.closeEditModal(); }

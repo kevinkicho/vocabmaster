@@ -104,6 +104,7 @@ class Quiz extends GameMode {
     update() {
         this.busy = false; 
         this.answered = false;
+        this.hasMissed = false;
         const c = this.list[this.i];
         if (!c) {
             L('[Quiz] No current item (empty list after collection filter?)');
@@ -169,6 +170,7 @@ class Quiz extends GameMode {
         this.dom.btns.forEach((btn, idx) => {
             const pData = pool[idx];
             if(pData) {
+                btn.parentElement.style.display = '';
                 const txt = pData[aKey];
                 const span = btn.querySelector('span');
                 span.innerText = txt;
@@ -184,6 +186,8 @@ class Quiz extends GameMode {
                     const doPlay = app.store.prefs.quizPlayAnswer !== false; 
                     app.game.handleInput(wrapper, doPlay ? txt.replace(/'/g,"\\'") : null, doPlay ? aKey : null, () => app.game.check(btn, pData.id===c.id));
                 }
+            } else {
+                btn.parentElement.style.display = 'none';
             }
         });
 
@@ -224,7 +228,10 @@ class Quiz extends GameMode {
             btnWrap.classList.add('bg-emerald-500', 'border-emerald-500');
         } else {
             btnWrap.classList.add('bg-rose-500', 'border-rose-500');
-            this.miss();
+            if (!this.hasMissed) {
+                this.hasMissed = true;
+                this.miss();
+            }
         }
 
         if(isCorrect) {

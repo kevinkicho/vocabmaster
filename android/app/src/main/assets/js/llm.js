@@ -936,11 +936,10 @@ RULES:
     }
 
     // Main entry with critic: generate → validate → critic → regenerate with critic feedback
-    async generateWithCritic(schemaName, promptBuilder, level, langCode, ...promptArgs) {
+    async generateWithCritic({ schemaName, promptBuilder, level, langCode, promptArgs = [], onProgress = null }) {
         let bestData = null;
         let bestScore = 0;
-        const onProgress = promptArgs[promptArgs.length - 1];
-        const actualArgs = typeof onProgress === 'function' ? promptArgs.slice(0, -1) : promptArgs;
+        let actualArgs = [...promptArgs];
 
         for (let criticAttempt = 0; criticAttempt <= this.maxCriticRetries; criticAttempt++) {
             if (typeof onProgress === 'function') {
@@ -1773,12 +1772,14 @@ LLMService.prototype.findClozeMatch = async function(sentence, target, langCode,
     if (cached !== null && cached !== '') return cached;
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'clozeMatch',
-        this.validator.buildClozePrompt.bind(this.validator),
-        level, langCode,
-        sentence, target, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'clozeMatch',
+        promptBuilder: this.validator.buildClozePrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [sentence, target, langCode, level],
+        onProgress: null
+    });
 
     if (result.data) await this.setCache(sentence, target, langCode, result.data.match);
     return result.data?.match || null;
@@ -1795,12 +1796,14 @@ LLMService.prototype.generateClozeSentence = async function(target, langCode, le
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'generatedCloze',
-        this.validator.buildGeneratedClozePrompt.bind(this.validator),
-        level, langCode,
-        target, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'generatedCloze',
+        promptBuilder: this.validator.buildGeneratedClozePrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [target, langCode, level],
+        onProgress: null
+    });
 
     return result.data || null;
 };
@@ -1810,12 +1813,14 @@ LLMService.prototype.getGrammarExplanation = async function(word, context, langC
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'grammarExplanation',
-        this.validator.buildGrammarPrompt.bind(this.validator),
-        level, langCode,
-        word, context, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'grammarExplanation',
+        promptBuilder: this.validator.buildGrammarPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [word, context, langCode, level],
+        onProgress: null
+    });
 
     if (!result.data) return null;
     return `GRAMMAR: ${result.data.grammar}\nUSAGE: ${result.data.usage}\nEXAMPLE: ${result.data.example}`;
@@ -1825,12 +1830,14 @@ LLMService.prototype.getListeningPassage = async function(words, langCode, level
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'listeningPassage',
-        this.validator.buildListeningPrompt.bind(this.validator),
-        level, langCode,
-        words, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'listeningPassage',
+        promptBuilder: this.validator.buildListeningPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [words, langCode, level],
+        onProgress: null
+    });
 
     if (!result.data) return null;
     return {
@@ -1850,12 +1857,14 @@ LLMService.prototype.getGrammarExercise = async function(word, context, langCode
     if (!this.available || !this.hasModel) return null;
     const onProgress = arguments[4];
     const vocabId = arguments[5];
-    const result = await this.validator.generateWithCritic(
-        'grammarExercise',
-        this.validator.buildGrammarExercisePrompt.bind(this.validator),
-        level, langCode,
-        word, context, langCode, level, onProgress
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'grammarExercise',
+        promptBuilder: this.validator.buildGrammarExercisePrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [word, context, langCode, level],
+        onProgress: onProgress
+    });
     if (!result.data) return null;
     const exercises = (result.data.exercises || []).map(ex => {
         const { labelA, labelB } = LLMService.resolveLabels(ex.type, ex.answer);
@@ -1928,12 +1937,14 @@ LLMService.prototype.generateStory = async function(storyWords, langCode, level)
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'storyWithQuestions',
-        this.validator.buildStoryPrompt.bind(this.validator),
-        level, langCode,
-        storyWords, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'storyWithQuestions',
+        promptBuilder: this.validator.buildStoryPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [storyWords, langCode, level],
+        onProgress: null
+    });
 
     if (result.data) {
         result.data.critiqueScore = result.critiqueScore;
@@ -1949,12 +1960,14 @@ LLMService.prototype.generateParagraph = async function(words, langCode, level, 
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'paragraph',
-        this.validator.buildParagraphPrompt.bind(this.validator),
-        level, langCode,
-        words, langCode, level, topic
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'paragraph',
+        promptBuilder: this.validator.buildParagraphPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [words, langCode, level, topic],
+        onProgress: null
+    });
 
     return result.data;
 };
@@ -1963,12 +1976,14 @@ LLMService.prototype.generateQuiz = async function(words, langCode, level, types
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'quiz',
-        this.validator.buildQuizPrompt.bind(this.validator),
-        level, langCode,
-        words, langCode, level, types, count
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'quiz',
+        promptBuilder: this.validator.buildQuizPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [words, langCode, level, types, count],
+        onProgress: null
+    });
 
     return result.data;
 };
@@ -1977,12 +1992,14 @@ LLMService.prototype.generateExplanation = async function(word, context, langCod
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'explanation',
-        this.validator.buildExplanationPrompt.bind(this.validator),
-        level, langCode,
-        word, context, langCode, level
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'explanation',
+        promptBuilder: this.validator.buildExplanationPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [word, context, langCode, level],
+        onProgress: null
+    });
 
     return result.data;
 };
@@ -1991,12 +2008,14 @@ LLMService.prototype.generateConversation = async function(words, langCode, leve
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'conversation',
-        this.validator.buildConversationPrompt.bind(this.validator),
-        level, langCode,
-        words, langCode, level, scenario
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'conversation',
+        promptBuilder: this.validator.buildConversationPrompt.bind(this.validator),
+        level: level,
+        langCode: langCode,
+        promptArgs: [words, langCode, level, scenario],
+        onProgress: null
+    });
 
     return result.data;
 };
@@ -2005,12 +2024,14 @@ LLMService.prototype.generateFeedback = async function(sessionData) {
     if (!this.validator) this.initValidator();
     if (!this.available || !this.hasModel) return null;
 
-    const result = await this.validator.generateWithCritic(
-        'feedback',
-        this.validator.buildFeedbackPrompt.bind(this.validator),
-        sessionData.level, sessionData.langCode,
-        sessionData
-    );
+    const result = await this.validator.generateWithCritic({
+        schemaName: 'feedback',
+        promptBuilder: this.validator.buildFeedbackPrompt.bind(this.validator),
+        level: sessionData.level,
+        langCode: sessionData.langCode,
+        promptArgs: [sessionData],
+        onProgress: null
+    });
 
     return result.data;
 };

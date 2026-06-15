@@ -101,7 +101,7 @@ class TF extends GameMode {
         const backKey = p.tfBack || 'en';
         
         this.truth = Math.random() > 0.5;
-        this.dispBack = this.truth ? c[backKey] : (() => { let w; do{w=app.data.rand()}while(w.id===c.id); return w[backKey]; })();
+        this.dispBack = this.truth ? c[backKey] : (() => { if(app.data.list.length <= 1) return c[backKey]; let w; do{w=app.data.rand()}while(w.id===c.id); return w[backKey]; })();
         
         let fSec="", fEx="", fExSrc="";
         if(typeof LANG_CONFIG !== 'undefined') {

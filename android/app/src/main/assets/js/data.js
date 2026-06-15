@@ -12,6 +12,10 @@ class DataService {
         this.currentCollection = 'all';
     }
 
+    get activeList() {
+        return this._reviewList || this.list;
+    }
+
     setCollection(id) {
         this.currentCollection = id || 'all';
     }
@@ -51,9 +55,7 @@ class DataService {
         const reviewWords = await this.getReviewWords(count);
         if (reviewWords.length > 0) {
             this._reviewList = reviewWords;
-            this._originalList = this.list;
-            // Temporarily override for this session
-            this.list = reviewWords;
+            
             return true;
         }
         return false;
@@ -63,16 +65,11 @@ class DataService {
     startSpecificReview(words) {
         if (!words || words.length === 0) return false;
         this._reviewList = words;
-        this._originalList = this.list;
-        this.list = words;
+        
         return true;
     }
 
     endReviewSession() {
-        if (this._originalList) {
-            this.list = this._originalList;
-            this._originalList = null;
-        }
         this._reviewList = null;
     }
 

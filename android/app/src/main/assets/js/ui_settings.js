@@ -193,7 +193,7 @@ Object.assign(UIManager.prototype, {
         this.renderLevelFilter();
         if (app.game) {
             app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.list; p.levelFilter = ['all']; }
+            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
             if(app.game.i >= app.game.list.length) app.game.i = 0;
             if (app.game.update) app.game.update(); else app.game.render();
         }
@@ -468,7 +468,7 @@ Object.assign(UIManager.prototype, {
             this.updateRemoteLogStatus();
         }
     },
-    copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; el.select(); document.execCommand('copy'); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); },
+    copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; navigator.clipboard.writeText(el.value); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); },
     downloadLogs() {
         if (!window.logBuffer || window.logBuffer.length === 0) { app.ui.showToast('No logs captured yet.', 'warning'); return; }
         const content = window.logBuffer.join('\n') + '\n\n--- End of VocabMaster debug log (' + new Date().toISOString() + ') ---';

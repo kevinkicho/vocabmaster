@@ -102,7 +102,7 @@ class Store {
         if(window.app && window.app.game) {
             const game = window.app.game;
             game.list = app.data.getFilteredList();
-            if (game.list.length === 0) game.list = app.data.list;
+            if (game.list.length === 0) game.list = app.data.activeList;
             if (game.i >= game.list.length) game.i = 0;
             game.historyStack = [game.i];
             game.historyPtr = 0;
@@ -129,7 +129,7 @@ class Store {
         if(window.app && window.app.game) {
             const game = window.app.game;
             game.list = app.data.getFilteredList();
-            if (game.list.length === 0) game.list = app.data.list;
+            if (game.list.length === 0) game.list = app.data.activeList;
             if (game.i >= game.list.length) game.i = 0;
             game.historyStack = [game.i];
             game.historyPtr = 0;

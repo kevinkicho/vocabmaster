@@ -359,17 +359,19 @@ LLMService.prototype.analyzeLearningPatterns = async function() {
     }
 
     const summary = app.learningLoop.buildSessionSummaryForAI(sessions);
-    const analysis = await this.validator.generateWithCritic(
-        'feedback',
-        this.validator.buildFeedbackPrompt.bind(this.validator),
-        summary.level, summary.langCode,
-        {
+    const analysis = await this.validator.generateWithCritic({
+        schemaName: 'feedback',
+        promptBuilder: this.validator.buildFeedbackPrompt.bind(this.validator),
+        level: summary.level,
+        langCode: summary.langCode,
+        promptArgs: [{
             accuracy: { overall: summary.avgAccuracy, byType: {} },
             interactions: summary.commonActions,
             level: summary.level,
             langCode: summary.langCode
-        }
-    );
+        }],
+        onProgress: null
+    });
 
     return analysis?.data || null;
 };

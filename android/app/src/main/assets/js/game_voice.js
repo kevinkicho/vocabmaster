@@ -188,7 +188,7 @@ class Voice extends GameMode {
         
         const frontFace = this.dom.card.querySelector('.absolute.inset-0.bg-white');
 
-        if (inputCmp === targetCmp || targetCmp.includes(inputCmp)) {
+        if (inputCmp === targetCmp || (targetCmp.includes(inputCmp) && inputCmp.length >= targetCmp.length * 0.7)) {
             frontFace.classList.remove('border-slate-100', 'dark:border-neutral-800');
             frontFace.classList.add('border-emerald-500', 'ring-4', 'ring-emerald-500/20');
             app.celebration.play();

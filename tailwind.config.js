@@ -11,6 +11,7 @@ module.exports = {
     'from-amber-50', 'to-orange-50', 'from-violet-50', 'to-purple-50',
     'dark:from-amber-900/20', 'dark:to-orange-900/20', 'dark:from-violet-900/20', 'dark:to-purple-900/20',
     'border-amber-100', 'dark:border-amber-900/30', 'border-violet-100', 'dark:border-violet-900/30',
+    'peer-checked:bg-white', 'peer-checked:text-slate-700',
   ],
   darkMode: 'class',
   theme: {

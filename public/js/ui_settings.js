@@ -125,7 +125,12 @@ Object.assign(UIManager.prototype, {
                     }
                 }
             });
-            settingsList.insertBefore(div, settingsList.firstChild);
+            const anchor = settingsList.children[1];
+            if (anchor && anchor.nextSibling) {
+                settingsList.insertBefore(div, anchor.nextSibling);
+            } else {
+                settingsList.appendChild(div);
+            }
         }
     },
 
@@ -289,11 +294,10 @@ Object.assign(UIManager.prototype, {
                 html += `<div class="h-px bg-slate-200 dark:bg-neutral-700"></div><p class="text-[10px] uppercase font-bold text-slate-400">Enable Audio By Language</p><div id="container-match-audio" class="grid grid-cols-4 gap-2"></div>`;
             }
             html += `</div></details>`;
-            // Insert in good visual position: after level-filter if present, else after global visual card, else append
-            const level = document.getElementById('level-filter-container');
-            const anchor = level && level.parentNode ? level : document.querySelector('#settings-list > div.bg-slate-100');
-            if (anchor && anchor.parentNode) {
-                anchor.parentNode.insertBefore( (function(){ const t=document.createElement('div'); t.innerHTML=html; return t.firstChild; })() , anchor.nextSibling );
+            // Insert at the end (before Developer section if it exists)
+            const devSection = document.getElementById('details-developer');
+            if (devSection && devSection.parentNode) {
+                devSection.parentNode.insertBefore( (function(){ const t=document.createElement('div'); t.innerHTML=html; return t.firstChild; })() , devSection );
             } else {
                 list.insertAdjacentHTML('beforeend', html);
             }

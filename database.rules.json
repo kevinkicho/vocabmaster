@@ -20,12 +20,13 @@
         ".write": "$uid === auth.uid"
       }
     },
-    "stories": {
+"stories": {
       ".read": true,
-      ".indexOn": ["lang", "ts"],
-      "$storyId": {
-        ".write": "auth != null",
-        ".validate": "newData.hasChildren(['storyText', 'questions', 'lang', 'ts']) && newData.child('lang').isString() && newData.child('storyText').isString()"
+      "$vocabKey": {
+        "$lang": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['story', 'questions', 'vocabIds', 'ts']) && newData.child('story').isString()"
+        }
       }
     },
     "grammar_exercises": {

@@ -129,6 +129,7 @@ class App {
         this.score = Math.max(0, Number(this.score) || 0);
         this.dailyScore = Math.max(0, Number(this.dailyScore) || 0);
         this.game = null;
+        this._returnTo = null;
 
         try { this.store = new Store(); } catch (e) {
             L("FATAL: Store constructor failed:", e);
@@ -150,6 +151,15 @@ class App {
         if (typeof window._initLearningLoop === 'function') window._initLearningLoop();
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
         else { this.init(); }
+
+        // Android back button / browser back: return to previous game if applicable
+        window.addEventListener('popstate', function(e) {
+            if (e.state && e.state.returnTo && app && app.goBack) {
+                app.goBack();
+            } else if (e.state && e.state.view === 'home') {
+                if (app && app.goHome) app.goHome(false);
+            }
+        });
     }
 
     applyUrlParameters() {
@@ -550,6 +560,29 @@ class App {
             L("Launch Error:", e.stack || e);
             if (app.ui && app.ui.showToast) app.ui.showToast("Failed to start game: " + e.message, 'error');
             this.goHome(false);
+        }
+    }
+
+    // --- Sub-game navigation ---
+    launchSubGame(fn) {
+        if (this.game) {
+            this._returnTo = { key: this.game.key };
+            this.game.destroy();
+            if (this.audio) this.audio.cancel();
+        }
+        this.game = fn();
+        history.pushState({ view: 'subgame', returnTo: true }, '');
+    }
+
+    goBack() {
+        if (this._returnTo) {
+            var key = this._returnTo.key;
+            this._returnTo = null;
+            if (this.game) this.game.destroy();
+            if (this.audio) this.audio.cancel();
+            this.launchGameMode(key);
+        } else {
+            this.goHome();
         }
     }
 

@@ -3,8 +3,8 @@ Object.assign(Story.prototype, {
 
 // --- Story-specific header with session progress ---
 _setupStoryHeader() {
-        const num = this.storyNum || 1;
-        const total = this.storiesPerSession;
+        var num = this.storyNum || 1;
+        var total = this._cachedStories.length || '∞';
         this.dom.header.innerHTML = `
             <div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">
                 <div class="flex items-center bg-white dark:bg-neutral-800 rounded-full px-4 py-2 shadow-sm border border-slate-200 dark:border-neutral-700 mr-auto">
@@ -13,6 +13,9 @@ _setupStoryHeader() {
                     <span class="text-[10px] font-bold text-slate-400 ml-1">/ ${total}</span>
                 </div>
                 <div class="flex items-center">
+                    <button onclick="app.game._surpriseStory()" class="w-9 h-9 bg-amber-400 dark:bg-amber-500 hover:bg-amber-500 dark:hover:bg-amber-400 rounded-full flex items-center justify-center active:scale-90 transition-all text-white mr-2" title="Surprise story with random words">
+                        <i class="ph-bold ph-star text-sm"></i>
+                    </button>
                     <div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2">
                         <span class="text-slate-400">PTS</span>
                         <span class="score-display">${Math.max(0, Number(app.score) || 0)}</span>
@@ -32,45 +35,24 @@ _setupStoryHeader() {
 
 // --- Streaming card — final UI from the start ---
 _showStreamingCard(wordList) {
-        const startTime = Date.now();
+        // Replaced by _showGeneratingCard — kept as transition fallback
+        this._showGeneratingCard(wordList);
+    },
+
+// --- Generating spinner card (buffered, no streaming) ---
+_showGeneratingCard(wordList) {
         const lang = this._getTargetLang();
-
         this.dom.body.innerHTML = `
-            <div class="space-y-4 pb-2">
-                <div class="bg-white dark:bg-neutral-900 rounded-2xl p-4 border border-slate-200 dark:border-neutral-700 shadow-sm">
-                    <div class="flex items-center gap-2 mb-3">
-                        <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
-                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
-                        <span id="story-elapsed" class="ml-auto text-[10px] text-slate-300 dark:text-neutral-600 font-mono">0s</span>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5 mb-3">
-                        ${wordList.map(w => `<button data-word="${escapeHtml(w)}" data-lang="${lang}" class="story-word-chip inline-flex items-center gap-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full active:scale-95 transition-all cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800" title="Tap to hear"><span>${escapeHtml(w)}</span><i class="ph-bold ph-speaker-high text-[10px] opacity-70"></i></button>`).join('')}
-                    </div>
-                    <div id="story-stream" class="text-base leading-relaxed text-slate-800 dark:text-neutral-100 whitespace-pre-wrap min-h-[60px] select-text"><span class="text-slate-300 dark:text-neutral-600 animate-pulse">|</span></div>
-                </div>
-                <div id="story-questions-area"></div>
+            <div class="flex flex-col items-center justify-center h-full px-6 text-center">
+                <p id="story-gen-text" class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating story...</p>
+                <p id="story-elapsed" class="text-[10px] text-slate-300 dark:text-neutral-600 font-mono mt-2">0s</p>
             </div>`;
+        this.dom.footer.innerHTML = '';
 
-        this.dom.footer.innerHTML = `
-            <div class="flex items-center gap-2 justify-center opacity-60">
-                <i class="ph-bold ph-spinner animate-spin text-xs text-indigo-400"></i>
-                <span id="story-status" class="text-[11px] font-bold text-slate-400">Writing story...</span>
-            </div>`;
-
-        // Wire up word chip clicks → TTS
-        this.dom.body.querySelectorAll('.story-word-chip').forEach(chip => {
-            chip.onclick = (e) => {
-                e.preventDefault();
-                const word = chip.dataset.word || '';
-                const l = chip.dataset.lang || lang;
-                if (app.audio && word) app.audio.play(word, l, null, 0);
-                chip.classList.add('ring-2', 'ring-indigo-400');
-                setTimeout(() => chip.classList.remove('ring-2', 'ring-indigo-400'), 600);
-            };
-        });
-
-        this._elapsedTimer = setInterval(() => {
-            const el = document.getElementById('story-elapsed');
+        var startTime = Date.now();
+        if (this._elapsedTimer) clearInterval(this._elapsedTimer);
+        this._elapsedTimer = setInterval(function() {
+            var el = document.getElementById('story-elapsed');
             if (el) el.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
         }, 1000);
 
@@ -78,12 +60,11 @@ _showStreamingCard(wordList) {
     },
 
 // --- Display: story + sequential questions ---
-    _showStoryWithQuestions(storyPart, lang, isFallback = false) {
+    _showStoryWithQuestions(storyPart, lang) {
         this.phase = 'reading';
         const highlighted = this._highlightWords(storyPart);
         const total = this.questions.length;
 
-        const fallbackBadge = isFallback ? `<span class="ml-2 text-[9px] font-black bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 px-2 py-0.5 rounded-full">Basic Mode</span>` : '';
         const wordPills = `<div class="flex flex-wrap gap-1.5 mb-3">${this.storyWords.map(w => {
             const txt = w[lang] || w.ja || '';
             return `<button data-word="${escapeHtml(txt)}" data-lang="${lang}" class="story-word-chip inline-flex items-center gap-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full active:scale-95 transition-all cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800" title="Tap to hear"><span>${escapeHtml(txt)}</span><i class="ph-bold ph-speaker-high text-[10px] opacity-70"></i></button>`;
@@ -95,7 +76,6 @@ _showStreamingCard(wordList) {
                     <div class="flex items-center gap-2 mb-3">
                         <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
-                        ${fallbackBadge}
                         <button id="story-speak-btn" onclick="app.game._readStory()" class="ml-auto w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-indigo-500 hover:border-indigo-300">
                             <i class="ph-bold ph-speaker-high text-sm"></i>
                         </button>
@@ -155,10 +135,12 @@ _showStreamingCard(wordList) {
                 <p class="text-sm font-bold text-slate-800 dark:text-white mb-3">${this.wrapHanzi(q.text)}</p>
                 <p class="text-[9px] text-slate-400 mb-2">Tap a choice to hear it, tap again to submit</p>
                 <div class="grid grid-cols-1 gap-2">
-                    ${q.choices.map(c => `
-                        <button data-letter="${c.letter}" data-text="${escapeHtml(c.text)}" data-played="0" class="story-choice text-left px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-bold text-slate-700 dark:text-white active:scale-[0.98] transition-all">
-                            <span class="text-indigo-500 dark:text-indigo-400 font-black mr-2">${c.letter})</span> ${this.wrapHanzi(c.text)}
-                        </button>`).join('')}
+                    <button data-value="answer" data-text="${escapeHtml(q.answer.text)}" data-translation="${escapeHtml(q.answer.translation || '')}" data-longpress="0" data-played="0" class="story-choice text-left px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-bold text-slate-700 dark:text-white active:scale-[0.98] transition-all select-none">
+                        ${this.wrapHanzi(q.answer.text)}
+                    </button>
+                    <button data-value="wrong" data-text="${escapeHtml(q.wrong.text)}" data-translation="${escapeHtml(q.wrong.translation || '')}" data-longpress="0" data-played="0" class="story-choice text-left px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-bold text-slate-700 dark:text-white active:scale-[0.98] transition-all select-none">
+                        ${this.wrapHanzi(q.wrong.text)}
+                    </button>
                 </div>
             </div>`;
 
@@ -166,9 +148,29 @@ _showStreamingCard(wordList) {
         requestAnimationFrame(() => qSection.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 
         const choices = qSection.querySelectorAll('.story-choice');
-        choices.forEach(btn => {
-            btn.onclick = () => this._handleStoryChoiceClick(btn, q);
-        });
+        choices.forEach(function(btn) {
+            var timer = null;
+            var origText = btn.textContent;
+            btn.addEventListener('pointerdown', function() {
+                if (btn.dataset.played === '1') return;
+                timer = setTimeout(function() {
+                    btn.dataset.longpress = '1';
+                    var tr = btn.dataset.translation;
+                    if (tr) btn.textContent = tr;
+                }, 500);
+            });
+            btn.addEventListener('pointerup', function() { clearTimeout(timer); if (btn.dataset.longpress === '1') { btn.textContent = origText; btn.dataset.longpress = '0'; } });
+            btn.addEventListener('pointerleave', function() { clearTimeout(timer); if (btn.dataset.longpress === '1') { btn.textContent = origText; btn.dataset.longpress = '0'; } });
+            btn.addEventListener('click', function(e) {
+                if (btn.dataset.longpress === '1') {
+                    btn.textContent = origText;
+                    btn.dataset.longpress = '0';
+                    return;
+                }
+                this._handleStoryChoiceClick(btn, q);
+            }.bind(this));
+            btn.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+        }.bind(this));
     },
 
     _handleStoryChoiceClick(el, q) {
@@ -183,7 +185,7 @@ _showStreamingCard(wordList) {
             el.classList.add('ring-2', 'ring-indigo-300', 'dark:ring-indigo-600');
             return;
         }
-        this._checkAnswer(el.dataset.letter, el, q);
+        this._checkAnswer(el, q);
     },
 
     _deselectStoryChoices() {
@@ -195,16 +197,16 @@ _showStreamingCard(wordList) {
         });
     },
 
-    _checkAnswer(letter, el, q) {
+    _checkAnswer(el, q) {
         if (this.answered) return;
         this.answered = true;
 
-        const correct = letter === q.correct;
+        const correct = el.dataset.value === 'answer';
         const area = document.getElementById('story-questions-area');
 
         area.querySelectorAll('.story-choice').forEach(btn => {
             btn.classList.remove('border-slate-200', 'dark:border-neutral-700', 'bg-white', 'dark:bg-neutral-900', 'bg-emerald-50', 'bg-rose-50');
-            if (btn.dataset.letter === q.correct) {
+            if (btn.dataset.value === 'answer') {
                 btn.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30', 'dark:text-white');
             } else if (btn === el && !correct) {
                 btn.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30', 'dark:text-white');
@@ -221,6 +223,15 @@ _showStreamingCard(wordList) {
             this.miss();
         }
 
+        // Show explanation
+        var explanationBlock = document.createElement('div');
+        explanationBlock.className = 'mt-3 p-3 rounded-xl ' + (correct ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30' : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30');
+        var label = correct ? '<span class="text-emerald-600 dark:text-emerald-400 font-bold"><i class="ph-bold ph-check-circle mr-1"></i>Correct!</span>' : '<span class="text-amber-600 dark:text-amber-400 font-bold"><i class="ph-bold ph-x-circle mr-1"></i>Not quite</span>';
+        var expText = (q.explanation || '') + (q.answer.translation ? '<br><span class="text-[10px] text-slate-500">' + escapeHtml(q.answer.translation) + '</span>' : '');
+        explanationBlock.innerHTML = label + '<p class="text-xs text-slate-600 dark:text-neutral-300 mt-1">' + expText + '</p>';
+        area.appendChild(explanationBlock);
+        requestAnimationFrame(function() { explanationBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+
         this.qIndex++;
         const hasMore = this.qIndex < this.questions.length;
 
@@ -230,73 +241,90 @@ _showStreamingCard(wordList) {
                 <button id="story-next-q" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-indigo-500 to-purple-500 active:scale-95 transition-transform shadow-lg">
                     <i class="ph-bold ph-arrow-right mr-1"></i> Next Question (${remaining} left)
                 </button>`;
-            document.getElementById('story-next-q').onclick = () => this._showCurrentQuestion();
+            document.getElementById('story-next-q').onclick = function() { this._showCurrentQuestion(); }.bind(this);
         } else {
-            // Session complete?
-            const sessionDone = this.storyNum >= this.storiesPerSession;
-            if (sessionDone) {
-                this.dom.footer.innerHTML = `
-                    <div class="space-y-2">
-                        <div class="text-center text-xs font-bold text-emerald-500 mb-1">
-                            <i class="ph-bold ph-check-circle mr-1"></i> Session complete! ${this.storiesPerSession} stories finished
-                        </div>
-                        <button onclick="app.game._resetSession()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-emerald-500 to-cyan-500 active:scale-95 transition-transform shadow-lg">
-                            <i class="ph-bold ph-arrow-clockwise mr-1"></i> New Session
-                        </button>
-                    </div>`;
-            } else {
-                const prefetchReady = !!this._prefetched;
-                const nextCached = this._cachedIndex < this._cachedStories.length;
-                const instant = prefetchReady || nextCached;
-                this.dom.footer.innerHTML = `
-                    <div class="space-y-2">
-                        <button onclick="app.game._loadNext()" class="w-full py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
-                            <i class="ph-bold ph-arrow-right mr-1"></i> ${instant ? 'Next Story' : 'New Story'}
-                        </button>
-                        <button id="story-generate-anew" onclick="app.game._generateAnewStory()" class="w-full py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-fuchsia-500 active:scale-95 transition-transform shadow-md">
-                            <i class="ph-bold ph-sparkle mr-1"></i> Generate Anew Story
-                        </button>
-                        <button onclick="app.game._reviewStoryWords()" class="w-full py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-rose-500 active:scale-95 transition-transform">
-                            <i class="ph-bold ph-list-checks mr-1"></i> Review words from this story
-                        </button>
-                    </div>`;
-            }
+            this._showStoryNavFooter();
         }
     },
 
+    _showStoryNavFooter() {
+        var prefetchReady = !!this._prefetched;
+        var nextCached = this._cachedIndex < this._cachedStories.length;
+        var hasPrev = this._cachedIndex > 1;
+        var hasNext = prefetchReady || nextCached;
+
+        this.dom.footer.innerHTML = `
+            <div class="space-y-2">
+                <div class="flex gap-2">
+                    <button onclick="app.game._prevStory()" class="flex-1 py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-slate-500 to-slate-600 active:scale-95 transition-transform shadow-lg ${hasPrev ? '' : 'opacity-50 cursor-not-allowed'}" ${hasPrev ? '' : 'disabled'}>
+                        <i class="ph-bold ph-caret-left mr-1"></i> Previous
+                    </button>
+                    <button onclick="app.game._nextStory()" class="flex-1 py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg ${hasNext ? '' : 'opacity-50 cursor-not-allowed'}" ${hasNext ? '' : 'disabled'}>
+                        ${hasNext ? 'Next' : 'Generate'} <i class="ph-bold ph-caret-right ml-1"></i>
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="app.game._regenerateStory()" class="flex-1 py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-fuchsia-500 active:scale-95 transition-transform shadow-md">
+                        <i class="ph-bold ph-sparkle mr-1"></i> Regenerate Story
+                    </button>
+                    <button onclick="app.game._surpriseStory()" class="flex-1 py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-amber-400 to-orange-500 active:scale-95 transition-transform shadow-md">
+                        <i class="ph-bold ph-star mr-1"></i> Surprise
+                    </button>
+                </div>
+                <button onclick="app.game._reviewStoryWords()" class="w-full py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-rose-500 active:scale-95 transition-transform">
+                    <i class="ph-bold ph-list-checks mr-1"></i> Review words from this story
+                </button>
+            </div>`;
+    },
+
     async _generateAnewStory() {
-        // Skip cache + prefetch, force fresh AI generation
+        // Skip cache + prefetch, force fresh AI generation reusing current words
         this._prefetched = null;
         this._prefetching = false;
         this.answered = false;
         this.busy = false;
-        // Disable the button to prevent double-clicks
-        const btn = document.getElementById('story-generate-anew');
+        var btn = document.getElementById('story-generate-anew');
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<i class="ph-bold ph-spinner animate-spin mr-1"></i> Generating…';
         }
-        // Reuse startStory(forceAnew=true) — it handles AI off, generation, and rendering.
-        // Each fresh generation counts as a new story in the session, which matches "Generate Anew Story".
+        await this.startStory(true);
+    },
+
+    async _surpriseStory() {
+        // Force random words + fresh AI generation
+        this.storyWords = [];
+        this._prefetched = null;
+        this._prefetching = false;
+        this.answered = false;
+        this.busy = false;
         await this.startStory(true);
     },
 
     _reviewStoryWords() {
         if (!this.storyWords || this.storyWords.length === 0 || !app.data) return;
-        const ok = app.data.startSpecificReview(this.storyWords);
-        if (ok) {
-            // Launch Quiz or Flash with these words for review using app.launch to ensure UI switches
-            app.launch(() => {
-                const quiz = new Quiz('quiz');
-                // Auto end review when this review game ends
-                const origDestroy = quiz.destroy.bind(quiz);
-                quiz.destroy = () => {
-                    if (app.data) app.data.endReviewSession();
-                    origDestroy();
-                };
-                return quiz;
-            });
-        }
+        app.launchSubGame(function() {
+            var fc = new Flashcard('flashcard');
+            fc.list = this.storyWords;
+            fc.i = 0;
+            fc.setup();
+            fc.update();
+            return fc;
+        }.bind(this));
+    },
+
+    _prevStory() {
+        if (this._cachedIndex < 2) return;
+        this._cachedIndex -= 2;
+        this._loadNext();
+    },
+
+    _nextStory() {
+        this._loadNext();
+    },
+
+    _regenerateStory() {
+        this._generateAnewStory();
     },
 
     _resetSession() {

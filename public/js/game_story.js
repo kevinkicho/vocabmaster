@@ -12,7 +12,7 @@ class Story extends GameMode {
         this._prefetching = false;
 
         // Session progress
-        this.storiesPerSession = 5;
+        this.storiesPerSession = Infinity;
         this.storyNum = 0;      // how many stories completed or in-progress (1-based during play)
 
         // RTDB story cache

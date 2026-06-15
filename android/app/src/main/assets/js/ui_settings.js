@@ -8,8 +8,7 @@ Object.assign(UIManager.prototype, {
             if (settingsList && settingsList.innerHTML.trim() === '' && window.SETTINGS_HTML) {
                 settingsList.innerHTML = window.SETTINGS_HTML;
             }
-            this.renderPresetsUI(); this.renderThemeGrid(); this.renderLevelFilter();
-            this.renderCollectionsInSettings();  // surface collections inside settings (suggestion)
+            this.renderPresetsUI(); this.renderThemeGrid();
             this.renderFontsAccordion();
             this.renderAISettings();
             this.ensureActivitySections();  // generate from schema to reduce HTML bloat
@@ -48,10 +47,6 @@ Object.assign(UIManager.prototype, {
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
-            // Robustness + collections always fresh on open (even if settings re-rendered)
-            if (typeof this.renderCollectionsInSettings === 'function') {
-                try { this.renderCollectionsInSettings(); } catch(e){}
-            }
         } catch(e) { L("Error loading settings UI:", e); }
     },
 
@@ -130,7 +125,12 @@ Object.assign(UIManager.prototype, {
                     }
                 }
             });
-            settingsList.insertBefore(div, settingsList.firstChild);
+            const anchor = settingsList.children[1];
+            if (anchor && anchor.nextSibling) {
+                settingsList.insertBefore(div, anchor.nextSibling);
+            } else {
+                settingsList.appendChild(div);
+            }
         }
     },
 
@@ -144,60 +144,6 @@ Object.assign(UIManager.prototype, {
 
     renderThemeGrid() { const container = document.getElementById('theme-grid'); if(!container) return; const themes = [{ id: 'classic', color: '#6366f1', label: 'Classic' }, { id: 'sakura',  color: '#ec4899', label: 'Sakura' }, { id: 'ocean',   color: '#14b8a6', label: 'Ocean' }, { id: 'coffee',  color: '#f59e0b', label: 'Coffee' }, { id: 'cyber',   color: '#06b6d4', label: 'Cyber' }]; const cur = this.store.prefs.theme || 'classic'; container.innerHTML = themes.map(t => { const isActive = t.id === cur; const ring = isActive ? `ring-2 ring-offset-2 ring-${t.id === 'classic' ? 'indigo' : 'gray'}-400 dark:ring-offset-neutral-800` : ''; return `<button onclick="app.store.setTheme('${t.id}')" class="flex flex-col items-center gap-1 group"><div class="w-8 h-8 rounded-full shadow-sm border border-slate-200 dark:border-neutral-600 ${ring} transition-all active:scale-95" style="background-color: ${t.color}"></div><span class="text-[9px] font-bold text-slate-500 dark:text-neutral-400 ${isActive?'text-indigo-600 dark:text-indigo-400':''}">${t.label}</span></button>`; }).join(''); },
     renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); const p = this.store.prefs; const curSource = p.presetSource || 'en'; const curTarget = p.presetTarget || 'ja'; container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; const src = document.getElementById('preset-source'); const tgt = document.getElementById('preset-target'); if(src) src.value = curSource; if(tgt) tgt.value = curTarget; },
-    renderLevelFilter() {
-        const container = document.getElementById('level-filter-container');
-        if (!container) return;
-        const p = this.store.prefs;
-        if (typeof LEVEL_CONFIG === 'undefined') return;
-        const selected = p.levelFilter || ['all'];
-        const hasLevelData = app.data.list.some(item => item.tags && item.tags.length > 0);
-        if (!hasLevelData) { container.classList.add('hidden'); return; }
-        container.classList.remove('hidden');
-        const allBtnClass = selected.includes('all') ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-200 border-slate-200 dark:border-neutral-600';
-        let html = `<p class="text-[9px] uppercase font-bold text-violet-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-barbell"></i> Level Filter</p>
-            <div class="flex flex-wrap gap-1.5 mb-2">
-            <button data-level="all" class="level-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>`;
-        for (const group of LEVEL_CONFIG.groups) {
-            const isRelevant = group.langs.some(l => p.flashFront === l || p.flashBack1 === l || p.flashBack2 === l || p.sentencesQ === l || p.quizQ === l || p.tfFront === l || p.voiceDispFront === l);
-            if (!isRelevant) continue;
-            html += `<span class="text-[9px] font-black text-slate-400 mx-1">${group.label}</span>`;
-            for (const lvl of group.levels) {
-                const isActive = selected.includes(lvl);
-                const color = LEVEL_CONFIG.colors[lvl] || '#6366f1';
-                const btnClass = isActive ? 'text-white border-transparent shadow-sm' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-200 border-slate-200 dark:border-neutral-700';
-                const style = isActive ? `background:${color}; border-color:${color}` : '';
-                html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}" style="${style}">${lvl}</button>`;
-            }
-        }
-        const unassignedActive = selected.includes('unassigned');
-        const unClass = unassignedActive ? 'bg-slate-600 text-white border-slate-600' : 'bg-white dark:bg-neutral-700 text-slate-400 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
-        html += `<button data-level="unassigned" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${unClass}">Untagged</button>`;
-        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>`;
-        html += `<p class="text-[8px] text-slate-400 dark:text-neutral-600 mt-1 italic">TOPIK &amp; CEFR levels are approximated from JLPT proficiency</p></div>`;
-        container.innerHTML = html;
-        container.querySelectorAll('.level-filter-btn').forEach(btn => {
-            btn.onclick = () => { this.toggleLevel(btn.dataset.level); };
-        });
-    },
-    toggleLevel(level) {
-        const p = this.store.prefs;
-        let selected = [...(p.levelFilter || ['all'])];
-        if (level === 'all') { selected = ['all']; }
-        else {
-            selected = selected.filter(l => l !== 'all');
-            if (selected.includes(level)) { selected = selected.filter(l => l !== level); if (selected.length === 0) selected = ['all']; }
-            else { selected.push(level); }
-        }
-        p.levelFilter = selected;
-        localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
-        this.renderLevelFilter();
-        if (app.game) {
-            app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
-            if(app.game.i >= app.game.list.length) app.game.i = 0;
-            if (app.game.update) app.game.update(); else app.game.render();
-        }
-    },
     // --- Shared helpers for settings dropdowns/grids (used by sub-renderers) ---
     createOpts(selId, selectedVal, hideVisuals = false) {
         const el = document.getElementById(selId);
@@ -348,56 +294,16 @@ Object.assign(UIManager.prototype, {
                 html += `<div class="h-px bg-slate-200 dark:bg-neutral-700"></div><p class="text-[10px] uppercase font-bold text-slate-400">Enable Audio By Language</p><div id="container-match-audio" class="grid grid-cols-4 gap-2"></div>`;
             }
             html += `</div></details>`;
-            // Insert in good visual position: after level-filter if present, else after global visual card, else append
-            const level = document.getElementById('level-filter-container');
-            const anchor = level && level.parentNode ? level : document.querySelector('#settings-list > div.bg-slate-100');
-            if (anchor && anchor.parentNode) {
-                anchor.parentNode.insertBefore( (function(){ const t=document.createElement('div'); t.innerHTML=html; return t.firstChild; })() , anchor.nextSibling );
+            // Insert at the end (before Developer section if it exists)
+            const devSection = document.getElementById('details-developer');
+            if (devSection && devSection.parentNode) {
+                devSection.parentNode.insertBefore( (function(){ const t=document.createElement('div'); t.innerHTML=html; return t.firstChild; })() , devSection );
             } else {
                 list.insertAdjacentHTML('beforeend', html);
             }
         });
     },
 
-    renderCollectionsInSettings() {
-        const list = document.getElementById('settings-list');
-        if (!list) return;
-        // Re-use or recreate for freshness (picker options may be dynamic)
-        let div = document.getElementById('collections-in-settings');
-        if (div) div.remove();
-        div = document.createElement('div');
-        div.id = 'collections-in-settings';
-        div.className = 'bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 mb-2';
-        let html = `<p class="text-xs font-black text-emerald-500 uppercase tracking-widest mb-2"><i class="ph-bold ph-list"></i> Collections (Medium-term)</p>`;
-        const cols = (typeof listCollections === 'function') ? listCollections() : [];
-        html += `<select id="settings-collection-picker" class="w-full text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-2 py-1">`;
-        cols.forEach(c => {
-            html += `<option value="${c.id}">${c.name} — ${c.description || ''}</option>`;
-        });
-        html += `</select><p class="text-[9px] text-emerald-600 mt-1">Active collection scopes games, review queue and Story word selection. Change also from home screen. (Persisted via prefs + registry default.)</p>`;
-        div.innerHTML = html;
-        // insert after level filter (or global visual) for prominence
-        const level = document.getElementById('level-filter-container');
-        const anchor = level && level.parentNode ? level : document.querySelector('#settings-list > div.bg-slate-100');
-        if (anchor && anchor.parentNode) {
-            anchor.parentNode.insertBefore(div, anchor.nextSibling);
-        } else {
-            list.appendChild(div);
-        }
-        const sel = document.getElementById('settings-collection-picker');
-        const current = (this.data && this.data.currentCollection) || (this.store && this.store.prefs && this.store.prefs.currentCollection) || 'all';
-        if (sel) {
-            sel.value = current;
-            sel.onchange = () => {
-                if (app && app.setCollection) {
-                    app.setCollection(sel.value);
-                    // keep home picker in sync if present
-                    const homePicker = document.getElementById('collection-picker');
-                    if (homePicker) homePicker.value = sel.value;
-                }
-            };
-        }
-    },
 
     renderSettingsUI() {
         const p = this.store.prefs;

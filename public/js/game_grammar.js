@@ -95,10 +95,28 @@ class Grammar extends GameMode {
         const llmReady = app.llm && app.llm.available && app.llm.hasModel;
         if (!llmReady) {
             if (this.dom.content) {
-                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Grammar Gym requires a working AI connection.</p><p class="text-xs text-slate-400 mt-2">Please set up and connect AI in Settings &gt; AI.</p></div>`;
+                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Grammar Gym requires a working AI connection.</p><p class="text-xs text-slate-400 mt-2">Connecting to AI...</p></div>`;
             }
             if (this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
             this.afterRender();
+            // Retry up to 5 times over 10 seconds (autoDetect may still be in progress)
+            if (!this._llmRetryTimer) {
+                let attempts = 0;
+                this._llmRetryTimer = setInterval(() => {
+                    attempts++;
+                    if (app.llm && app.llm.available && app.llm.hasModel) {
+                        clearInterval(this._llmRetryTimer);
+                        this._llmRetryTimer = null;
+                        if (this.list && this.list[this.i]) this.update();
+                    } else if (attempts >= 10) {
+                        clearInterval(this._llmRetryTimer);
+                        this._llmRetryTimer = null;
+                        if (this.dom.content) {
+                            this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Grammar Gym requires a working AI connection.</p><p class="text-xs text-slate-400 mt-2">Please set up and connect AI in Settings &gt; AI.</p></div>`;
+                        }
+                    }
+                }, 1000);
+            }
             return;
         }
         this.updateHeader();

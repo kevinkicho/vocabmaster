@@ -52,7 +52,7 @@ class UIManager {
         const standardControls = (!isMatch && opts.showDice) ? `<button onclick="app.game.rand()" class="${btnClass}"><i class="ph-bold ph-dice-five text-lg"></i></button>` : '';
         const matchControls = isMatch ? `<button onclick="app.game.restorePrev()" class="${btnClass} ${!opts.hasPrev?'opacity-50 cursor-not-allowed':''}"><i class="ph-bold ph-arrow-u-up-left text-lg"></i></button><button onclick="app.game.shuffleGrid()" class="${btnClass}"><i class="ph-bold ph-arrows-clockwise text-lg"></i></button><button onclick="app.game.newGame()" class="${btnClass}"><i class="ph-bold ph-dice-five text-lg"></i></button>` : '';
         
-        return `<div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">${inputHtml}<div class="flex items-center">${editBtn}${standardControls}${matchControls}<div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2"><span class="text-slate-400">PTS</span><span class="score-display">${score}</span></div><button onclick="app.goHome()" class="w-9 h-9 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x"></i></button></div></div>`;
+        return `<div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">${inputHtml}<div class="flex items-center">${editBtn}${standardControls}${matchControls}<div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2"><span class="text-slate-400">PTS</span><span class="score-display">${score}</span></div><button onclick="app.goBack()" class="w-9 h-9 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x"></i></button></div></div>`;
     }
     
     btnAudio(lang, icon) { return `<button onclick="event.stopPropagation();app.game.playSmartAudio('${lang}')" class="w-12 h-12 rounded-full border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:border-indigo-400 hover:text-indigo-600 text-2xl flex items-center justify-center active:scale-95 transition-all text-slate-700 dark:text-neutral-300 select-none shadow-sm">${icon}</button>`; }
@@ -553,7 +553,8 @@ class UIManager {
         const curr = new Date();
         const day = curr.getDay(); 
         const diffToMon = curr.getDate() - day + (day === 0 ? -6 : 1);
-        const mondayDate = new Date(curr.setDate(diffToMon));
+        const mondayDate = new Date(curr);
+        mondayDate.setDate(diffToMon);
         const modes = ['flash', 'quiz', 'tf', 'match', 'voice', 'sentences'];
         const colors = { 'flash': '#818cf8', 'quiz': '#f472b6', 'tf': '#34d399', 'match': '#94a3b8', 'voice': '#38bdf8', 'sentences': '#8b5cf6' };
         const datasets = modes.map(mode => {
@@ -579,10 +580,10 @@ class UIManager {
                if(sum > maxVal) maxVal = sum;
             }
         }
-        let yMax = 1000;
-        if (maxVal > 900) yMax = 5000;
-        if (maxVal > 4500) yMax = 10000;
-        if (maxVal > 9000) yMax = 20000;
+        let yMax = Math.max(10, Math.ceil(maxVal / 10) * 10);
+        if (maxVal > 100) yMax = Math.ceil(maxVal / 100) * 100;
+        if (maxVal > 1000) yMax = Math.ceil(maxVal / 1000) * 1000;
+        if (maxVal > 10000) yMax = Math.ceil(maxVal / 5000) * 5000;
         window.myStatsChart = new Chart(ctx, {
             type: 'bar',
             data: { labels: labels, datasets: datasets },

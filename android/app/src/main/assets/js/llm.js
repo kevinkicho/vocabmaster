@@ -420,6 +420,10 @@ Object.assign(LLMService.prototype, {
 
     async setCache(sentence, target, lang, match) {
         const key = this._cacheKey(sentence, target, lang);
+        if (this.cache.size >= 500) {
+            const firstKey = this.cache.keys().next().value;
+            this.cache.delete(firstKey);
+        }
         this.cache.set(key, match);
         if (!this.db) return;
         try {
@@ -939,6 +943,7 @@ RULES:
     async generateWithCritic({ schemaName, promptBuilder, level, langCode, promptArgs = [], onProgress = null }) {
         let bestData = null;
         let bestScore = 0;
+        const baseArgs = [...promptArgs];
         let actualArgs = [...promptArgs];
 
         for (let criticAttempt = 0; criticAttempt <= this.maxCriticRetries; criticAttempt++) {
@@ -971,8 +976,7 @@ RULES:
                 ? critique.issues.join('; ') + ' | ' + critique.suggestedFix
                 : critique.suggestedFix;
 
-            actualArgs[actualArgs.length - 2] = true;
-            actualArgs[actualArgs.length - 1] = criticFeedback;
+            actualArgs = [...baseArgs, true, criticFeedback];
         }
 
         L(`[Critic] All ${this.maxCriticRetries + 1} attempts below threshold (best: ${bestScore}). Returning best with warning.`);
@@ -1888,12 +1892,24 @@ LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, dat
     if (!db) { L('[Grammar] Save skipped: no db'); return; }
     if (!auth) { L('[Grammar] Save skipped: no auth'); return; }
     if (!auth.currentUser) { L('[Grammar] Save skipped: no currentUser'); return; }
+    if (!data || !data.exercises || data.exercises.length === 0) {
+        L('[Grammar] Save skipped: no valid exercises');
+        return;
+    }
+    // Verify exercises have required fields — reject partial/mock data
+    const validExercises = data.exercises.filter(ex =>
+        ex.type && ex.question && ex.choices && ex.choices.length >= 2 && ex.answer && ex.explanation
+    );
+    if (validExercises.length < 12) {
+        L('[Grammar] Save skipped: only', validExercises.length, 'valid exercises (need 12)');
+        return;
+    }
     const token = Math.random().toString(36).slice(2, 8);
     const entry = {
         grammar: data.grammar,
         usage: data.usage,
         example: data.example,
-        exercises: data.exercises,
+        exercises: validExercises,
         model: this.resolvedModel || 'unknown',
         ts: firebase.database.ServerValue.TIMESTAMP
     };

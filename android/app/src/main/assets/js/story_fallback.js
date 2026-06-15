@@ -108,7 +108,7 @@ window.StoryFallback = {
             if (availSentences.length === 0) return;
             const idx = Math.floor(Math.random() * availSentences.length);
             const sentenceTmpl = availSentences.splice(idx, 1)[0];
-            const wordText = vocab[langCode] || vocab.word || vocab.id || "";
+            const wordText = typeof vocab === 'string' ? vocab : (vocab[langCode] || vocab.word || vocab.id || "");
             selectedSentences.push(sentenceTmpl.replace('{word}', wordText));
         });
         

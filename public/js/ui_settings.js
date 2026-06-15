@@ -8,7 +8,7 @@ Object.assign(UIManager.prototype, {
             if (settingsList && settingsList.innerHTML.trim() === '' && window.SETTINGS_HTML) {
                 settingsList.innerHTML = window.SETTINGS_HTML;
             }
-            this.renderPresetsUI(); this.renderThemeGrid(); this.renderLevelFilter();
+            this.renderPresetsUI(); this.renderThemeGrid();
             this.renderFontsAccordion();
             this.renderAISettings();
             this.ensureActivitySections();  // generate from schema to reduce HTML bloat
@@ -139,60 +139,6 @@ Object.assign(UIManager.prototype, {
 
     renderThemeGrid() { const container = document.getElementById('theme-grid'); if(!container) return; const themes = [{ id: 'classic', color: '#6366f1', label: 'Classic' }, { id: 'sakura',  color: '#ec4899', label: 'Sakura' }, { id: 'ocean',   color: '#14b8a6', label: 'Ocean' }, { id: 'coffee',  color: '#f59e0b', label: 'Coffee' }, { id: 'cyber',   color: '#06b6d4', label: 'Cyber' }]; const cur = this.store.prefs.theme || 'classic'; container.innerHTML = themes.map(t => { const isActive = t.id === cur; const ring = isActive ? `ring-2 ring-offset-2 ring-${t.id === 'classic' ? 'indigo' : 'gray'}-400 dark:ring-offset-neutral-800` : ''; return `<button onclick="app.store.setTheme('${t.id}')" class="flex flex-col items-center gap-1 group"><div class="w-8 h-8 rounded-full shadow-sm border border-slate-200 dark:border-neutral-600 ${ring} transition-all active:scale-95" style="background-color: ${t.color}"></div><span class="text-[9px] font-bold text-slate-500 dark:text-neutral-400 ${isActive?'text-indigo-600 dark:text-indigo-400':''}">${t.label}</span></button>`; }).join(''); },
     renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); const p = this.store.prefs; const curSource = p.presetSource || 'en'; const curTarget = p.presetTarget || 'ja'; container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; const src = document.getElementById('preset-source'); const tgt = document.getElementById('preset-target'); if(src) src.value = curSource; if(tgt) tgt.value = curTarget; },
-    renderLevelFilter() {
-        const container = document.getElementById('level-filter-container');
-        if (!container) return;
-        const p = this.store.prefs;
-        if (typeof LEVEL_CONFIG === 'undefined') return;
-        const selected = p.levelFilter || ['all'];
-        const hasLevelData = app.data.list.some(item => item.tags && item.tags.length > 0);
-        if (!hasLevelData) { container.classList.add('hidden'); return; }
-        container.classList.remove('hidden');
-        const allBtnClass = selected.includes('all') ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-200 border-slate-200 dark:border-neutral-600';
-        let html = `<p class="text-[9px] uppercase font-bold text-violet-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-barbell"></i> Level Filter</p>
-            <div class="flex flex-wrap gap-1.5 mb-2">
-            <button data-level="all" class="level-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>`;
-        for (const group of LEVEL_CONFIG.groups) {
-            const isRelevant = group.langs.some(l => p.flashFront === l || p.flashBack1 === l || p.flashBack2 === l || p.sentencesQ === l || p.quizQ === l || p.tfFront === l || p.voiceDispFront === l);
-            if (!isRelevant) continue;
-            html += `<span class="text-[9px] font-black text-slate-400 mx-1">${group.label}</span>`;
-            for (const lvl of group.levels) {
-                const isActive = selected.includes(lvl);
-                const color = LEVEL_CONFIG.colors[lvl] || '#6366f1';
-                const btnClass = isActive ? 'text-white border-transparent shadow-sm' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-200 border-slate-200 dark:border-neutral-700';
-                const style = isActive ? `background:${color}; border-color:${color}` : '';
-                html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}" style="${style}">${lvl}</button>`;
-            }
-        }
-        const unassignedActive = selected.includes('unassigned');
-        const unClass = unassignedActive ? 'bg-slate-600 text-white border-slate-600' : 'bg-white dark:bg-neutral-700 text-slate-400 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
-        html += `<button data-level="unassigned" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${unClass}">Untagged</button>`;
-        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>`;
-        html += `<p class="text-[8px] text-slate-400 dark:text-neutral-600 mt-1 italic">TOPIK &amp; CEFR levels are approximated from JLPT proficiency</p></div>`;
-        container.innerHTML = html;
-        container.querySelectorAll('.level-filter-btn').forEach(btn => {
-            btn.onclick = () => { this.toggleLevel(btn.dataset.level); };
-        });
-    },
-    toggleLevel(level) {
-        const p = this.store.prefs;
-        let selected = [...(p.levelFilter || ['all'])];
-        if (level === 'all') { selected = ['all']; }
-        else {
-            selected = selected.filter(l => l !== 'all');
-            if (selected.includes(level)) { selected = selected.filter(l => l !== level); if (selected.length === 0) selected = ['all']; }
-            else { selected.push(level); }
-        }
-        p.levelFilter = selected;
-        localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
-        this.renderLevelFilter();
-        if (app.game) {
-            app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
-            if(app.game.i >= app.game.list.length) app.game.i = 0;
-            if (app.game.update) app.game.update(); else app.game.render();
-        }
-    },
     // --- Shared helpers for settings dropdowns/grids (used by sub-renderers) ---
     createOpts(selId, selectedVal, hideVisuals = false) {
         const el = document.getElementById(selId);

@@ -122,12 +122,27 @@ async _prefetchNext() {
             });
 
             const storyPart = this._extractStory(fullText);
-            const questions = this._extractQuestions(fullText);
+            
+            const qPrompt = `Based on the following story, write 2 comprehension questions in ${langName}.\nEach question MUST have 4 answer choices (A, B, C, D) and you MUST mark the correct answer with "ANSWER: X".\n\nStory:\n"${storyPart}"\n\nFormat exactly like this:\nQ1:\n(question text)\nA) ...\nB) ...\nC) ...\nD) ...\nANSWER: (letter)\n\nQ2:\n(question text)\nA) ...\nB) ...\nC) ...\nD) ...\nANSWER: (letter)`;
+            let qText = '';
+            try {
+                qText = await app.llm.generate({
+                    prompt: qPrompt,
+                    system: 'You are a language learning assistant.',
+                    options: { num_predict: 512, temperature: 0.5 }
+                });
+            } catch(e) {
+                L('[Story] Prefetch question generation failed:', e);
+            }
+
+            const questions = this._extractQuestions(qText);
 
             if (questions.length > 0) {
-                this._prefetched = { storyWords: words, storyPart, questions, lang, rawText: fullText, wordIds: words.map(w => w.id) };
+                this._prefetched = { storyWords: words, storyPart, questions, lang, rawText: fullText + '\n\n' + qText, wordIds: words.map(w => w.id) };
                 L('[Story] Prefetch ready:', questions.length, 'questions');
                 this._updateNextButton();
+            } else {
+                L('[Story] Prefetch failed to extract questions.');
             }
         } catch (e) {
             const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud } : null;

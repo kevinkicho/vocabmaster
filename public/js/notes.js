@@ -3,15 +3,19 @@ class NoteService {
     constructor() {
         this.currentWordId = null;
         this.isAdmin = false;
-        this.adminEmail = 'kevinkicho@gmail.com';
+        // adminEmail removed, using custom claims
         this.isDragging = false; 
     }
 
     setUser(user) {
-        if (user && user.email && user.email.toLowerCase() === this.adminEmail.toLowerCase()) {
-            this.isAdmin = true;
-        } else {
-            this.isAdmin = false;
+        this.isAdmin = false;
+        if (user && !user.isAnonymous) {
+            user.getIdTokenResult().then(idTokenResult => {
+                if (idTokenResult.claims.admin) {
+                    this.isAdmin = true;
+                    this.render(); // re-render to show admin controls if needed
+                }
+            }).catch(e => console.warn('[Notes] Claims check failed:', e));
         }
         
         const devTab = document.getElementById('details-developer');

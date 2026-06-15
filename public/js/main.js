@@ -224,8 +224,15 @@ class App {
                 if(this.auth) {
                     this.auth.currentUser = user;
                     if(user) {
-                        const isAdmin = user.email && user.email.toLowerCase() === 'kevinkicho@gmail.com';
-                        this.auth.userRole = user.isAnonymous ? 'anonymous' : isAdmin ? 'admin' : 'user';
+                        const isAdmin = false; // set via getIdTokenResult below
+                        this.auth.userRole = user.isAnonymous ? 'anonymous' : 'user';
+                        if (!user.isAnonymous) {
+                            user.getIdTokenResult().then(idTokenResult => {
+                                if (idTokenResult.claims.admin) {
+                                    this.auth.userRole = 'admin';
+                                }
+                            }).catch(err => L('[Auth] Failed to get custom claims:', err));
+                        }
                     } else {
                         this.auth.userRole = 'anonymous';
                     }

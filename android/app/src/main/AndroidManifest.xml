@@ -11,7 +11,7 @@
         android:label="VocabMaster"
         android:supportsRtl="true"
         android:theme="@style/Theme.VocabMaster"
-        android:usesCleartextTraffic="true">
+>
         <activity
             android:name=".MainActivity"
             android:exported="true"

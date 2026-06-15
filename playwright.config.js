@@ -10,9 +10,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8123',
     trace: 'on',
-    launchOptions: {
-      args: ['--disable-web-security'],
-    },
+    launchOptions: {},
   },
   projects: [
     {

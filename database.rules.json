@@ -4,14 +4,14 @@
       ".read": true,
       ".indexOn": ["id", "e", "k", "s", "t"],
       "$itemId": {
-        ".write": "auth != null"
+        ".write": "auth != null && auth.token.admin === true"
       }
     },
     "dictionary": {
       ".read": true,
       ".indexOn": ["s", "t"],
       "$itemId": {
-        ".write": "auth != null"
+        ".write": "auth != null && auth.token.admin === true"
       }
     },
     "users": {

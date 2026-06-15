@@ -199,7 +199,7 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
             validationResult = this._validateStoryOnly(storyText, storyWordsObjs, lang);
             if (!validationResult.valid) {
                 L(`[Story] Story validation failed on attempt ${attempt}:`, validationResult.error);
-                if (attempt >= maxRetries) throw new Error(validationResult.error);
+                if (attempt > maxRetries) throw new Error(validationResult.error);
             }
         }
 
@@ -345,18 +345,18 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
     _extractQuestions(text) {
         if (!text) return [];
         const questions = [];
-        const qBlocks = text.matchAll(/(?:Q\d|QUESTION|PERGUNTA|PREGUNTA|QUESTIONS?|1\.|2\.)[:\s]*([\\s\\S]*?)(?:ANSWER|RESPUESTA|RESPOSTA|CORRECT(?: ANSWER)?|A|SOLUTION|ANS)[:\s]*\*?([A-D])\*?/gi);
+        const qBlocks = text.matchAll(/(?:Q\d|QUESTION|PERGUNTA|PREGUNTA|QUESTIONS?|1\.|2\.)[:\s]*([\s\S]*?)(?:ANSWER|RESPUESTA|RESPOSTA|CORRECT(?: ANSWER)?|A|SOLUTION|ANS)[:\s]*\*?([A-D])\*?/gi);
         
         for (const m of qBlocks) {
             const block = m[1].trim();
             const correctLetter = m[2].toUpperCase();
-            const lines = block.split('\\n').map(l => l.trim()).filter(Boolean);
+            const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) continue;
 
             const qText = lines[0];
             const choices = [];
             for (let i = 1; i < lines.length; i++) {
-                const cm = lines[i].match(/^([A-D])\\s*[\\)\\.\\:\\-]\\s*(.*)/i);
+                const cm = lines[i].match(/^([A-D])\s*[)\.\:\-]\s*(.*)/i);
                 if (cm) choices.push({ letter: cm[1].toUpperCase(), text: cm[2] });
             }
             if (choices.length >= 2) {

@@ -100,65 +100,65 @@
   <div id="overlay-init" class="fixed inset-0 z-[100] bg-slate-900 dark:bg-black flex flex-col items-center justify-center text-white p-6 text-center">
       <div class="w-24 h-24 bg-indigo-500 rounded-3xl flex items-center justify-center mb-8 shadow-2xl shadow-indigo-500 animate-pulse"><i class="ph-fill ph-student text-6xl text-white"></i></div>
       <h2 class="text-4xl font-black mb-2 tracking-tight">VocabMaster</h2>
-      <button id="btn-init" class="bg-white text-slate-900 px-12 py-4 rounded-full font-black text-xl shadow-xl active:scale-95 transition-all mt-8">Start</button>
+      <button id="btn-init" disabled class="bg-white text-slate-900 px-12 py-4 rounded-full font-black text-xl shadow-xl active:scale-95 transition-all mt-8 opacity-50 cursor-not-allowed">Start</button>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database-compat.js" defer></script>
  
-  <script src="js/escape.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/config.js?v=2"></script>
-  <script src="js/firebase.js"></script> 
+  <script src="js/escape.js" defer></script>
+  <script src="js/auth.js" defer></script>
+  <script src="js/config.js?v=2" defer></script>
+  <script src="js/firebase.js" defer></script> 
   
-  <script src="js/data/vocab_de.js"></script>
-  <script src="js/data/vocab_es.js"></script>
-  <script src="js/data/vocab_fr.js"></script>
-  <script src="js/data/vocab_it.js"></script>
-  <script src="js/data/vocab_ja.js"></script>
-  <script src="js/data/vocab_ko.js"></script>
-  <script src="js/data/vocab_pt.js"></script>
-  <script src="js/data/vocab_ru.js"></script>
-  <script src="js/data/vocab_zh.js"></script>
-  <script src="js/vocabulary-collections.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/notes.js"></script> 
-  <script src="js/services.js?v=5"></script>
-  <script src="js/preferences_registry.js"></script>
-  <script src="js/store.js?v=2"></script>
-  <script src="js/presets.js"></script>
-  <script src="js/settings_html.js"></script>
-  <script src="js/ui.js?v=5"></script>
-  <script src="js/ui_modals.js"></script>
-  <script src="js/ui_settings.js"></script>
-  <script src="js/ui_stats.js"></script>
-  <script src="js/ui_llm.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/adaptive.js"></script>
+  <script src="js/data/vocab_de.js" defer></script>
+  <script src="js/data/vocab_es.js" defer></script>
+  <script src="js/data/vocab_fr.js" defer></script>
+  <script src="js/data/vocab_it.js" defer></script>
+  <script src="js/data/vocab_ja.js" defer></script>
+  <script src="js/data/vocab_ko.js" defer></script>
+  <script src="js/data/vocab_pt.js" defer></script>
+  <script src="js/data/vocab_ru.js" defer></script>
+  <script src="js/data/vocab_zh.js" defer></script>
+  <script src="js/vocabulary-collections.js" defer></script>
+  <script src="js/data.js" defer></script>
+  <script src="js/notes.js" defer></script> 
+  <script src="js/services.js?v=5" defer></script>
+  <script src="js/preferences_registry.js" defer></script>
+  <script src="js/store.js?v=2" defer></script>
+  <script src="js/presets.js" defer></script>
+  <script src="js/settings_html.js" defer></script>
+  <script src="js/ui.js?v=5" defer></script>
+  <script src="js/ui_modals.js" defer></script>
+  <script src="js/ui_settings.js" defer></script>
+  <script src="js/ui_stats.js" defer></script>
+  <script src="js/ui_llm.js" defer></script>
+  <script src="js/analytics.js" defer></script>
+  <script src="js/adaptive.js" defer></script>
 
-  <script src="js/native_tts.js"></script>
-  <script src="js/native_auth.js"></script>
-  <script src="js/capacitor_tts_bridge.js"></script>
-  <script src="js/llm.js?v=2"></script>
-  <script src="js/learning_loop.js"></script>
-  <script src="js/game_core.js"></script>
-  <script src="js/collection-bar.js"></script>
+  <script src="js/native_tts.js" defer></script>
+  <script src="js/native_auth.js" defer></script>
+  <script src="js/capacitor_tts_bridge.js" defer></script>
+  <script src="js/llm.js?v=2" defer></script>
+  <script src="js/learning_loop.js" defer></script>
+  <script src="js/game_core.js" defer></script>
+  <script src="js/collection-bar.js" defer></script>
   
-  <script src="js/game_flashcard.js"></script>
-  <script src="js/game_quiz.js"></script>
-  <script src="js/game_tf.js"></script>
-  <script src="js/game_match.js"></script>
-  <script src="js/game_voice.js"></script>
-  <script src="js/game_sentences.js"></script>
-  <script src="js/game_grammar.js"></script>
-  <script src="js/story_fallback.js"></script>
-  <script src="js/game_story.js?v=3"></script>
-  <script src="js/game_story_cache.js"></script>
-  <script src="js/game_story_generator.js"></script>
-  <script src="js/game_story_ui.js"></script>
+  <script src="js/game_flashcard.js" defer></script>
+  <script src="js/game_quiz.js" defer></script>
+  <script src="js/game_tf.js" defer></script>
+  <script src="js/game_match.js" defer></script>
+  <script src="js/game_voice.js" defer></script>
+  <script src="js/game_sentences.js" defer></script>
+  <script src="js/game_grammar.js" defer></script>
+  <script src="js/story_fallback.js" defer></script>
+  <script src="js/game_story.js?v=3" defer></script>
+  <script src="js/game_story_cache.js" defer></script>
+  <script src="js/game_story_generator.js" defer></script>
+  <script src="js/game_story_ui.js" defer></script>
 
-  <script src="js/main.js"></script>
+  <script src="js/main.js" defer></script>
 
 </body>
 </html>

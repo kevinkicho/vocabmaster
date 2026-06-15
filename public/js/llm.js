@@ -73,7 +73,7 @@ class LLMService {
     /**
      * Unified Ollama call — direct HTTP to local endpoint
      */
-    async _ollamaRequest(path, payload, { stream = false, timeout = 45000, method = null } = {}) {
+    async _ollamaRequest(path, payload, { stream = false, timeout = 45000, method = null, signal = null } = {}) {
         const useProxy = false;
 
         // For local Ollama, /api/tags must be GET (no body). Cloud/proxy paths stay POST-wrapped.
@@ -109,7 +109,7 @@ class LLMService {
 
         const resp = await this._fetch(url, {
             ...fetchOptions,
-            signal: AbortSignal.timeout(timeout)
+            signal: signal ? (AbortSignal.any ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : signal) : AbortSignal.timeout(timeout)
         });
 
         if (!resp.ok) {
@@ -199,8 +199,9 @@ class LLMService {
 
     // --- Request queue (serialize API calls) ---
     _enqueue(fn) {
-        this._queue = this._queue.then(fn, fn);
-        return this._queue;
+        const next = this._queue.then(() => fn(), () => fn());
+        this._queue = next.catch(() => {});
+        return next;
     }
 
     // --- Non-streaming generation ---
@@ -225,7 +226,8 @@ class LLMService {
             try {
                 const data = await this._ollamaRequest('/api/generate', body, {
                     stream: false,
-                    timeout: opts.timeout || 45000
+                    timeout: opts.timeout || 45000,
+                    signal: opts.signal
                 });
                 return data.response || '';
             } catch (err) {
@@ -237,6 +239,13 @@ class LLMService {
 
     // --- Streaming generation (for Story mode) ---
     async streamGenerate(opts, onToken) {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.HttpProxy) {
+            L('[LLM] Capacitor HttpProxy detected, falling back to non-streaming generate to avoid crashes.');
+            const fullText = await this.generate(opts);
+            if (onToken) onToken(fullText);
+            return;
+        }
+
         let model = this.resolvedModel || this.model;
         if (!model && this.availableModels && this.availableModels.length > 0) {
             model = this._pickBestLocalModel();
@@ -258,7 +267,8 @@ class LLMService {
             try {
                 resp = await this._ollamaRequest('/api/generate', body, {
                     stream: true,
-                    timeout: opts.timeout || 180000
+                    timeout: opts.timeout || 180000,
+                    signal: opts.signal
                 });
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
             } catch (err) {
@@ -283,6 +293,7 @@ class LLMService {
                         const obj = JSON.parse(line);
                         if (obj.error) {
                             L('[LLM] stream error from backend for model', this.resolvedModel || model, ':', obj.error);
+                            if (fullText.length < 10) throw new Error(obj.error);
                         }
                         if (obj.response) {
                             fullText += obj.response;

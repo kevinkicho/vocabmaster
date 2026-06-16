@@ -1234,9 +1234,9 @@ class UIManager {
         const isNative = app.audio && app.audio.useNative;
 
         if (isNative) {
-            html += `<div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg mb-2 border border-emerald-200 dark:border-emerald-900/40">
-                <p class="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Voice selection is managed by Android</p>
-                <p class="text-[9px] text-emerald-600 dark:text-emerald-500 mt-1">To change your TTS voice: <b>Settings → General Management → Text-to-speech output → Preferred engine</b>, then tap gear ⚙ to choose a voice.</p>
+            html = `<div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
+                <p class="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Using Android default TTS engine</p>
+                <p class="text-[9px] text-emerald-600 dark:text-emerald-500 mt-1">Voice selection is managed by Android. To change your TTS voice: <b>Settings → General Management → Text-to-speech output → Preferred engine</b>, then tap gear ⚙ to choose a voice.</p>
             </div>`;
         } else if (isAndroid) {
             html += `<div class="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-900/50">

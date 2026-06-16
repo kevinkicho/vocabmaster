@@ -259,16 +259,18 @@ class UIManager {
         const allBtnClass = selected.includes('all') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
         const groups = [
             { label: 'JLPT', tags: ['N5','N4','N3','N2','N1'] },
-            { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'] },
+            { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'], stripPrefix: 'HSK' },
             { label: 'CEFR', tags: ['A1','A2','B1','B2','C1'] },
-            { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'] },
+            { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'], stripPrefix: 'TOPIK' },
             { label: 'Frequency', tags: ['common','uncommon','rare'] },
         ];
         let html = `<div class="bg-white dark:bg-neutral-900 rounded-2xl p-3 border border-slate-200 dark:border-neutral-800">
             <p class="text-[9px] uppercase font-bold text-indigo-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-exam"></i> Exam Level <span class="text-[7px] text-slate-300 dark:text-neutral-600 italic font-normal normal-case">(Basic → Advanced)</span> <i class="ph-bold ph-info text-slate-400 cursor-pointer relative" id="exam-level-info"></i></p>
             <div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px]">Levels are approximate — not all entries have every framework tag</div>
-            <div class="flex flex-wrap gap-1.5 mb-3">
-            <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>`;
+            <div class="flex items-center justify-between mb-3">
+                <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>
+                <p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-indigo-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>
+            </div>`;
         for (const group of groups) {
             const existingTags = group.tags.filter(t => allTags.includes(t));
             if (existingTags.length === 0) continue;
@@ -278,12 +280,12 @@ class UIManager {
             for (const tag of existingTags) {
                 const isActive = selected.includes(tag);
                 const btnClass = isActive ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 border-slate-200 dark:border-neutral-700';
-                html += `<button data-tag="${tag}" class="tag-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}">${tag}</button>`;
+                const display = group.stripPrefix ? tag.replace(group.stripPrefix, '') : tag;
+                html += `<button data-tag="${tag}" class="tag-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}">${display}</button>`;
             }
             html += `</div></div>`;
         }
         html += `</div>
-            <p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-indigo-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>
         </div>`;
         section.innerHTML = html;
         const infoIcon = document.getElementById('exam-level-info');

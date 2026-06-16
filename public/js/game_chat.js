@@ -207,8 +207,8 @@ class Chat extends GameMode {
             var m = this.messages[i];
             if (m.role === 'user') {
                 messagesHtml += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
-                    + '<div class="chat-bubble" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + lang + '">'
-                    + '<p style="margin:0">' + escapeHtml(m.text) + '</p>'
+                    + '<div class="chat-bubble" style="max-width:80%;background:#6366f1;color:#fff;border-radius:16px 16px 4px 16px;padding:10px 14px;font-size:14px;line-height:1.5;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + lang + '">'
+                    + '<p style="margin:0;white-space:pre-wrap;overflow-wrap:break-word">' + escapeHtml(m.text) + '</p>'
                     + '</div></div>';
             } else if (m.units) {
                 for (var j = 0; j < m.units.length; j++) {
@@ -223,32 +223,32 @@ class Chat extends GameMode {
         }
 
         var micBtn = this.recognition
-            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" style="width:40px;height:40px;background:#fff;border:1px solid #e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:#64748b" class="dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-400"><i class="ph-bold ph-microphone" style="font-size:18px"></i></button>'
+            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" class="w-10 h-10 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-sm shrink-0"><i class="ph-bold ph-microphone text-lg"></i></button>'
             : '';
 
-        this.root.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden">'
-            + '<div id="chat-header" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;flex-shrink:0">'
-            + '<div style="display:flex;align-items:center;gap:8px">'
-            + '<span style="font-size:10px;font-weight:900;color:#6366f1;text-transform:uppercase">' + scenarioLabel + '</span>'
-            + '<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;background:#eef2ff;color:#6366f1;border:1px solid rgba(99,102,241,0.4)" class="dark:bg-neutral-700 dark:text-indigo-300">' + level + '</span>'
+        this.root.innerHTML = '<div class="flex flex-col h-full w-full overflow-hidden">'
+            + '<div id="chat-header" class="flex items-center justify-between px-3 py-2 shrink-0">'
+            + '<div class="flex items-center gap-2">'
+            + '<span class="text-[10px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
+            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-neutral-700 dark:text-indigo-300 ring-1 ring-indigo-500/40 text-indigo-600">' + level + '</span>'
             + '</div>'
-            + '<div style="display:flex;align-items:center;gap:8px">'
-            + '<i class="ph-bold ph-info" style="color:#94a3b8;cursor:pointer;font-size:18px;position:relative" id="chat-info-icon"></i>'
-            + '<button onclick="app.goBack()" style="width:32px;height:32px;background:#e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b" class="dark:bg-neutral-800 dark:text-neutral-300"><i class="ph-bold ph-x" style="font-size:18px"></i></button>'
+            + '<div class="flex items-center gap-2">'
+            + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
+            + '<button onclick="app.goBack()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x text-lg"></i></button>'
             + '</div>'
             + '</div>'
-            + '<div id="chat-info-tooltip" class="hidden" style="position:fixed;z-index:50;background:#1e293b;color:#fff;font-size:10px;border-radius:8px;padding:12px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.3);max-width:300px;line-height:1.5">'
-            + '<p style="margin:0 0 6px 0">• Tap a sentence to hear it spoken.</p>'
-            + '<p style="margin:0 0 6px 0">• Long-press a sentence to see its translation.</p>'
-            + '<p style="margin:0 0 6px 0">• The AI responds in your target language only.</p>'
-            + '<p style="margin:0">• Saves compact summaries — never full transcripts.</p>'
+            + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-4 py-3 shadow-lg max-w-[300px] w-auto break-words whitespace-normal leading-relaxed">'
+            + '<p class="mb-1.5">• Tap a sentence to hear it spoken.</p>'
+            + '<p class="mb-1.5">• Long-press a sentence to see its translation.</p>'
+            + '<p class="mb-1.5">• The AI responds in your target language only.</p>'
+            + '<p>Saves compact summaries — never full transcripts.</p>'
             + '</div>'
-            + '<div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 12px 8px">' + messagesHtml + '</div>'
-            + '<div id="chat-typing" class="hidden" style="display:flex;justify-content:flex-start;padding:0 12px;margin-bottom:4px"><div style="max-width:80%;background:#f1f5f9;border-radius:16px 16px 4px 16px;padding:12px 16px" class="dark:bg-neutral-800"><span style="display:inline-flex;gap:4px"><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite" class="dark:bg-neutral-500"></span><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite;animation-delay:150ms" class="dark:bg-neutral-500"></span><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite;animation-delay:300ms" class="dark:bg-neutral-500"></span></span></div></div>'
-            + '<div style="display:flex;align-items:center;gap:8px;padding:0 12px 12px;flex-shrink:0">'
+            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
+            + '<div id="chat-typing" class="hidden flex justify-start px-3 mb-1"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
+            + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
             + micBtn
-            + '<input id="chat-input" type="text" placeholder="Type your message..." style="flex:1;min-width:0;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;outline:none;color:#334155" class="dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-200 dark:placeholder-neutral-600" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
-            + '<button id="chat-send" onclick="app.game.sendMessage()" style="width:40px;height:40px;background:#6366f1;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.3)"><i class="ph-bold ph-paper-plane-right" style="font-size:18px"></i></button>'
+            + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600 min-w-0" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
+            + '<button id="chat-send" onclick="app.game.sendMessage()" class="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full flex items-center justify-center active:scale-90 transition-all shadow-md shrink-0"><i class="ph-bold ph-paper-plane-right text-lg"></i></button>'
             + '</div>'
             + '</div>';
 
@@ -361,17 +361,14 @@ class Chat extends GameMode {
 
     _setBusyUI(busy) {
         this.busy = busy;
-        if (this.dom.send) this.dom.send.style.display = busy ? 'none' : '';
+        if (this.dom.send) this.dom.send.classList.toggle('hidden', busy);
         if (this.dom.input) {
             this.dom.input.disabled = busy;
             this.dom.input.placeholder = busy ? '' : 'Type your message...';
         }
-        if (this.dom.mic) this.dom.mic.style.display = busy ? 'none' : '';
+        if (this.dom.mic) this.dom.mic.classList.toggle('hidden', busy);
         var typing = this.root.querySelector('#chat-typing');
-        if (typing) {
-            if (busy) { typing.classList.remove('hidden'); typing.style.display = 'flex'; }
-            else { typing.classList.add('hidden'); typing.style.display = 'none'; }
-        }
+        if (typing) typing.classList.toggle('hidden', !busy);
     }
 
     async _generateOpening() {
@@ -487,16 +484,16 @@ class Chat extends GameMode {
         for (var i = 0; i < this.messages.length; i++) {
             var m = this.messages[i];
             if (m.role === 'user') {
-                html += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
-                    + '<div class="chat-bubble" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + this._getTargetLang() + '">'
-                    + '<p style="margin:0">' + escapeHtml(m.text) + '</p>'
+                html += '<div class="flex justify-end mb-2">'
+                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-text="' + escapeHtml(m.text) + '" data-lang="' + this._getTargetLang() + '">'
+                    + '<p class="whitespace-pre-wrap break-words" style="margin:0">' + escapeHtml(m.text) + '</p>'
                     + '</div></div>';
             } else if (m.units) {
                 for (var j = 0; j < m.units.length; j++) {
                     var u = m.units[j];
                     if (!u.text) continue;
-                    html += '<div style="display:flex;justify-content:flex-start;margin-bottom:4px">'
-                        + '<div class="chat-sentence" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || this._getTargetLang()) + '">'
+                    html += '<div class="flex justify-start mb-1">'
+                        + '<div class="chat-sentence max-w-[80%] cursor-pointer select-none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || this._getTargetLang()) + '">'
                         + (u.html || escapeHtml(u.text))
                         + '</div></div>';
                 }

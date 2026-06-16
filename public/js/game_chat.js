@@ -9,22 +9,13 @@ class Chat extends GameMode {
         this.memories = [];
         this.abortController = null;
         this.recognition = null;
-        this.sampleWords = '';
-        this._pickSampleWords();
         this._setupSTT();
         this._loadMemories();
         this.render();
     }
 
     _getTargetLang() {
-        var p = app.store.prefs;
-        return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
-    }
-
-    _pickSampleWords() {
-        var lang = this._getTargetLang();
-        var filtered = app.data.getFilteredList();
-        this.sampleWords = filtered.sort(function() { return Math.random() - 0.5; }).slice(0, 5).map(function(w) { return w[lang]; }).filter(Boolean).join(', ');
+        return app.store.prefs.presetTarget || '';
     }
 
     _setupSTT() {
@@ -112,8 +103,10 @@ class Chat extends GameMode {
 
         var system = 'You are a language tutor. The user is practicing ' + lang + ' at ' + level + ' level.\n'
             + 'Scenario: ' + scenarioDesc + '.\n'
-            + 'Their vocabulary covers: ' + tagInfo + '.\n'
-            + 'Sample words they know: ' + (this.sampleWords || '(none)') + '.\n\n'
+            + 'Their vocabulary covers: ' + tagInfo + '.\n\n'
+            + 'IMPORTANT: You must respond in ' + lang + ' only.\n'
+            + 'Do NOT respond in Japanese, English, Korean, or any language other than ' + lang + '.\n'
+            + 'If you respond in the wrong language, the user cannot learn.\n\n'
             + 'Rules:\n'
             + '- Respond in ' + lang + ' only, 2-3 sentences\n'
             + '- Use vocabulary appropriate for ' + level + '\n'
@@ -125,10 +118,10 @@ class Chat extends GameMode {
             + 'Never include full transcripts. Only save meaningful summaries.';
 
         var history = this.messages.slice(-this.maxHistory * 2).map(function(m) {
-            return (m.role === 'user' ? 'User' : 'Assistant') + ': ' + m.text;
+            return '[' + lang + '] ' + (m.role === 'user' ? 'User' : 'Assistant') + ': ' + m.text;
         }).join('\n');
 
-        return { system: system, prompt: history + '\nUser: ' + userMessage + '\nAssistant:' };
+        return { system: system, prompt: history + '\n[' + lang + '] User: ' + userMessage + '\n[' + lang + '] Assistant:' };
     }
 
     _buildOpeningPrompt() {
@@ -136,8 +129,10 @@ class Chat extends GameMode {
         var level = app.store.prefs.chatLevel || 'B1';
         var scenario = app.store.prefs.chatScenario || 'daily';
         return {
-            system: 'You are a language tutor. Greet the user in ' + lang + ' and ask an opening question about ' + scenario + '. Respond in ' + lang + ' only, 1-2 sentences.',
-            prompt: 'Start the conversation. Greet the user and ask a question about ' + scenario + '.'
+            system: 'You are a language tutor. Greet the user in ' + lang + ' and ask an opening question about ' + scenario + '.\n'
+                + 'IMPORTANT: Respond in ' + lang + ' only. Do NOT use Japanese, English, Korean, or any other language.\n'
+                + '1-2 sentences.',
+            prompt: '[' + lang + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
         };
     }
 
@@ -280,8 +275,8 @@ class Chat extends GameMode {
     async _generateOpening() {
         if (!app.llm || !app.llm.available || !app.llm.hasModel) {
             var lang = this._getTargetLang();
-            var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', en: 'Hello! What would you like to practice today?', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
-            this.messages.push({ role: 'assistant', text: greetings[lang] || greetings.en });
+            var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
+            this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
             this._updateMessages();
             return;
         }
@@ -315,8 +310,8 @@ class Chat extends GameMode {
         } catch(e) {
             if (e.name === 'AbortError') return;
             var lang = this._getTargetLang();
-            var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', en: 'Hello! What would you like to practice today?', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
-            this.messages.push({ role: 'assistant', text: greetings[lang] || greetings.en });
+            var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
+            this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
             this._updateMessages();
         }
         this._setBusyUI(false);

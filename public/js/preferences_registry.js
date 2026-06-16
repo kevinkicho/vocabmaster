@@ -88,6 +88,12 @@ const PREFERENCE_SCHEMA = [
   { key: 'llmModel',          type: 'select', default: 'gemma4:31b-cloud',domId: 'llm-model',                   section: 'llm', label: 'Model' },
   { key: 'storyAutoRead',     type: 'bool',   default: true,    domId: 'story-auto-read',                section: 'llm', label: 'Auto-read Story' },
 
+  // ===== CHAT (no DOM binding — set via in-game UI) =====
+  { key: 'chatScenario',      type: 'select', default: 'daily',  domId: null,                       section: 'chat', label: 'Chat Scenario' },
+  { key: 'chatLevel',         type: 'select', default: 'B1',     domId: null,                       section: 'chat', label: 'Chat Level' },
+  { key: 'chatAutoPlay',      type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Chat Auto-play TTS' },
+  { key: 'chatLang',          type: 'select', default: 'ja',     domId: null,                       section: 'chat', label: 'Chat Language' },
+
   // ===== LEVEL FILTER (no DOM binding) =====
   { key: 'levelFilter',       type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Level Filter' },
 

@@ -352,6 +352,7 @@ class App {
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
+                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'amber', ()=>new Chat('chat'))}
                     </div>
 
                     <!-- AI section is *always* rendered (no app.llm guard) so that Story Mode and AI Cloze
@@ -394,6 +395,7 @@ class App {
         else if (mode === 'sentences') this.game = new Sentences('sentences');
         else if (mode === 'story') this.game = new Story('story');
         else if (mode === 'grammar') this.game = new Grammar('grammar');
+        else if (mode === 'chat') this.game = new Chat('chat');
     }
 
     launch(fn) { 

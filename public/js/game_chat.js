@@ -83,25 +83,27 @@ class Chat extends GameMode {
     }
 
     async _criticizePresentation(text, lang) {
-        if (!app.llm || !app.llm.available) return text;
+        if (!app.llm || !app.llm.available) return [{ text: text, lang: lang, html: escapeHtml(text) }];
         try {
             var result = await app.llm.generate({
-                prompt: 'Reformat this ' + lang + ' language tutor response for clean chat display.\n'
-                    + 'Rules:\n'
-                    + '- Break long paragraphs into individual sentences (one per line)\n'
-                    + '- Ensure all markdown is well-formed (no unmatched ** or *)\n'
-                    + '- Remove any redundant spacing\n'
-                    + '- Keep bold (**) for vocabulary words the user should notice\n'
-                    + '- Keep inline code (`) for example phrases\n'
-                    + '- Keep bullet lists (-) for multiple examples\n'
-                    + '- Remove any headings, horizontal rules, or table syntax\n'
-                    + '- Output ONLY the cleaned text, no explanations\n\n'
-                    + 'Input: "' + text + '"\n\nOutput:',
-                options: { num_predict: 256, temperature: 0 },
-                timeout: 8000
+                prompt: 'You are a chat UI designer. Format this ' + lang + ' language tutor response as beautiful chat bubbles.\n'
+                    + 'Output a JSON array. Each array item is one sentence or phrase that becomes its own bubble.\n'
+                    + 'Each item has:\n'
+                    + '- "text": raw text for TTS (plain, no HTML)\n'
+                    + '- "lang": language code for TTS engine (e.g. ja, ko, zh, en, es, fr, de, it, pt, ru)\n'
+                    + '- "html": FULL styled HTML for the bubble using inline styles. This is the only styling — style everything: background, color, border-radius, padding, font-size, line-height, margin, etc. Make it look like a modern chat app. Use dark-mode-friendly colors (dark backgrounds use lighter text).\n'
+                    + 'Output ONLY the JSON array. No markdown, no backticks, no extra text:\n'
+                    + '[\n'
+                    + '  {"text": "...", "lang": "...", "html": "..."}\n'
+                    + ']\n\n'
+                    + 'Response: "' + text + '"',
+                options: { num_predict: 1024, temperature: 0 },
+                timeout: 15000
             });
-            return (result || text).replace(/^["']|["']$/g, '').trim();
-        } catch(e) { return text; }
+            var parsed = JSON.parse(result);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            return [{ text: text, lang: lang, html: escapeHtml(text) }];
+        } catch(e) { return [{ text: text, lang: lang, html: escapeHtml(text) }]; }
     }
 
     _buildPrompt(userMessage) {
@@ -187,39 +189,10 @@ class Chat extends GameMode {
         } catch(e) {}
     }
 
-    _playMessageTTS(text) {
-        var lang = this._getTargetLang();
+    _playMessageTTS(text, lang) {
         if (text && lang) {
-            var clean = text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
-            app.audio.play(clean, lang, 'chat', 0);
+            app.audio.play(text, lang, 'chat', 0);
         }
-    }
-
-    _splitSentences(text) {
-        if (!text) return [];
-        return text.match(/[^.!?]+[.!?]+/g) || [text];
-    }
-
-    _renderMarkdown(text) {
-        if (typeof snarkdown === 'function') {
-            return snarkdown(text);
-        }
-        return escapeHtml(text);
-    }
-
-    async _translateMessage(text) {
-        var targetLang = this._getTargetLang();
-        var sourceLang = this._getSourceLang();
-        if (!targetLang || !sourceLang) return '';
-        if (!app.llm || !app.llm.available || !app.llm.hasModel) return '';
-        try {
-            var result = await app.llm.generate({
-                prompt: 'Translate this ' + targetLang + ' text to ' + sourceLang + '. Respond with ONLY the translation, no explanation.\n\nText: "' + text + '"',
-                options: { num_predict: 128, temperature: 0 },
-                timeout: 10000
-            });
-            return (result || '').replace(/^["']|["']$/g, '').trim();
-        } catch(e) { return ''; }
     }
 
     render() {
@@ -232,65 +205,57 @@ class Chat extends GameMode {
         var messagesHtml = '';
         for (var i = 0; i < this.messages.length; i++) {
             var m = this.messages[i];
-            var isUser = m.role === 'user';
-            if (isUser) {
-                messagesHtml += '<div class="flex justify-end mb-2">'
-                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none">'
-                    + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
+            if (m.role === 'user') {
+                messagesHtml += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
+                    + '<div class="chat-bubble" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + lang + '">'
+                    + '<p style="margin:0">' + escapeHtml(m.text) + '</p>'
                     + '</div></div>';
-            } else {
-                var sentences = this._splitSentences(m.text);
-                for (var j = 0; j < sentences.length; j++) {
-                    var s = sentences[j].trim();
-                    if (!s) continue;
-                    var hasTranslation = m.translations && m.translations[j];
-                    messagesHtml += '<div class="flex justify-start mb-1">'
-                        + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
-                        + '<p class="whitespace-pre-wrap break-words">' + this._renderMarkdown(s) + '</p>'
-                        + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
+            } else if (m.units) {
+                for (var j = 0; j < m.units.length; j++) {
+                    var u = m.units[j];
+                    if (!u.text) continue;
+                    messagesHtml += '<div style="display:flex;justify-content:flex-start;margin-bottom:4px">'
+                        + '<div class="chat-sentence" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || lang) + '">'
+                        + (u.html || escapeHtml(u.text))
                         + '</div></div>';
                 }
             }
         }
 
         var micBtn = this.recognition
-            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" class="w-10 h-10 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-sm shrink-0"><i class="ph-bold ph-microphone text-lg"></i></button>'
+            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" style="width:40px;height:40px;background:#fff;border:1px solid #e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:#64748b" class="dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-400"><i class="ph-bold ph-microphone" style="font-size:18px"></i></button>'
             : '';
 
-        this.root.innerHTML = '<div class="flex flex-col h-full w-full overflow-hidden">'
-            + '<div id="chat-header" class="flex items-center justify-between px-3 py-2 shrink-0">'
-            + '<div class="flex items-center gap-2">'
-            + '<span class="text-[10px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
-            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-800/80 dark:text-indigo-200 ring-1 ring-indigo-500/40 text-indigo-600">' + level + '</span>'
+        this.root.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden">'
+            + '<div id="chat-header" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;flex-shrink:0">'
+            + '<div style="display:flex;align-items:center;gap:8px">'
+            + '<span style="font-size:10px;font-weight:900;color:#6366f1;text-transform:uppercase">' + scenarioLabel + '</span>'
+            + '<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;background:#eef2ff;color:#6366f1;border:1px solid rgba(99,102,241,0.4)" class="dark:bg-neutral-700 dark:text-indigo-300">' + level + '</span>'
             + '</div>'
-            + '<div class="flex items-center gap-2">'
-            + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
-            + '<button onclick="app.goBack()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x text-lg"></i></button>'
+            + '<div style="display:flex;align-items:center;gap:8px">'
+            + '<i class="ph-bold ph-info" style="color:#94a3b8;cursor:pointer;font-size:18px;position:relative" id="chat-info-icon"></i>'
+            + '<button onclick="app.goBack()" style="width:32px;height:32px;background:#e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b" class="dark:bg-neutral-800 dark:text-neutral-300"><i class="ph-bold ph-x" style="font-size:18px"></i></button>'
             + '</div>'
             + '</div>'
-            + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px] break-words whitespace-normal leading-relaxed">'
-            + '<p class="mb-1">• Tap a sentence to hear it spoken.</p>'
-            + '<p class="mb-1">• Long-press a sentence to see its translation.</p>'
-            + '<p class="mb-1">• The AI responds in your target language only.</p>'
-            + '<p>• Saves compact summaries — never full transcripts.</p>'
+            + '<div id="chat-info-tooltip" class="hidden" style="position:fixed;z-index:50;background:#1e293b;color:#fff;font-size:10px;border-radius:8px;padding:12px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.3);max-width:300px;line-height:1.5">'
+            + '<p style="margin:0 0 6px 0">• Tap a sentence to hear it spoken.</p>'
+            + '<p style="margin:0 0 6px 0">• Long-press a sentence to see its translation.</p>'
+            + '<p style="margin:0 0 6px 0">• The AI responds in your target language only.</p>'
+            + '<p style="margin:0">• Saves compact summaries — never full transcripts.</p>'
             + '</div>'
-            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
-            + '<div id="chat-typing" class="hidden flex justify-start px-3 mb-1"><div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
-            + '<div id="chat-audio" class="shrink-0 px-3 mb-1"></div>'
-            + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
+            + '<div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 12px 8px">' + messagesHtml + '</div>'
+            + '<div id="chat-typing" class="hidden" style="display:flex;justify-content:flex-start;padding:0 12px;margin-bottom:4px"><div style="max-width:80%;background:#f1f5f9;border-radius:16px 16px 4px 16px;padding:12px 16px" class="dark:bg-neutral-800"><span style="display:inline-flex;gap:4px"><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite" class="dark:bg-neutral-500"></span><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite;animation-delay:150ms" class="dark:bg-neutral-500"></span><span style="width:8px;height:8px;background:#94a3b8;border-radius:50%;animation:bounce 1.4s infinite;animation-delay:300ms" class="dark:bg-neutral-500"></span></span></div></div>'
+            + '<div style="display:flex;align-items:center;gap:8px;padding:0 12px 12px;flex-shrink:0">'
             + micBtn
-            + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600 min-w-0" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
-            + '<button id="chat-send" onclick="app.game.sendMessage()" class="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full flex items-center justify-center active:scale-90 transition-all shadow-md shrink-0"><i class="ph-bold ph-paper-plane-right text-lg"></i></button>'
-            + '<button id="chat-cancel" onclick="app.game.cancelGeneration()" class="w-10 h-10 bg-rose-500 hover:bg-rose-600 text-white rounded-full hidden flex items-center justify-center active:scale-90 transition-all shadow-md shrink-0"><i class="ph-bold ph-stop-circle text-lg"></i></button>'
+            + '<input id="chat-input" type="text" placeholder="Type your message..." style="flex:1;min-width:0;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:10px 16px;font-size:14px;font-weight:700;outline:none;color:#334155" class="dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-200 dark:placeholder-neutral-600" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
+            + '<button id="chat-send" onclick="app.game.sendMessage()" style="width:40px;height:40px;background:#6366f1;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.3)"><i class="ph-bold ph-paper-plane-right" style="font-size:18px"></i></button>'
             + '</div>'
             + '</div>';
 
         this.dom.header = this.root.querySelector('#chat-header');
         this.dom.messages = this.root.querySelector('#chat-messages');
-        this.dom.audio = this.root.querySelector('#chat-audio');
         this.dom.input = this.root.querySelector('#chat-input');
         this.dom.send = this.root.querySelector('#chat-send');
-        this.dom.cancel = this.root.querySelector('#chat-cancel');
         this.dom.mic = this.root.querySelector('#chat-mic');
 
         this._setupTooltip();
@@ -307,7 +272,6 @@ class Chat extends GameMode {
         var icon = document.getElementById('chat-info-icon');
         var tooltip = document.getElementById('chat-info-tooltip');
         if (!icon || !tooltip) return;
-        var self = this;
         icon.onclick = function(e) {
             e.stopPropagation();
             tooltip.classList.toggle('hidden');
@@ -329,13 +293,14 @@ class Chat extends GameMode {
         sentences.forEach(function(el) {
             el.onclick = function(e) {
                 e.stopPropagation();
-                var text = el.dataset.sentence;
-                if (text) self._playMessageTTS(text);
+                var text = el.dataset.text;
+                var lang = el.dataset.lang;
+                if (text) self._playMessageTTS(text, lang);
             };
             var pressTimer = null;
             el.onmousedown = function() {
                 pressTimer = setTimeout(function() {
-                    var text = el.dataset.sentence;
+                    var text = el.dataset.text;
                     if (text) self._showSentenceTranslation(el, text);
                 }, 500);
             };
@@ -343,7 +308,7 @@ class Chat extends GameMode {
             el.onmouseleave = function() { clearTimeout(pressTimer); };
             el.ontouchstart = function() {
                 pressTimer = setTimeout(function() {
-                    var text = el.dataset.sentence;
+                    var text = el.dataset.text;
                     if (text) self._showSentenceTranslation(el, text);
                 }, 500);
             };
@@ -355,7 +320,7 @@ class Chat extends GameMode {
             el.onclick = function(e) {
                 e.stopPropagation();
                 var p = el.querySelector('p');
-                if (p && p.textContent) self._playMessageTTS(p.textContent);
+                if (p && p.textContent) self._playMessageTTS(p.textContent, self._getTargetLang());
             };
         });
     }
@@ -364,28 +329,29 @@ class Chat extends GameMode {
         if (el.dataset.translating) return;
         el.dataset.translating = '1';
         var origHtml = el.innerHTML;
-        el.innerHTML = '<p class="whitespace-pre-wrap break-words">' + escapeHtml(text) + '</p>'
-            + '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1 italic">Translating...</p>';
+        el.innerHTML = el.innerHTML + '<p style="font-size:10px;margin:6px 0 0 0;opacity:0.7;border-top:1px solid currentColor;padding-top:4px;font-style:italic">Translating...</p>';
         var translation = await this._translateMessage(text);
         if (translation) {
-            el.innerHTML = '<p class="whitespace-pre-wrap break-words">' + escapeHtml(text) + '</p>'
-                + '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(translation) + '</p>';
-            for (var mi = this.messages.length - 1; mi >= 0; mi--) {
-                var msg = this.messages[mi];
-                if (msg.role !== 'assistant') continue;
-                var sentences = this._splitSentences(msg.text);
-                for (var si = 0; si < sentences.length; si++) {
-                    if (sentences[si].trim() === text) {
-                        if (!msg.translations) msg.translations = [];
-                        msg.translations[si] = translation;
-                        break;
-                    }
-                }
-            }
+            el.innerHTML = origHtml + '<p style="font-size:10px;margin:6px 0 0 0;opacity:0.7;border-top:1px solid currentColor;padding-top:4px">' + escapeHtml(translation) + '</p>';
         } else {
             el.innerHTML = origHtml;
         }
         delete el.dataset.translating;
+    }
+
+    async _translateMessage(text) {
+        var targetLang = this._getTargetLang();
+        var sourceLang = this._getSourceLang();
+        if (!targetLang || !sourceLang) return '';
+        if (!app.llm || !app.llm.available || !app.llm.hasModel) return '';
+        try {
+            var result = await app.llm.generate({
+                prompt: 'Translate this ' + targetLang + ' text to ' + sourceLang + '. Respond with ONLY the translation, no explanation.\n\nText: "' + text + '"',
+                options: { num_predict: 128, temperature: 0 },
+                timeout: 10000
+            });
+            return (result || '').replace(/^["']|["']$/g, '').trim();
+        } catch(e) { return ''; }
     }
 
     _scrollToBottom() {
@@ -395,31 +361,24 @@ class Chat extends GameMode {
 
     _setBusyUI(busy) {
         this.busy = busy;
-        if (this.dom.send) this.dom.send.classList.toggle('hidden', busy);
-        if (this.dom.cancel) this.dom.cancel.classList.toggle('hidden', !busy);
+        if (this.dom.send) this.dom.send.style.display = busy ? 'none' : '';
         if (this.dom.input) {
             this.dom.input.disabled = busy;
             this.dom.input.placeholder = busy ? '' : 'Type your message...';
         }
-        if (this.dom.mic) this.dom.mic.disabled = busy;
-        // Show/hide typing indicator
+        if (this.dom.mic) this.dom.mic.style.display = busy ? 'none' : '';
         var typing = this.root.querySelector('#chat-typing');
-        if (typing) typing.classList.toggle('hidden', !busy);
-    }
-
-    cancelGeneration() {
-        if (this.abortController) {
-            this.abortController.abort();
-            this.abortController = null;
+        if (typing) {
+            if (busy) { typing.classList.remove('hidden'); typing.style.display = 'flex'; }
+            else { typing.classList.add('hidden'); typing.style.display = 'none'; }
         }
-        this._setBusyUI(false);
     }
 
     async _generateOpening() {
         if (!app.llm || !app.llm.available || !app.llm.hasModel) {
             var lang = this._getTargetLang();
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
-            this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
+            this.messages.push({ role: 'assistant', text: greetings[lang] || '', units: [{ text: greetings[lang] || '', lang: lang, html: escapeHtml(greetings[lang] || '') }] });
             this._updateMessages();
             if (greetings[lang] && app.store.prefs.chatAutoPlay !== false) {
                 app.audio.play(greetings[lang], lang, 'chat', 300);
@@ -430,9 +389,8 @@ class Chat extends GameMode {
         var promptData = this._buildOpeningPrompt();
         this.abortController = new AbortController();
         var self = this;
-        var fullText = '';
         try {
-            fullText = await app.llm.generate({
+            var fullText = await app.llm.generate({
                 prompt: promptData.prompt,
                 system: promptData.system,
                 options: { num_predict: 128, temperature: 0.7 },
@@ -440,18 +398,17 @@ class Chat extends GameMode {
                 timeout: 15000
             });
             if (!this.root || !this.root.isConnected) return;
-            var cleaned = await this._criticizePresentation(fullText, this._getTargetLang());
-            this.messages.push({ role: 'assistant', text: cleaned });
+            var units = await this._criticizePresentation(fullText, this._getTargetLang());
+            this.messages.push({ role: 'assistant', text: fullText, units: units });
             this._updateMessages();
-            if (cleaned && app.store.prefs.chatAutoPlay !== false) {
-                var ttsText = cleaned.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
-                app.audio.play(ttsText, this._getTargetLang(), 'chat', 300);
+            if (units.length > 0 && units[0].text && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(units[0].text, units[0].lang || this._getTargetLang(), 'chat', 300);
             }
         } catch(e) {
             if (e.name === 'AbortError') return;
             var lang = this._getTargetLang();
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
-            this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
+            this.messages.push({ role: 'assistant', text: greetings[lang] || '', units: [{ text: greetings[lang] || '', lang: lang, html: escapeHtml(greetings[lang] || '') }] });
             this._updateMessages();
             if (greetings[lang] && app.store.prefs.chatAutoPlay !== false) {
                 app.audio.play(greetings[lang], lang, 'chat', 300);
@@ -501,16 +458,14 @@ class Chat extends GameMode {
                 this._saveMemory(parsed.json);
             }
 
-            cleaned = await this._criticizePresentation(cleaned, this._getTargetLang());
-
-            this.messages.push({ role: 'assistant', text: cleaned });
+            var units = await this._criticizePresentation(cleaned, this._getTargetLang());
+            this.messages.push({ role: 'assistant', text: cleaned, units: units });
 
             this._updateMessages();
             this._scrollToBottom();
 
-            if (cleaned && app.store.prefs.chatAutoPlay !== false) {
-                var ttsText = cleaned.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
-                app.audio.play(ttsText, this._getTargetLang(), 'chat', 300);
+            if (units.length > 0 && units[0].text && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(units[0].text, units[0].lang || this._getTargetLang(), 'chat', 300);
             }
 
         } catch (err) {
@@ -531,22 +486,18 @@ class Chat extends GameMode {
         var html = '';
         for (var i = 0; i < this.messages.length; i++) {
             var m = this.messages[i];
-            var isUser = m.role === 'user';
-            if (isUser) {
-                html += '<div class="flex justify-end mb-2">'
-                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none">'
-                    + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
+            if (m.role === 'user') {
+                html += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
+                    + '<div class="chat-bubble" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + this._getTargetLang() + '">'
+                    + '<p style="margin:0">' + escapeHtml(m.text) + '</p>'
                     + '</div></div>';
-            } else {
-                var sentences = this._splitSentences(m.text);
-                for (var j = 0; j < sentences.length; j++) {
-                    var s = sentences[j].trim();
-                    if (!s) continue;
-                    var hasTranslation = m.translations && m.translations[j];
-                    html += '<div class="flex justify-start mb-1">'
-                        + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
-                        + '<p class="whitespace-pre-wrap break-words">' + this._renderMarkdown(s) + '</p>'
-                        + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
+            } else if (m.units) {
+                for (var j = 0; j < m.units.length; j++) {
+                    var u = m.units[j];
+                    if (!u.text) continue;
+                    html += '<div style="display:flex;justify-content:flex-start;margin-bottom:4px">'
+                        + '<div class="chat-sentence" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || this._getTargetLang()) + '">'
+                        + (u.html || escapeHtml(u.text))
                         + '</div></div>';
                 }
             }

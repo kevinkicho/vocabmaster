@@ -370,10 +370,13 @@ class App {
                     <div class="mt-1 px-2">
                         <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
                     </div>
+
+                    <!-- Tag Filter -->
+                    <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            if(this.fitter) this.fitter.fitAll().then(() => view.classList.add('visible')).catch(()=>view.classList.add('visible'));
-            else view.classList.add('visible');
+            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }).catch(()=>{ view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); });
+            else { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }
         });
     }
 

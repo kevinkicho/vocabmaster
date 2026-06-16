@@ -91,6 +91,9 @@ const PREFERENCE_SCHEMA = [
   // ===== LEVEL FILTER (no DOM binding) =====
   { key: 'levelFilter',       type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Level Filter' },
 
+  // ===== TAG FILTER (no DOM binding) =====
+  { key: 'tagFilter',         type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Tag Filter' },
+
   // ===== COLLECTION (Medium-term; dynamic UI in home + settings, persisted lightly) =====
   { key: 'currentCollection', type: 'select', default: 'all', domId: null,                       section: 'global', label: 'Active Collection' },
   { key: '_collectionKey',    type: 'text',   default: '',     domId: null,                       section: 'global', label: 'Collection Key' },

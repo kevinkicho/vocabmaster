@@ -36,7 +36,7 @@ class Chat extends GameMode {
             }
         };
         this.recognition.onerror = function() {
-            if (app.ui) app.ui.toast('Speech recognition failed. Try typing.', 'error');
+            alert('Speech recognition failed. Please check your microphone and try again, or type your message instead.');
         };
     }
 
@@ -190,7 +190,8 @@ class Chat extends GameMode {
     _playMessageTTS(text) {
         var lang = this._getTargetLang();
         if (text && lang) {
-            app.audio.play(text, lang, 'chat', 0);
+            var clean = text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+            app.audio.play(clean, lang, 'chat', 0);
         }
     }
 
@@ -260,7 +261,7 @@ class Chat extends GameMode {
             + '<div id="chat-header" class="flex items-center justify-between px-3 py-2 shrink-0">'
             + '<div class="flex items-center gap-2">'
             + '<span class="text-[10px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
-            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 dark:text-indigo-300 ring-1 ring-indigo-500/30 text-indigo-600">' + level + '</span>'
+            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-800/80 dark:text-indigo-200 ring-1 ring-indigo-500/40 text-indigo-600">' + level + '</span>'
             + '</div>'
             + '<div class="flex items-center gap-2">'
             + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
@@ -274,6 +275,7 @@ class Chat extends GameMode {
             + '<p>• Saves compact summaries — never full transcripts.</p>'
             + '</div>'
             + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
+            + '<div id="chat-typing" class="hidden flex justify-start px-3 mb-1"><div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
             + '<div id="chat-audio" class="shrink-0 px-3 mb-1"></div>'
             + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
             + micBtn
@@ -397,9 +399,12 @@ class Chat extends GameMode {
         if (this.dom.cancel) this.dom.cancel.classList.toggle('hidden', !busy);
         if (this.dom.input) {
             this.dom.input.disabled = busy;
-            this.dom.input.placeholder = busy ? 'AI is thinking...' : 'Type your message...';
+            this.dom.input.placeholder = busy ? '' : 'Type your message...';
         }
         if (this.dom.mic) this.dom.mic.disabled = busy;
+        // Show/hide typing indicator
+        var typing = this.root.querySelector('#chat-typing');
+        if (typing) typing.classList.toggle('hidden', !busy);
     }
 
     cancelGeneration() {
@@ -439,7 +444,8 @@ class Chat extends GameMode {
             this.messages.push({ role: 'assistant', text: cleaned });
             this._updateMessages();
             if (cleaned && app.store.prefs.chatAutoPlay !== false) {
-                app.audio.play(cleaned, this._getTargetLang(), 'chat', 300);
+                var ttsText = cleaned.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+                app.audio.play(ttsText, this._getTargetLang(), 'chat', 300);
             }
         } catch(e) {
             if (e.name === 'AbortError') return;
@@ -497,15 +503,14 @@ class Chat extends GameMode {
 
             cleaned = await this._criticizePresentation(cleaned, this._getTargetLang());
 
-            if (this.messages.length > 0 && this.messages[this.messages.length - 1].role === 'assistant') {
-                this.messages[this.messages.length - 1].text = cleaned;
-            }
+            this.messages.push({ role: 'assistant', text: cleaned });
 
             this._updateMessages();
             this._scrollToBottom();
 
             if (cleaned && app.store.prefs.chatAutoPlay !== false) {
-                app.audio.play(cleaned, this._getTargetLang(), 'chat', 300);
+                var ttsText = cleaned.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+                app.audio.play(ttsText, this._getTargetLang(), 'chat', 300);
             }
 
         } catch (err) {

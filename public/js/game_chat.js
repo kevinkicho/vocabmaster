@@ -82,6 +82,18 @@ class Chat extends GameMode {
         } catch(e) {}
     }
 
+    _cleanResponse(text) {
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '$1')
+            .replace(/\*(.*?)\*/g, '$1')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/^[-*]\s+/gm, '')
+            .replace(/^\d+\.\s+/gm, '')
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`([^`]+)`/g, '$1')
+            .trim();
+    }
+
     _buildPrompt(userMessage) {
         var lang = this._getTargetLang();
         var p = app.store.prefs;
@@ -116,6 +128,8 @@ class Chat extends GameMode {
             + '- Use ' + level + '-appropriate vocabulary\n'
             + '- Gently correct mistakes\n'
             + '- End with a follow-up question\n'
+            + '- Do NOT use markdown formatting like **, *, #, -, or numbered lists\n'
+            + '- Write in plain text only\n'
             + '\nAt the end of your response, you may optionally append [MEMORY: ...] with a JSON object to save a compact summary. Example:\n'
             + '[MEMORY: {"summary": "Practiced restaurant vocabulary, struggled with ordering", "topics": ["food", "ordering"], "level": "B1"}]\n'
             + 'Never include full transcripts. Only save meaningful summaries.';
@@ -133,7 +147,7 @@ class Chat extends GameMode {
         return {
             system: 'You are a ' + lang + ' language tutor. You speak only ' + lang + '.\n'
                 + 'Greet the user in ' + lang + ' and ask an opening question about ' + scenario + '.\n'
-                + '1-2 sentences.',
+                + '1-2 sentences. Do not use markdown formatting.',
             prompt: '[' + lang + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
         };
     }
@@ -169,6 +183,11 @@ class Chat extends GameMode {
         }
     }
 
+    _splitSentences(text) {
+        if (!text) return [];
+        return text.match(/[^.!?]+[.!?]+/g) || [text];
+    }
+
     async _translateMessage(text) {
         var targetLang = this._getTargetLang();
         var sourceLang = this._getSourceLang();
@@ -184,16 +203,78 @@ class Chat extends GameMode {
         } catch(e) { return ''; }
     }
 
-    setupHeader() {
-        if (this.dom.header) {
-            this.dom.header.innerHTML = '<div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">'
-                + '<div></div>'
-                + '<div class="flex items-center gap-2">'
-                + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-xl relative" id="chat-info-icon"></i>'
-                + '<button onclick="app.goBack()" class="w-9 h-9 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x"></i></button>'
-                + '</div></div>'
-                + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[250px] break-words whitespace-normal leading-relaxed">Tap a message to hear it spoken. Long-press to see a translation. The AI responds in your target language only, uses vocabulary at your selected level, gently corrects mistakes, and ends with a follow-up question. It can save compact summaries of your progress — never full transcripts.</div>';
-            this._setupTooltip();
+    render() {
+        var lang = this._getTargetLang();
+        var p = app.store.prefs;
+        var level = p.chatLevel || 'B1';
+        var scenario = p.chatScenario || 'daily';
+        var scenarioLabel = { daily: 'Daily Life', restaurant: 'Restaurant', travel: 'Travel', business: 'Business', hobby: 'Hobbies', custom: 'Free' }[scenario] || 'Daily Life';
+
+        var messagesHtml = '';
+        for (var i = 0; i < this.messages.length; i++) {
+            var m = this.messages[i];
+            var isUser = m.role === 'user';
+            if (isUser) {
+                messagesHtml += '<div class="flex justify-end mb-2">'
+                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none">'
+                    + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
+                    + '</div></div>';
+            } else {
+                var sentences = this._splitSentences(m.text);
+                for (var j = 0; j < sentences.length; j++) {
+                    var s = sentences[j].trim();
+                    if (!s) continue;
+                    var hasTranslation = m.translations && m.translations[j];
+                    messagesHtml += '<div class="flex justify-start mb-1">'
+                        + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
+                        + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(s) + '</p>'
+                        + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
+                        + '</div></div>';
+                }
+            }
+        }
+
+        var micBtn = this.recognition
+            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" class="w-10 h-10 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-sm shrink-0"><i class="ph-bold ph-microphone text-lg"></i></button>'
+            : '';
+
+        this.root.innerHTML = '<div class="flex flex-col h-full w-full overflow-hidden">'
+            + '<div id="chat-header" class="flex items-center justify-between px-3 py-2 shrink-0">'
+            + '<div class="flex items-center gap-2">'
+            + '<span class="text-[10px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
+            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-300">' + level + '</span>'
+            + '</div>'
+            + '<div class="flex items-center gap-2">'
+            + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
+            + '<button onclick="app.goBack()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x text-lg"></i></button>'
+            + '</div>'
+            + '</div>'
+            + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[250px] break-words whitespace-normal leading-relaxed">Tap a sentence to hear it spoken. Long-press a sentence to see its translation. The AI responds in your target language only, uses vocabulary at your selected level, gently corrects mistakes, and ends with a follow-up question. It can save compact summaries of your progress — never full transcripts.</div>'
+            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
+            + '<div id="chat-audio" class="shrink-0 px-3 mb-1"></div>'
+            + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
+            + micBtn
+            + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600 min-w-0" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
+            + '<button id="chat-send" onclick="app.game.sendMessage()" class="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full flex items-center justify-center active:scale-90 transition-all shadow-md shrink-0"><i class="ph-bold ph-paper-plane-right text-lg"></i></button>'
+            + '<button id="chat-cancel" onclick="app.game.cancelGeneration()" class="w-10 h-10 bg-rose-500 hover:bg-rose-600 text-white rounded-full hidden flex items-center justify-center active:scale-90 transition-all shadow-md shrink-0"><i class="ph-bold ph-stop-circle text-lg"></i></button>'
+            + '</div>'
+            + '</div>';
+
+        this.dom.header = this.root.querySelector('#chat-header');
+        this.dom.messages = this.root.querySelector('#chat-messages');
+        this.dom.audio = this.root.querySelector('#chat-audio');
+        this.dom.input = this.root.querySelector('#chat-input');
+        this.dom.send = this.root.querySelector('#chat-send');
+        this.dom.cancel = this.root.querySelector('#chat-cancel');
+        this.dom.mic = this.root.querySelector('#chat-mic');
+
+        this._setupTooltip();
+        this._attachBubbleListeners();
+        this._scrollToBottom();
+        this.afterRender();
+
+        if (this.messages.length === 0) {
+            this._generateOpening();
         }
     }
 
@@ -217,99 +298,44 @@ class Chat extends GameMode {
         });
     }
 
-    render() {
-        var lang = this._getTargetLang();
-        var p = app.store.prefs;
-        var level = p.chatLevel || 'B1';
-        var scenario = p.chatScenario || 'daily';
-        var scenarioLabel = { daily: 'Daily Life', restaurant: 'Restaurant', travel: 'Travel', business: 'Business', hobby: 'Hobbies', custom: 'Free' }[scenario] || 'Daily Life';
-
-        var messagesHtml = '';
-        for (var i = 0; i < this.messages.length; i++) {
-            var m = this.messages[i];
-            var isUser = m.role === 'user';
-            messagesHtml += '<div class="flex ' + (isUser ? 'justify-end' : 'justify-start') + ' mb-2">'
-                + '<div class="chat-bubble max-w-[80%] ' + (isUser ? 'bg-indigo-500 text-white rounded-2xl rounded-br-md' : 'bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md') + ' px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-text="' + escapeHtml(m.text) + '" data-role="' + m.role + '">'
-                + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
-                + (m.translation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translation) + '</p>' : '')
-                + '</div></div>';
-        }
-
-        var micBtn = this.recognition
-            ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" class="w-11 h-11 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-sm"><i class="ph-bold ph-microphone text-lg"></i></button>'
-            : '';
-
-        this.root.innerHTML = '<div class="flex flex-col h-full w-full overflow-hidden">'
-            + '<div id="chat-header"></div>'
-            + '<div class="bg-white dark:bg-neutral-900 rounded-2xl mx-2 p-2.5 border border-slate-200 dark:border-neutral-800 mb-2 shrink-0">'
-            + '<div class="flex items-center gap-2">'
-            + '<span class="text-[9px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
-            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">' + level + '</span>'
-            + '</div></div>'
-            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-2 pb-2 thin-scroll">' + messagesHtml + '</div>'
-            + '<div id="chat-audio" class="shrink-0 px-2 mb-1"></div>'
-            + '<div class="flex items-center gap-2 px-2 pb-3 shrink-0">'
-            + micBtn
-            + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
-            + '<button id="chat-send" onclick="app.game.sendMessage()" class="w-11 h-11 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full flex items-center justify-center active:scale-90 transition-all shadow-md"><i class="ph-bold ph-paper-plane-right text-lg"></i></button>'
-            + '<button id="chat-cancel" onclick="app.game.cancelGeneration()" class="w-11 h-11 bg-rose-500 hover:bg-rose-600 text-white rounded-full hidden flex items-center justify-center active:scale-90 transition-all shadow-md"><i class="ph-bold ph-stop-circle text-lg"></i></button>'
-            + '</div>'
-            + '</div>';
-
-        this.dom.header = this.root.querySelector('#chat-header');
-        this.dom.messages = this.root.querySelector('#chat-messages');
-        this.dom.audio = this.root.querySelector('#chat-audio');
-        this.dom.input = this.root.querySelector('#chat-input');
-        this.dom.send = this.root.querySelector('#chat-send');
-        this.dom.cancel = this.root.querySelector('#chat-cancel');
-        this.dom.mic = this.root.querySelector('#chat-mic');
-
-        this.setupHeader();
-        this._attachBubbleListeners();
-        this._scrollToBottom();
-        this.afterRender();
-
-        if (this.messages.length === 0) {
-            this._generateOpening();
-        }
-    }
-
     _attachBubbleListeners() {
         var self = this;
-        var bubbles = this.root.querySelectorAll('.chat-bubble');
-        bubbles.forEach(function(el) {
+        var sentences = this.root.querySelectorAll('.chat-sentence');
+        sentences.forEach(function(el) {
             el.onclick = function(e) {
                 e.stopPropagation();
-                var text = el.dataset.text;
+                var text = el.dataset.sentence;
                 if (text) self._playMessageTTS(text);
             };
             var pressTimer = null;
             el.onmousedown = function() {
                 pressTimer = setTimeout(function() {
-                    var text = el.dataset.text;
-                    var role = el.dataset.role;
-                    if (text && role === 'assistant') {
-                        self._showTranslation(el, text);
-                    }
+                    var text = el.dataset.sentence;
+                    if (text) self._showSentenceTranslation(el, text);
                 }, 500);
             };
             el.onmouseup = function() { clearTimeout(pressTimer); };
             el.onmouseleave = function() { clearTimeout(pressTimer); };
             el.ontouchstart = function() {
                 pressTimer = setTimeout(function() {
-                    var text = el.dataset.text;
-                    var role = el.dataset.role;
-                    if (text && role === 'assistant') {
-                        self._showTranslation(el, text);
-                    }
+                    var text = el.dataset.sentence;
+                    if (text) self._showSentenceTranslation(el, text);
                 }, 500);
             };
             el.ontouchend = function() { clearTimeout(pressTimer); };
             el.ontouchmove = function() { clearTimeout(pressTimer); };
         });
+        var bubbles = this.root.querySelectorAll('.chat-bubble');
+        bubbles.forEach(function(el) {
+            el.onclick = function(e) {
+                e.stopPropagation();
+                var p = el.querySelector('p');
+                if (p && p.textContent) self._playMessageTTS(p.textContent);
+            };
+        });
     }
 
-    async _showTranslation(el, text) {
+    async _showSentenceTranslation(el, text) {
         if (el.dataset.translating) return;
         el.dataset.translating = '1';
         var origHtml = el.innerHTML;
@@ -319,11 +345,17 @@ class Chat extends GameMode {
         if (translation) {
             el.innerHTML = '<p class="whitespace-pre-wrap break-words">' + escapeHtml(text) + '</p>'
                 + '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(translation) + '</p>';
-            // Store translation in messages array
-            for (var i = 0; i < this.messages.length; i++) {
-                if (this.messages[i].text === text && this.messages[i].role === 'assistant') {
-                    this.messages[i].translation = translation;
-                    break;
+            // Find which message this sentence belongs to and store translation
+            for (var mi = this.messages.length - 1; mi >= 0; mi--) {
+                var msg = this.messages[mi];
+                if (msg.role !== 'assistant') continue;
+                var sentences = this._splitSentences(msg.text);
+                for (var si = 0; si < sentences.length; si++) {
+                    if (sentences[si].trim() === text) {
+                        if (!msg.translations) msg.translations = [];
+                        msg.translations[si] = translation;
+                        break;
+                    }
                 }
             }
         } else {
@@ -368,11 +400,20 @@ class Chat extends GameMode {
         var promptData = this._buildOpeningPrompt();
         this.abortController = new AbortController();
         var self = this;
+        var fullText = '';
+        // Create a temporary single-bubble element for streaming
         this.messages.push({ role: 'assistant', text: '' });
-        this._updateMessages();
-        var msgEl = this.dom.messages.lastElementChild;
+        var tempIdx = this.messages.length - 1;
+        var container = this.dom.messages;
+        if (container) {
+            container.innerHTML += '<div class="flex justify-start mb-1">'
+                + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="">'
+                + '<p class="whitespace-pre-wrap break-words"></p>'
+                + '</div></div>';
+        }
+        var msgEl = container ? container.lastElementChild : null;
         try {
-            var fullText = await app.llm.streamGenerate({
+            fullText = await app.llm.streamGenerate({
                 prompt: promptData.prompt,
                 system: promptData.system,
                 options: { num_predict: 128, temperature: 0.7 },
@@ -423,9 +464,16 @@ class Chat extends GameMode {
         var promptData = this._buildPrompt(text);
         this.abortController = new AbortController();
 
+        // Create a temporary single-bubble element for streaming
         this.messages.push({ role: 'assistant', text: '' });
-        this._updateMessages();
-        var msgEl = this.dom.messages.lastElementChild;
+        var container = this.dom.messages;
+        if (container) {
+            container.innerHTML += '<div class="flex justify-start mb-1">'
+                + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="">'
+                + '<p class="whitespace-pre-wrap break-words"></p>'
+                + '</div></div>';
+        }
+        var msgEl = container ? container.lastElementChild : null;
         var self = this;
 
         try {
@@ -454,6 +502,8 @@ class Chat extends GameMode {
                 this._saveMemory(parsed.json);
             }
 
+            cleaned = this._cleanResponse(cleaned);
+
             if (this.messages.length > 0 && this.messages[this.messages.length - 1].role === 'assistant') {
                 this.messages[this.messages.length - 1].text = cleaned;
             }
@@ -461,10 +511,8 @@ class Chat extends GameMode {
             this._updateMessages();
             this._scrollToBottom();
 
-            var sentences = cleaned.split(/[.!?]+/).filter(Boolean);
-            var lastSentence = sentences.length > 0 ? sentences[sentences.length - 1].trim() : '';
-            if (lastSentence && app.store.prefs.chatAutoPlay !== false) {
-                app.audio.play(lastSentence, this._getTargetLang(), 'chat', 200);
+            if (cleaned && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(cleaned, this._getTargetLang(), 'chat', 300);
             }
 
         } catch (err) {
@@ -486,11 +534,24 @@ class Chat extends GameMode {
         for (var i = 0; i < this.messages.length; i++) {
             var m = this.messages[i];
             var isUser = m.role === 'user';
-            html += '<div class="flex ' + (isUser ? 'justify-end' : 'justify-start') + ' mb-2">'
-                + '<div class="chat-bubble max-w-[80%] ' + (isUser ? 'bg-indigo-500 text-white rounded-2xl rounded-br-md' : 'bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md') + ' px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-text="' + escapeHtml(m.text) + '" data-role="' + m.role + '">'
-                + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
-                + (m.translation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translation) + '</p>' : '')
-                + '</div></div>';
+            if (isUser) {
+                html += '<div class="flex justify-end mb-2">'
+                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none">'
+                    + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(m.text) + '</p>'
+                    + '</div></div>';
+            } else {
+                var sentences = this._splitSentences(m.text);
+                for (var j = 0; j < sentences.length; j++) {
+                    var s = sentences[j].trim();
+                    if (!s) continue;
+                    var hasTranslation = m.translations && m.translations[j];
+                    html += '<div class="flex justify-start mb-1">'
+                        + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
+                        + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(s) + '</p>'
+                        + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
+                        + '</div></div>';
+                }
+            }
         }
         container.innerHTML = html;
         this._attachBubbleListeners();

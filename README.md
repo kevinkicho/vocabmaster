@@ -37,6 +37,7 @@
 - **Grammar Gym**: `afterRender()` on all `update()` paths, cache threshold 6 (matches schema `minItems: 6`), choices limited to `maxItems: 2`, no letter circles/helper text/icon bullets.
 - **Auth fixes**: `waitForAuth()` resolved flag + 1.5s timeout before anonymous fallback. Native auth `.then(resetBtn)` removed (was overwriting photoURL).
 - **TTS fixes**: `app.audio.cancel()` on Story destroy/navigation. `raw` parameter for story narration (bypasses `sanitizeText`).
+- **Android TTS root cause fixed**: Script loading race condition — `native_tts.js` now loads before `services.js` so `NativeTTSBridge` is defined when `AudioService` constructor runs. R8 obfuscation ruled out as cause.
 - **Admin**: Email-based check (`kevinkicho@gmail.com`). Delete story button in header (not footer).
 - **SW cache version**: v1185.
 
@@ -70,7 +71,7 @@ VocabMaster integrates with [Ollama](https://ollama.com) for AI-powered features
 ### Grammar Gym
 - AI-generated exercises targeting specific grammar patterns for the current vocab word
 - 6-12 exercises per generation (aim for 8), covering 12 type variants
-- **RTDB caching** — Exercises saved to `grammar_gym/{vocabId}/{langCode}/{token}`
+- **RTDB caching** — Exercises saved to `grammar_exercises/{vocabId}/{langCode}/{token}`
 - **TTS interactions** — Clickable vocab, sentence examples, and answer choices with TTS playback
 - **Two-tap answer** — First tap plays TTS, second tap submits
 
@@ -194,7 +195,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 /dictionary          — Shared vocab entries (indexed on id, e, k, s, t)
 /users/{uid}         — Per-user scores, prefs, analytics, debug logs
 /stories/{compositeVocabId}/{lang} — Shared AI-generated stories (story, questions, vocabIds, ts)
-/grammar_gym/{vocabId}/{langCode}/{token} — Shared AI-generated grammar exercises
+/grammar_exercises/{vocabId}/{langCode}/{token} — Shared AI-generated grammar exercises
 /vocab               — Vocab lists/collections
 ```
 

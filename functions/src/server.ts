@@ -16,6 +16,11 @@ app.options("*", (_req, res) => {
   res.status(204).send("");
 });
 
+app.get("/", (_req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.json({ ok: true, message: "Ollama proxy is running" });
+});
+
 app.post("/", (req, res) => {
   const { path, method = "GET", headers = {}, body } = req.body;
   if (!path) {

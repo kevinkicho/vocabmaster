@@ -21,9 +21,20 @@
  */
 class LLMService {
     constructor() {
-        this.endpoint = 'http://127.0.0.1:11434';
-        this.useCloud = false;
-        this.apiKey = null;
+        var isBrowser = !window.Capacitor && !window.NativeTTS;
+        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
+            this.useProxy = true;
+            this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
+            this.endpoint = this.proxyUrl;
+            this.useCloud = true;
+            this.apiKey = null;
+        } else {
+            this.useProxy = false;
+            this.proxyUrl = '';
+            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
+            this.useCloud = window.OLLAMA_USE_CLOUD === true;
+            this.apiKey = window.OLLAMA_API_KEY || null;
+        }
         this.model = '';
         this.available = false;
         this.availableModels = [];

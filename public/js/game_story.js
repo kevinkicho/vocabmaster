@@ -19,6 +19,12 @@ class Story extends GameMode {
         this._cachedStories = []; // fetched from RTDB at session start
         this._cachedIndex = 0;
         this._cacheLoaded = false;
+        this._highlightsVisible = false;
+        this._showTranslation = false;
+        this._currentStoryTranslation = null;
+        this._currentCompositeKey = null;
+        this._currentStoryLang = null;
+        this._generationId = 0;
 
         this.render();
     }
@@ -55,7 +61,9 @@ class Story extends GameMode {
 
     _highlightWords(text) {
         const lang = this._getTargetLang();
-        let html = escapeHtml(text);
+        // First wrap hanzi characters
+        let html = this.wrapHanziOnEscaped(escapeHtml(text));
+        if (!this._highlightsVisible) return html;
         for (const w of this.storyWords) {
             const word = w[lang] || w.ja || '';
             if (!word) continue;
@@ -63,41 +71,31 @@ class Story extends GameMode {
             for (const v of variants) {
                 const escapedHtml = escapeHtml(v);
                 const escaped = escapedHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(escaped, 'g');
-                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">${escapedHtml}</mark>`);
+                const re = new RegExp(escaped, 'gi');
+                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">$&</mark>`);
             }
         }
-        return this.wrapHanziOnEscaped(html);
+        return html;
     }
 
     async _pickWords(count) {
-        // Respect active collection / level filter (Medium-term collections + tiers)
         const list = (app.data && typeof app.data.getFilteredList === 'function')
             ? app.data.getFilteredList()
             : (app.data ? app.data.activeList : []);
 
         if (!list || list.length === 0) return [];
 
-        let weak = [];
-        if (app.analytics) {
-            try {
-                const missed = await app.analytics.getMostMissedWords(count * 2);
-                weak = missed.filter(m => m.vocab).map(m => m.vocab);
-            } catch (e) {}
-        }
+        var picked = [];
+        var usedIds = new Set();
+        var lang = this._getTargetLang();
+        var safety = 0;
 
-        const picked = [];
-        const usedIds = new Set();
-
-        for (const w of weak) {
-            if (picked.length >= count) break;
-            if (!usedIds.has(w.id)) { picked.push(w); usedIds.add(w.id); }
-        }
-
-        let safety = 0;
-        while (picked.length < count && safety < 50) {
-            const r = app.data.rand ? app.data.rand() : list[Math.floor(Math.random() * list.length)];
-            if (r && !usedIds.has(r.id) && r.id !== undefined) { picked.push(r); usedIds.add(r.id); }
+        while (picked.length < count && safety < 100) {
+            var r = list[Math.floor(Math.random() * list.length)];
+            if (r && !usedIds.has(r.id) && r.id !== undefined && (r[lang] || r.ja || r.en)) {
+                picked.push(r);
+                usedIds.add(r.id);
+            }
             safety++;
         }
         return picked;
@@ -110,6 +108,7 @@ class Story extends GameMode {
     destroy() {
         this._destroyed = true;
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
+        if (app.audio) app.audio.cancel();
         super.destroy();
     }
 

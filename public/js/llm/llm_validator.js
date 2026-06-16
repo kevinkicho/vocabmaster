@@ -1,11 +1,31 @@
-/* js/llm/llm_validator.js — LLM Response Validator + AI Critic */
+/* js/llm/llm_validator.js — LLM Response Validator + AI Critic
+ *
+ * Two-layer quality pipeline:
+ *   1. generateValidated — schema validation (structural checks)
+ *   2. criticEvaluate — AI-as-judge (content quality, pedagogic value)
+ *
+ * Retry budget:
+ *   maxRetries=1  → at most 2 generation attempts
+ *   maxCriticRetries=0 → critic runs once, accepts or returns best-effort
+ *   Total: ≤3 LLM calls per feature request.
+ *
+ * num_predict (token budgets):
+ *   story 1024 (retry 1536) — fits story ~400t + translation ~250t + 2 Q&A ~300t
+ *   grammar 2048 (retry 3072) — fits 6-10 exercises
+ *   other 384 — short responses (cloze, grammar explanation)
+ *
+ * Critic skips simple schemas (clozeMatch, generatedCloze, grammarExplanation)
+ * and auto-approves (score 75) when its own response is unparseable.
+ *
+ * See docs/architecture.md §1-2 for full details.
+ */
 class LLMResponseValidator {
     constructor(llmService) {
         this.llm = llmService;
-        this.maxRetries = 2;
+        this.maxRetries = 1;
         this.criticThreshold = 70;
         this.criticMinCriterion = 50;
-        this.maxCriticRetries = 2;
+        this.maxCriticRetries = 0;
         this.criticTimeout = llmService.useCloud ? 15000 : 30000;
     }
 
@@ -175,44 +195,18 @@ class LLMResponseValidator {
     buildCriticPrompt(generatedContent, role, level, langCode) {
         const langName = this.llm._getLangName(langCode);
         const difficulty = LLMService.LEVEL_DIFFICULTY_MAP[level] || level;
-        const contentStr = JSON.stringify(generatedContent, null, 2);
+        const contentStr = JSON.stringify(generatedContent);
 
-        return `You are a language learning content critic for VocabMaster. Evaluate this generated content for a ${difficulty} learner of ${langName}.
+        return `You are a critic for VocabMaster. Evaluate this content for a ${difficulty} learner of ${langName}.
 
 ROLE: ${role}
-GENERATED CONTENT:
-${contentStr}
+CONTENT: ${contentStr}
 
-CRITERIA (score 0-100 each):
-1. levelAppropriate: Vocabulary/grammar matches ${difficulty}. No structures above level.
-2. pedagogicalValue: Teaches something useful. Not too easy, not overwhelming.
-3. naturalness: Sounds like a native speaker would actually say/write this.
-4. diversity: Varied sentence structures, not repetitive patterns.
-5. culturalAccuracy: Culturally appropriate. No hallucinated customs or unnatural phrases.
-6. engagement: Interesting, relevant to learner's likely goals (daily life, travel, etc.).
+Score each (0-100): levelAppropriate, pedagogicalValue, naturalness, diversity, culturalAccuracy, engagement.
 
-OUTPUT ONLY THIS JSON (no extra text, no markdown):
-{
-  "overallScore": 85,
-  "criteria": {
-    "levelAppropriate": 90,
-    "pedagogicalValue": 85,
-    "naturalness": 88,
-    "diversity": 75,
-    "culturalAccuracy": 92,
-    "engagement": 80
-  },
-  "issues": ["Specific issue 1", "Specific issue 2"],
-  "suggestedFix": "Concrete instruction for regeneration (e.g., 'Simplify sentence 3 to use only -ta past tense. Vary sentence openings.')",
-  "approve": false
-}
+Output ONLY JSON: {"overallScore":0,"criteria":{"levelAppropriate":0,"pedagogicalValue":0,"naturalness":0,"diversity":0,"culturalAccuracy":0,"engagement":0},"issues":[],"suggestedFix":"","approve":false}
 
-RULES:
-- Be strict: score < 50 on any criterion = do not approve
-- overallScore = average of 6 criteria
-- approve = true ONLY if overallScore >= 70 AND no criterion < 50
-- issues: list specific, actionable problems (empty if approve)
-- suggestedFix: one clear sentence the generator can follow`;
+Rules: score<50 on any criterion=no approve. overallScore=average. approve only if >=70 AND no criterion<50. issues=actionable problems. suggestedFix=one sentence.`;
     }
 
     async criticEvaluate(generatedContent, role, level, langCode) {
@@ -223,9 +217,9 @@ RULES:
         const prompt = this.buildCriticPrompt(generatedContent, role, level, langCode);
         const raw = await this.llm.generate({
             prompt,
-            system: 'You are a strict language learning content critic. Output ONLY valid JSON.',
-            options: { temperature: 0, num_predict: 256 },
-            timeout: this.criticTimeout || 30000
+            system: 'Output ONLY valid JSON.',
+            options: { temperature: 0, num_predict: 128 },
+            timeout: this.criticTimeout || 15000
         });
 
         const json = this.extractJSON(raw);
@@ -244,6 +238,13 @@ RULES:
     }
 
     async generateWithCritic({ schemaName, promptBuilder, level, langCode, promptArgs = [], onProgress = null }) {
+        const noCriticSchemas = ['clozeMatch', 'generatedCloze', 'grammarExplanation'];
+        if (noCriticSchemas.includes(schemaName)) {
+            if (typeof onProgress === 'function') onProgress('Generating...');
+            const data = await this.generateValidated(schemaName, promptBuilder, ...promptArgs);
+            return { data, critiqueScore: 75, attempts: 1 };
+        }
+
         let bestData = null;
         let bestScore = 0;
         const baseArgs = [...promptArgs];

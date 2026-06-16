@@ -3,6 +3,8 @@ Object.assign(Story.prototype, {
 
 // --- Main flow ---
 async startStory(forceAnew = false) {
+        this._generationId++;
+        var genId = this._generationId;
         this.storyNum++;
         this._updateProgress();
 
@@ -14,6 +16,7 @@ async startStory(forceAnew = false) {
                 this.storyWords = cached.storyWords;
                 this.questions = cached.questions;
                 this.qIndex = 0;
+                this._currentStoryTranslation = cached.translation || null;
                 this._showStoryWithQuestions(cached.storyPart, cached.lang);
                 return;
             }
@@ -44,6 +47,7 @@ async startStory(forceAnew = false) {
                 this.storyWords = p.storyWords;
                 this.questions = p.questions;
                 this.qIndex = 0;
+                this._currentStoryTranslation = p.translation || null;
                 this._showStoryWithQuestions(p.storyPart, p.lang);
                 if (!p.fromCache) this._saveStoryToRTDB(p.storyPart, p.questions, p.storyWords, p.lang).catch(function(e) { L('[Story] Save to RTDB error:', e); });
                 this._prefetchNext();
@@ -57,6 +61,7 @@ async startStory(forceAnew = false) {
                 this.storyWords = cached.storyWords;
                 this.questions = cached.questions;
                 this.qIndex = 0;
+                this._currentStoryTranslation = cached.translation || null;
                 this._showStoryWithQuestions(cached.storyPart, cached.lang);
                 this._prefetchNext();
                 return;
@@ -69,6 +74,7 @@ async startStory(forceAnew = false) {
         this.storyText = '';
         this.questions = [];
         this.qIndex = 0;
+        this._currentStoryTranslation = null;
 
         if (!forceAnew || !this.storyWords || this.storyWords.length === 0) {
             this.storyWords = await this._pickWords(4);
@@ -100,8 +106,7 @@ async startStory(forceAnew = false) {
         } catch (e) {
             const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud, available: app.llm.available, hasModel: app.llm.hasModel } : null;
             L('[Story] Generation failed:', e, 'llm:', llmInfo, 'wordList:', wordList, 'lang:', lang);
-            if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-            
+
             if (this._elapsedTimer) clearInterval(this._elapsedTimer);
             this.phase = 'error';
             const modelInfo = (app.llm && app.llm.resolvedModel) || 'unknown';
@@ -126,6 +131,7 @@ async startStory(forceAnew = false) {
 // --- Generation: use buffered AI with critic validation ---
 async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
         L('[Story] _generateStory using critic-validated pipeline');
+        var genId = this._generationId;
 
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         this.phase = 'loading';
@@ -145,6 +151,7 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
 
         if (this._elapsedTimer) clearInterval(this._elapsedTimer);
         if (this._destroyed) return;
+        if (this._generationId !== genId) { L('[Story] Discarding stale generation'); return; }
 
         if (!result || !result.story || !result.questions || result.questions.length === 0) {
             L('[Story] LLM failed to generate valid story+questions');
@@ -167,38 +174,20 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
 
         // Use the validated result data
         var cleanStory = result.story;
+        this._currentStoryTranslation = result.translation || null;
         this.questions = result.questions;
         this.qIndex = 0;
         L('[Story] Generation complete,', this.questions.length, 'questions');
 
         // Save to RTDB
+        var vocabIds = storyWordsObjs.map(function(w) { return w.id; }).filter(function(id) { return id !== undefined && id !== null; });
+        var compositeKey = vocabIds.slice().sort(function(a,b) { return a - b; }).join('-');
+        this._currentCompositeKey = compositeKey;
+        this._currentStoryLang = lang;
         this._saveStoryToRTDB(cleanStory, this.questions, storyWordsObjs, lang).catch(function(e) { L('[Story] Save to RTDB error:', e); });
 
         // Show story with questions
         this._showStoryWithQuestions(cleanStory, lang);
         this._prefetchNext();
-    },
-
-    _extractQuestions(text) {
-        if (!text) return [];
-        const questions = [];
-        const qBlocks = text.matchAll(/(?:Q\d|QUESTION|questions?)[:\s]*([\s\S]*?)(?=(?:Q\d|QUESTION)|$)/gi);
-        for (const m of qBlocks) {
-            const block = m[1].trim();
-            if (!block) continue;
-            const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-            if (lines.length < 3) continue;
-            const qText = lines[0];
-            let answerText = '', wrongText = '', translation = '';
-            for (const line of lines) {
-                if (line.toUpperCase().startsWith('ANSWER:')) answerText = line.replace(/^ANSWER:\s*/i, '').trim();
-                else if (line.toUpperCase().startsWith('WRONG:')) wrongText = line.replace(/^WRONG:\s*/i, '').trim();
-                else if (line.toUpperCase().startsWith('TRANSLATION:')) translation = line.replace(/^TRANSLATION:\s*/i, '').trim();
-            }
-            if (answerText && wrongText) {
-                questions.push({ text: qText, answer: { text: answerText, translation: translation }, wrong: { text: wrongText } });
-            }
-        }
-        return questions;
     }
 });

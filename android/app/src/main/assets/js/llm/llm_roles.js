@@ -154,8 +154,8 @@ LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, dat
     var validExercises = data.exercises.filter(function(ex) {
         return ex.type && ex.question && ex.choices && ex.choices.length >= 2 && ex.answer && ex.explanation;
     });
-    if (validExercises.length < 12) {
-        L('[Grammar] Save skipped: only', validExercises.length, 'valid exercises (need 12)');
+    if (validExercises.length < 6) {
+        L('[Grammar] Save skipped: only', validExercises.length, 'valid exercises (need 6)');
         return;
     }
     var token = Math.random().toString(36).slice(2, 8);

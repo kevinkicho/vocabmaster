@@ -348,36 +348,16 @@ Object.assign(UIManager.prototype, {
         if (devDetails) {
             const isAdmin = window.app && window.app.auth && window.app.auth.userRole === 'admin';
             if (isAdmin) devDetails.classList.remove('hidden');
-            if (!document.getElementById('rtdb-log-status')) {
-                const container = devDetails.querySelector('.p-4');
-                if (container) {
-                    const debugHTML = `<div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-1"></div>
-<div class="text-[9px] leading-snug flex flex-wrap items-center gap-x-2 gap-y-1 ${isAdmin ? '' : 'hidden'}">
-  <span class="uppercase font-bold text-emerald-500">RTDB</span>
-  <button onclick="if(app) app.flushLogsToRTDB && app.flushLogsToRTDB()" class="underline text-emerald-600 active:text-emerald-800">push</button>
-  <button onclick="app.ui && app.ui.fetchAndShowRTDBLogs && app.ui.fetchAndShowRTDBLogs()" class="underline text-slate-500 active:text-slate-700">fetch</button>
-  <button onclick="app.ui && app.ui.downloadRTDBLogs && app.ui.downloadRTDBLogs()" class="underline text-indigo-600 active:text-indigo-800">dl</button>
-  <button onclick="app.ui && app.ui.clearRemoteLogs && app.ui.clearRemoteLogs()" class="underline text-rose-600 active:text-rose-800">clear</button>
-  <span id="rtdb-log-status" class="text-slate-500 dark:text-neutral-400 font-mono">loading…</span>
-</div>
-<textarea id="rtdb-log-area" readonly class="w-full h-16 bg-black text-emerald-400 text-[8px] font-mono p-1 rounded border border-slate-700 resize-y focus:outline-none hidden mt-1"></textarea>`;
-                    container.insertAdjacentHTML('beforeend', debugHTML);
-                }
-            }
         }
 
         const logArea = document.getElementById('debug-log-area');
-        if (logArea && window.logBuffer) logArea.value = window.logBuffer.join('\n');
-
-        // Initial status for the new RTDB section
-        if (typeof this.updateRemoteLogStatus === 'function') {
-            this.updateRemoteLogStatus();
-        }
+        if (logArea) logArea.value = '';
     },
     copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; navigator.clipboard.writeText(el.value); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); },
     downloadLogs() {
-        if (!window.logBuffer || window.logBuffer.length === 0) { app.ui.showToast('No logs captured yet.', 'warning'); return; }
-        const content = window.logBuffer.join('\n') + '\n\n--- End of VocabMaster debug log (' + new Date().toISOString() + ') ---';
+        const area = document.getElementById('debug-log-area');
+        if (!area || !area.value) { app.ui.showToast('No logs captured yet.', 'warning'); return; }
+        const content = area.value + '\n\n--- End of VocabMaster debug log (' + new Date().toISOString() + ') ---';
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -389,104 +369,8 @@ Object.assign(UIManager.prototype, {
         URL.revokeObjectURL(url);
     },
     clearLogs() {
-        window.logBuffer = [];
-        try { localStorage.removeItem('vm_log_buffer'); } catch(e){}
         const el = document.getElementById('debug-log-area');
         if (el) el.value = '';
-    },
-
-    // --- RTDB remote log helpers (for developer analysis without device pulls) ---
-    updateRemoteLogStatus() {
-        const statusEl = document.getElementById('rtdb-log-status');
-        if (!statusEl) return;
-
-        const sess = (window.VM_SESSION_ID || 'unknown').slice(0, 18);
-        let last = '';
-        try {
-            const lp = localStorage.getItem('vm_last_rtdb_push');
-            if (lp) last = ' last push ' + new Date(parseInt(lp,10)).toLocaleTimeString();
-        } catch(e) {}
-
-        const uid = (auth && auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid.slice(-6) : 'no-auth';
-        statusEl.innerHTML = `sess <b>${sess}</b> • uid…${uid}${last}<br>RTDB path: <span class="text-emerald-400">/users/${uid ? auth.currentUser.uid : '...'}/debug_logs/sessions/${window.VM_SESSION_ID || '...'}</span>`;
-        statusEl.title = 'Open Firebase Console → Realtime Database and browse to the path above to inspect raw logs (even from previous runs).';
-    },
-
-    async fetchAndShowRTDBLogs() {
-        const area = document.getElementById('rtdb-log-area');
-        const statusEl = document.getElementById('rtdb-log-status');
-        if (!area || !db || !auth || !auth.currentUser) {
-            app.ui.showToast('RTDB logs not available (no auth or no db).', 'warning');
-            return;
-        }
-        try {
-            area.classList.remove('hidden');
-            area.value = 'Fetching from RTDB...';
-            const uid = auth.currentUser.uid;
-            const sess = window.VM_SESSION_ID || 'default';
-            const snap = await db.ref(`users/${uid}/debug_logs/sessions/${sess}/batches`).limitToLast(8).once('value');
-            const val = snap.val() || {};
-            const batches = Object.values(val);
-            let text = '';
-            batches.forEach(b => {
-                if (b && b.lines) {
-                    text += (b.lines || []).join('\n') + '\n--- batch ---\n';
-                }
-            });
-            if (!text.trim()) text = '(no batches stored for this session yet — tap Push now or wait for timer/error flush)';
-            area.value = text + `\n\n( fetched ${batches.length} batches • session ${sess} )`;
-            if (statusEl) statusEl.textContent = 'Fetched ' + batches.length + ' batches from RTDB';
-        } catch(e) {
-            if (area) area.value = 'Fetch error: ' + (e.message || e);
-        }
-    },
-
-    async downloadRTDBLogs() {
-        if (!db || !auth || !auth.currentUser) { app.ui.showToast('Cannot reach RTDB (no current user).', 'error'); return; }
-        try {
-            const uid = auth.currentUser.uid;
-            const sess = window.VM_SESSION_ID || 'default';
-            const snap = await db.ref(`users/${uid}/debug_logs/sessions/${sess}/batches`).limitToLast(12).once('value');
-            const val = snap.val() || {};
-            const batches = Object.values(val);
-            let content = `VocabMaster RTDB debug log export\nSession: ${sess}\nUser (tail uid): ${uid.slice(-8)}\nExported: ${new Date().toISOString()}\n\n`;
-            batches.forEach((b, i) => {
-                content += `--- batch ${i+1} @ ${b.at || ''} ---\n`;
-                content += (b.lines || []).join('\n') + '\n';
-            });
-            if (batches.length === 0) content += '(no remote batches)\n';
-
-            // Also append whatever is in the current local buffer for completeness
-            if (window.logBuffer && window.logBuffer.length) {
-                content += '\n\n=== CURRENT LOCAL BUFFER (newest first) ===\n' + window.logBuffer.join('\n');
-            }
-
-            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `vocabmaster-rtdb-${sess}-${Date.now()}.log`;
-            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch(e) {
-            app.ui.showToast('RTDB download failed: ' + (e.message || e), 'error');
-        }
-    },
-
-    async clearRemoteLogs() {
-        if (!confirm('Delete ALL your debug_logs in RTDB for this account? (This only affects the debug node, not scores or stories.)')) return;
-        if (!db || !auth || !auth.currentUser) return;
-        try {
-            const uid = auth.currentUser.uid;
-            await db.ref(`users/${uid}/debug_logs`).remove();
-            const area = document.getElementById('rtdb-log-area');
-            if (area) { area.value = ''; area.classList.add('hidden'); }
-            const st = document.getElementById('rtdb-log-status');
-            if (st) st.textContent = 'Remote logs cleared for this uid.';
-            try { localStorage.removeItem('vm_last_rtdb_push'); } catch(e) {}
-        } catch(e) {
-            app.ui.showToast('Clear remote failed: ' + (e.message || e), 'error');
-        }
     },
 
     renderCelebGrid() { const grid = document.getElementById('celeb-grid'); if(!grid || !window.app || !window.app.celebration) return; grid.innerHTML = ''; const allEffects = Object.keys(window.app.celebration.effects); const userAllowed = this.store.prefs.allowedCelebs || []; const labelMap = { 'Confetti': '🎉', 'Stars': '⭐', 'Discs': '💿', 'Coin': '🪙', 'Money': '💸', 'Red Env': '🧧', 'Sushi': '🍣', 'Kimono': '👘', 'Carp': '🎏', 'Torii': '⛩️', 'Sake': '🍶', 'Bento': '🍱', 'Dragon': '🐲' }; allEffects.forEach(name => { const isEnabled = userAllowed.includes(name); const btn = document.createElement('button'); const baseClass = "text-2xl font-bold py-2 rounded-xl transition-all active:scale-95 border-2 shadow-sm truncate px-1 flex items-center justify-center"; const activeClass = "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700/50"; const inactiveClass = "bg-slate-50 dark:bg-neutral-800 text-slate-400 dark:text-neutral-500 border-transparent hover:border-slate-200 dark:hover:border-neutral-700 grayscale opacity-60"; btn.className = `${baseClass} ${isEnabled ? activeClass : inactiveClass}`; btn.innerText = labelMap[name] || name; btn.onclick = () => this.store.toggleCeleb(name, btn, activeClass, inactiveClass); grid.appendChild(btn); }); }

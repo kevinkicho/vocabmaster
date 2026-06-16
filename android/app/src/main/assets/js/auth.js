@@ -11,31 +11,38 @@ class AuthManager {
 
     waitForAuth() {
         return new Promise((resolve) => {
-            // If already loaded, return immediately
             if (auth.currentUser) {
                 this.currentUser = auth.currentUser;
                 resolve(auth.currentUser);
                 return;
             }
 
-            const unsubscribe = auth.onAuthStateChanged(user => {
-                unsubscribe();
-                if (user) {
-                    this.currentUser = user;
-                    resolve(user);
-                } else {
-                    // Fallback to Anon
+            var resolved = false;
+            var timeout = setTimeout(function() {
+                if (!resolved) {
+                    resolved = true;
                     auth.signInAnonymously()
-                        .then((cred) => {
+                        .then(function(cred) {
                             this.currentUser = cred.user;
                             resolve(cred.user);
-                        })
-                        .catch(e => {
+                        }.bind(this))
+                        .catch(function(e) {
                             L("Anon Auth Failed:", e);
                             resolve(null);
                         });
                 }
-            });
+            }.bind(this), 1500);
+
+            var unsubscribe = auth.onAuthStateChanged(function(user) {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timeout);
+                unsubscribe();
+                if (user) {
+                    this.currentUser = user;
+                    resolve(user);
+                }
+            }.bind(this));
         });
     }
 

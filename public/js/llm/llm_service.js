@@ -1,4 +1,24 @@
-/* js/llm/llm_service.js — Core LLMService class */
+/* js/llm/llm_service.js — Core LLMService class
+ *
+ * === Transport layer ===
+ *   _fetch() tries Capacitor HttpProxy first (Android WebView),
+ *   falls back to native fetch() if proxy absent or throws.
+ *   Proxy does NOT support AbortSignal — timeout enforced via readTimeout param.
+ *   Native fetch() uses AbortController + setTimeout (not AbortSignal.any,
+ *   which is unreliable across WebView versions).
+ *
+ * === Concurrency ===
+ *   _enqueue() manages a FIFO array with _maxConcurrent=2.
+ *   Two requests may run in parallel. Queue capped at 50.
+ *   _ping() bypasses the queue (health check must not block behind generation).
+ *
+ * === Connection health ===
+ *   _ping() runs on visibilitychange (app resume). 3s timeout /api/tags.
+ *   On failure: clears available+hasModel flags, schedules autoDetect() in 5s.
+ *   On success: restores available=true.
+ *
+ * See docs/architecture.md §1 for full pipeline description.
+ */
 class LLMService {
     constructor() {
         this.endpoint = 'http://127.0.0.1:11434';
@@ -11,10 +31,36 @@ class LLMService {
         this.resolvedModel = null;
         this.cache = new Map();
         this.db = null;
-        this._queue = Promise.resolve();
+        this._activeRequests = 0;
+        this._maxConcurrent = 2;
+        this._queue = [];
         this._initDB();
         if (typeof this.initValidator === 'function') this.initValidator();
         L('[LLM] Endpoint configured:', this.endpoint);
+
+        // Re-check connection when app returns to foreground
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                this._ping();
+            }
+        }.bind(this));
+    }
+
+async _ping() {
+        try {
+            await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 3000 });
+            L('[LLM] Resume ping OK');
+            this.available = true;
+            return true;
+        } catch (e) {
+            L('[LLM] Resume ping failed — connection lost');
+            this.available = false;
+            this.hasModel = false;
+            setTimeout(function() {
+                if (!this.available) this.autoDetect().catch(function() {});
+            }.bind(this), 5000);
+            return false;
+        }
     }
 
     _pickBestLocalModel() {
@@ -37,17 +83,20 @@ class LLMService {
     }
 
     async _fetch(url, options) {
-        if (options === undefined) options = {};
+        // NOTE: Capacitor HttpProxy does NOT support AbortSignal.
+        // The caller's timeout value is passed as readTimeout instead.
+        // If proxy throws, fall through to native fetch() (which uses AbortController).
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.HttpProxy) {
             try {
                 var proxy = window.Capacitor.Plugins.HttpProxy;
+                var reqTimeout = options.timeout || 60000;
                 var result = await proxy.request({
                     url: url,
                     method: options.method || 'GET',
                     headers: options.headers || {},
                     body: options.body || null,
-                    connectTimeout: 15000,
-                    readTimeout: 60000
+                    connectTimeout: Math.min(reqTimeout, 15000),
+                    readTimeout: reqTimeout
                 });
                 return {
                     ok: result.ok,
@@ -56,7 +105,7 @@ class LLMService {
                     text: async function() { return result.data; }
                 };
             } catch (e) {
-                L('[LLM] HttpProxy failed:', e.message);
+                L('[LLM] Capacitor proxy failed, falling back to fetch:', e.message);
             }
         }
         return fetch(url, options);
@@ -79,12 +128,22 @@ class LLMService {
         var fetchOptions = {
             method: reqMethod,
             headers: headers,
-            body: reqBody
+            body: reqBody,
+            timeout: timeout
         };
 
-        var resp = await this._fetch(url, Object.assign({}, fetchOptions, {
-            signal: signal ? (AbortSignal.any ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : signal) : AbortSignal.timeout(timeout)
-        }));
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function() { controller.abort(); }, timeout);
+        if (signal) {
+            signal.addEventListener('abort', function() { clearTimeout(timeoutId); controller.abort(); });
+        }
+        var resp;
+
+        try {
+            resp = await this._fetch(url, Object.assign({}, fetchOptions, { signal: controller.signal }));
+        } finally {
+            clearTimeout(timeoutId);
+        }
 
         if (!resp.ok) {
             var errText = await resp.text().catch(function() { return ''; });
@@ -160,15 +219,34 @@ class LLMService {
         } catch (e) {
             L('[LLM] Connection failed for endpoint', this.endpoint, 'useCloud', this.useCloud, ':', e.message || e, 'stack:', e.stack);
             this.available = false;
-            if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(function() {});
             return false;
         }
     }
 
     _enqueue(fn) {
-        var next = this._queue.then(function() { return fn(); }, function() { return fn(); });
-        this._queue = next.catch(function() {});
-        return next;
+        if (this._queue.length >= 50) {
+            return Promise.reject(new Error('LLM queue full (50 queued), try again later'));
+        }
+        return new Promise(function(resolve, reject) {
+            this._queue.push({ fn: fn, resolve: resolve, reject: reject });
+            this._processQueue();
+        }.bind(this));
+    }
+
+    _processQueue() {
+        while (this._activeRequests < this._maxConcurrent && this._queue.length > 0) {
+            var item = this._queue.shift();
+            this._activeRequests++;
+            item.fn().then(function(result) {
+                item.resolve(result);
+                this._activeRequests--;
+                this._processQueue();
+            }.bind(this), function(err) {
+                item.reject(err);
+                this._activeRequests--;
+                this._processQueue();
+            }.bind(this));
+        }
     }
 
     async generate(opts) {

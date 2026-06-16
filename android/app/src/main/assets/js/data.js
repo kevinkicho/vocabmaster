@@ -6,18 +6,10 @@ class DataService {
         this.dailyScoreLoaded = false;
         this.kanjiCache = {}; 
         this.pendingFetches = {}; 
-        this._defaultList = null;
-
-        // Medium-term: active collection for scoping practice (works with getFilteredList)
-        this.currentCollection = 'all';
     }
 
     get activeList() {
         return this._reviewList || this.list;
-    }
-
-    setCollection(id) {
-        this.currentCollection = id || 'all';
     }
 
     // Medium-term: Review queue support (combines analytics + adaptive + collections)
@@ -77,7 +69,7 @@ class DataService {
         const prefs = app && app.store ? app.store.prefs : null;
         let list = this.list;
 
-        // Level filter (existing)
+        // Level filter
         if (prefs && prefs.levelFilter && !prefs.levelFilter.includes('all')) {
             const selected = prefs.levelFilter;
             const frameworkTags = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'];
@@ -88,18 +80,6 @@ class DataService {
                 if (item.tags && item.tags.some(t => selected.includes(t))) return true;
                 return false;
             });
-        }
-
-        // Collection filter (new Medium-term)
-        const collId = (app && app.data && app.data.currentCollection) || (prefs && prefs.currentCollection);
-        if (collId && collId !== 'all' && typeof getWordsForCollection === 'function') {
-            const filtered = getWordsForCollection(list, collId);
-            if (filtered.length === 0 && collId !== 'all') {
-                L(`[Data] Collection '${collId}' produced 0 results from current vocab (no matching tags/lang in loaded data). Falling back to full list.`);
-                // Do not return empty — prevents downstream "item.id of undefined" in games.
-            } else {
-                list = filtered;
-            }
         }
 
         return list.length > 0 ? list : this.list;
@@ -118,7 +98,6 @@ class DataService {
     }
 
     async load() {
-        let loaded = false;
         if (typeof db !== 'undefined' && db) {
             try {
                 L("[Data] Fetching vocab...");
@@ -127,25 +106,8 @@ class DataService {
                     const val = snap.val();
                     this.list = Array.isArray(val) ? val : Object.values(val);
                     this.list = this.list.filter(item => item !== null).sort((a,b) => a.id - b.id);
-                    loaded = true;
                 }
             } catch (e) { L("[Data] RTDB fetch failed", e); }
-        }
-        if (!loaded) {
-            try {
-                const res = await fetch('./master112625.csv'); 
-                const txt = await res.text();
-                this.parseCSV(txt);
-                loaded = true;
-            } catch (e) {
-                if (this.list.length === 0) this.createMockData();
-            }
-        }
-
-        // Initialize collection from prefs if present (Medium-term)
-        const prefs = app && app.store ? app.store.prefs : null;
-        if (prefs && prefs.currentCollection) {
-            this.currentCollection = prefs.currentCollection;
         }
 
         return this.list.length;
@@ -253,56 +215,5 @@ class DataService {
         } catch(e) { app.ui.showToast("Error: " + e.message, 'error'); }
     }
 
-    loadCollection(collectionKey) {
-        if (typeof VOCAB_COLLECTIONS === 'undefined' || !VOCAB_COLLECTIONS[collectionKey]) return false;
-        if (!this._defaultList) this._defaultList = this.list;
-        const collection = VOCAB_COLLECTIONS[collectionKey];
-        const langKey = collection[0] && collection[0].lang ? collection[0].lang : null;
-        const exKey = langKey ? langKey + '_ex' : null;
-        this.list = collection.map((item, i) => {
-            const entry = { id: item.id !== undefined ? item.id : i };
-            if (typeof LANG_CONFIG !== 'undefined') {
-                LANG_CONFIG.forEach(c => { entry[c.key] = ''; });
-            }
-            if (item.en) entry.en = item.en;
-            if (langKey && item[langKey]) entry[langKey] = item[langKey];
-            if (exKey && item[exKey]) {
-                entry[exKey] = item[exKey];
-            } else if (langKey && item[langKey + '_ex']) {
-                entry[langKey + '_ex'] = item[langKey + '_ex'];
-            }
-            if (item.en_ex) entry.en_ex = item.en_ex;
-            if (item.tags) entry.tags = item.tags;
-            return entry;
-        });
-        return true;
-    }
-
-    resetToDefaultList() {
-        if (this._defaultList) {
-            this.list = this._defaultList;
-            return true;
-        }
-        return false;
-    }
-
-    parseCSV(txt) {
-        let lines = txt.split(/\r?\n/).filter(l => l.trim().length > 0 && !l.trim().startsWith('['));
-        if (lines.length > 0) lines = lines.slice(1); 
-        this.list = lines.map((line, i) => {
-            const parts = []; let match; const regex = /(?:^|,)(\s*(?:"([^"]*)"|([^",]*))\s*)/g;
-            while ((match = regex.exec(line)) !== null) { parts.push(match[2] !== undefined ? match[2] : match[3]); }
-            if(parts.length===0) parts.push(...line.split(','));
-            const item = { id: i };
-            if(typeof LANG_CONFIG !== 'undefined') { LANG_CONFIG.forEach(c => item[c.key] = parts[c.index] ? parts[c.index].trim() : ""); }
-            const levelIdx = LANG_CONFIG ? LANG_CONFIG.length : 15;
-            const tagIdx = levelIdx + 1;
-            if (parts[tagIdx] && parts[tagIdx].trim()) item.tags = parts[tagIdx].split(/[;|]/).map(t => t.trim()).filter(Boolean);
-            return item;
-        });
-    }
-    
-    // FIX: Set "Test 0" so main.js can detect it as mock data properly
-    createMockData() { this.list = Array.from({length:20}, (_,i)=> ({ id: i, ja: "Test " + i, en: "Test " + i })); }
-    rand() { return this.list.length ? this.list[Math.floor(Math.random() * this.list.length)] : { id:0 }; }
+    rand() { return this.list.length ? this.list[Math.floor(Math.random() * this.list.length)] : null; }
 }

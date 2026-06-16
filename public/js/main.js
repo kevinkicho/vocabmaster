@@ -1,125 +1,14 @@
 /* js/main.js */
 
-// --- Robust Logger (always capture for debug, persistent to localStorage, exportable as file) ---
-// Also mirrors to RTDB under the signed-in (or anon) uid so logs survive app restarts/crashes
-// and are accessible for remote analysis without USB/adb/download friction.
-window.VM_DEBUG = location.search.includes('debug=1');
-window.logBuffer = [];
-try {
-    const saved = localStorage.getItem('vm_log_buffer');
-    if (saved) window.logBuffer = JSON.parse(saved).slice(0, 200);
-} catch(e) {}
-
-// Stable session id so logs from one "run" (including restarts) stay grouped in RTDB
-window.VM_SESSION_ID = localStorage.getItem('vm_session_id') || ('s_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7));
-localStorage.setItem('vm_session_id', window.VM_SESSION_ID);
-
-window._logFlushPending = false;
-
-let _autoFlushTimer = null;
-function scheduleAutoFlush() {
-  if (_autoFlushTimer) clearTimeout(_autoFlushTimer);
-  _autoFlushTimer = setTimeout(() => {
-    if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-  }, 8000); // automatic push ~8s after log activity, no button needed
-}
-
-function logToBuffer(type, args) {
-    try {
-        const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-        window.logBuffer.unshift(`[${type}] ${msg}`);
-        if (window.logBuffer.length > 200) window.logBuffer.length = 200;
-        // persist local
-        try { localStorage.setItem('vm_log_buffer', JSON.stringify(window.logBuffer)); } catch(e){}
-        const logArea = document.getElementById('debug-log-area');
-        if (logArea) logArea.value = window.logBuffer.join('\n');
-        // mark for remote (RTDB) mirror
-        window._logFlushPending = true;
-        scheduleAutoFlush();
-    } catch (e) {}
-}
-
-// Always capture to buffer (even without ?debug=1), so errors in Story/LLM are always logged for export
-const _log = console.log; const _err = console.error; const _warn = console.warn;
-console.log = (...args) => { _log.apply(console, args); logToBuffer('LOG', args); };
-console.error = (...args) => { _err.apply(console, args); logToBuffer('ERR', args); };
-console.warn = (...args) => { _warn.apply(console, args); logToBuffer('WRN', args); };
-
-// Global error hooks also try to flush what we have to RTDB (best-effort)
+// Global error hooks that navigate home on critical errors
 window.onerror = (msg, url, line) => {
   console.error(`Global: ${msg} (${url}:${line})`);
-  if (window.flushDebugLogsToRTDB) setTimeout(() => window.flushDebugLogsToRTDB().catch(()=>{}), 300);
   if(app && app.goHome) app.goHome(false);
 };
 window.addEventListener('unhandledrejection', (e) => {
   console.error('Unhandled Promise:', e.reason);
-  if (window.flushDebugLogsToRTDB) setTimeout(() => window.flushDebugLogsToRTDB().catch(()=>{}), 300);
   if(app && app.goHome) app.goHome(false);
 });
-
-// --- RTDB remote logging (per-user, bounded, safe for anon + real accounts) ---
-// Schema: debug_logs/{uid}/sessions/{VM_SESSION_ID}/
-//   meta: {started, ua, version, platform}
-//   batches: push({at: serverTs, n, lines: [...]})   // we push compact recent batches
-// Pruning keeps only the last ~15 batches per session (tiny data, easy to browse in console).
-window.flushDebugLogsToRTDB = async function() {
-  try {
-    if (!db || !auth || !auth.currentUser) return false;
-    const uid = auth.currentUser.uid;
-    const sess = window.VM_SESSION_ID || 'default';
-    const base = db.ref(`users/${uid}/debug_logs/sessions/${sess}`);
-
-    // Write meta once per session (non-blocking for future)
-    try {
-      const metaSnap = await base.child('meta').once('value');
-      if (!metaSnap.exists()) {
-        await base.child('meta').set({
-          started: Date.now(),
-          ua: String(navigator.userAgent || '').slice(0, 180),
-          version: (document.title || 'VocabMaster').slice(0, 40),
-          platform: (window.NativeTTS ? 'android-webview-native' : (window.Capacitor ? 'capacitor' : 'web'))
-        });
-      }
-    } catch(_) {}
-
-    const buffer = (window.logBuffer || []).slice();
-    if (buffer.length === 0) return true;
-
-    // Push a single compact batch with the most recent lines (oldest-first inside the batch)
-    const recent = buffer.slice(0, 60).reverse();
-    await base.child('batches').push({
-      at: firebase.database.ServerValue.TIMESTAMP,
-      n: recent.length,
-      lines: recent
-    });
-
-    // Light prune: keep last ~15 batches only
-    try {
-      const snap = await base.child('batches').once('value');
-      const val = snap.val() || {};
-      const keys = Object.keys(val);
-      if (keys.length > 15) {
-        const drop = keys.slice(0, keys.length - 15);
-        const updateObj = {};
-        drop.forEach(k => { updateObj['batches/' + k] = null; });
-        await base.update(updateObj);
-      }
-    } catch(_) {}
-
-    try { localStorage.setItem('vm_last_rtdb_push', String(Date.now())); } catch(_) {}
-    window._logFlushPending = false;
-
-    // Let UI refresh status if the settings pane is open
-    if (window.app && window.app.ui && typeof window.app.ui.updateRemoteLogStatus === 'function') {
-      try { window.app.ui.updateRemoteLogStatus(); } catch(_) {}
-    }
-    return true;
-  } catch (e) {
-    // Logging must never crash the app
-    try { console.warn('[RTDB-LOG] flush skipped:', (e && e.message) || e); } catch(_) {}
-    return false;
-  }
-};
 
 class App {
     constructor() {
@@ -182,8 +71,6 @@ class App {
             if (coll && this.store) {
                 L(`[CLI] Setting active collection to: ${coll}`);
                 this.store.prefs.currentCollection = coll;
-                if (this.data) this.data.setCollection(coll);
-                // Force a save so data.js loads it
                 this.store.saveSettings();
                 configChanged = true;
             }
@@ -237,6 +124,10 @@ class App {
                         const isAdmin = false; // set via getIdTokenResult below
                         this.auth.userRole = user.isAnonymous ? 'anonymous' : 'user';
                         if (!user.isAnonymous) {
+                            // Email-based admin check (fallback if custom claims not set)
+                            if (user.email === 'kevinkicho@gmail.com') {
+                                this.auth.userRole = 'admin';
+                            }
                             user.getIdTokenResult().then(idTokenResult => {
                                 if (idTokenResult.claims.admin) {
                                     this.auth.userRole = 'admin';
@@ -295,28 +186,14 @@ class App {
                 this.llm.autoDetect().catch(e => L('[Main] autoDetect error:', e));
             }
 
-            statusBar.innerText = count > 0 ? `${count} Words Ready` : 'No vocabulary loaded';
-            if (count === 0) statusBar.classList.add('text-rose-500');
-            else statusBar.classList.remove('text-rose-500');
-
-            // Start periodic RTDB log mirroring (every ~20s when there is new activity).
-            // This + error hooks + settings-close + goHome means logs are usually in the cloud even if
-            // the user never taps "Download .log File".
-            this._logFlushTimer = setInterval(() => {
-                if (window._logFlushPending && window.flushDebugLogsToRTDB) {
-                    window.flushDebugLogsToRTDB().catch(() => {});
-                }
-            }, 20000);
-
-            // Automatic RTDB log connect + flush on initialization (after auth ready).
-            // Logs are pushed automatically on start and ~8s after any activity via scheduleAutoFlush.
-            // No manual "Push" required; use Fetch/Download in Developer to export for analysis.
-            setTimeout(() => {
-                if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-            }, 2000);
-            setTimeout(() => {
-                if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-            }, 5000);
+            statusBar.innerText = count > 0 ? `${count} Words Ready` : 'No vocabulary loaded — check RTDB connection';
+            if (count === 0) {
+                statusBar.classList.add('text-rose-500');
+                btn.innerText = 'Retry';
+                btn.onclick = () => window.location.reload();
+                return;
+            }
+            statusBar.classList.remove('text-rose-500');
 
             // On first run, add a subtle gear-pulse hint instead of opening the full modal
             if (!localStorage.getItem('vm_first_run_done')) {
@@ -401,9 +278,7 @@ class App {
             const isFileOrigin = window.location.protocol === 'file:';
 
             if (isFileOrigin && window.NativeAuth) {
-                window.__nativeAuth.signIn().then(() => {
-                    resetBtn();
-                }).catch(e => {
+                window.__nativeAuth.signIn().catch(e => {
                     L("Native Auth Error:", e);
                     resetBtn();
                     if (e.message && !e.message.includes('12501')) {
@@ -428,9 +303,6 @@ class App {
     }
 
     async goHome(pushState = true) {
-        // Push whatever we have to RTDB before tearing down the current game (Story/LLM failures etc. will be captured)
-        if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
-
         if(this.game) this.game.destroy();
         this.game = null;
         if(app.audio) app.audio.cancel(); 
@@ -494,21 +366,6 @@ class App {
                         ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
                     </div>
 
-                    <!-- Medium-term: Collection / Tier picker (Phase 1) -->
-                    <div class="mt-2 px-2">
-                        <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Collection / Tier</div>
-                        <select id="collection-picker" class="w-full text-sm font-bold bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-3 py-2" 
-                                onchange="app.setCollection(this.value)">
-                            <!-- Populated dynamically from vocabulary-collections if available -->
-                            <option value="all">All Words</option>
-                            <option value="es-a1">Spanish A1</option>
-                            <option value="jlpt-n5">JLPT N5</option>
-                            <option value="jlpt-n3">JLPT N3 (enriched)</option>
-                            <option value="jlpt-n2">JLPT N2 (enriched)</option>
-                            <option value="jlpt-n1">JLPT N1 (enriched)</option>
-                        </select>
-                    </div>
-
                     <!-- Medium-term: Smart Review (Phase 2) -->
                     <div class="mt-1 px-2">
                         <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
@@ -517,20 +374,6 @@ class App {
 
             if(this.fitter) this.fitter.fitAll().then(() => view.classList.add('visible')).catch(()=>view.classList.add('visible'));
             else view.classList.add('visible');
-
-            // Sync collection picker with current state + make dynamic if collections module present
-            setTimeout(() => {
-                const picker = document.getElementById('collection-picker');
-                if (picker) {
-                    if (typeof listCollections === 'function') {
-                        const cols = listCollections();
-                        picker.innerHTML = cols.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-                    }
-                    if (this.data) {
-                        picker.value = this.data.currentCollection || 'all';
-                    }
-                }
-            }, 0);
         });
     }
 
@@ -586,19 +429,6 @@ class App {
         }
     }
 
-    // Medium-term collections support (Phase 1)
-    setCollection(id) {
-        if (this.data) this.data.setCollection(id);
-        // Persist simply in prefs for now (can move to registry)
-        if (this.store && this.store.prefs) {
-            this.store.prefs.currentCollection = id;
-            // light save without full modal cycle
-            try { localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(this.store.prefs)); } catch(e){}
-        }
-        // Re-render home so filters feel live
-        this.goHome(false);
-    }
-
     // Medium-term: Smart Review queue (Phase 2) - uses analytics + adaptive + current collection
     async launchSmartReview() {
         if (!this.data) return;
@@ -628,16 +458,8 @@ class App {
             if(this.ui) this.ui.loadSettings(); 
         } else { 
             if(this.store) this.store.saveSettings(); 
-            // Flush any new logs when user closes Settings (common place they reproduce issues then want to capture)
-            if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
             el.classList.add('hidden'); 
         }
-    }
-
-    // Public wrapper so UI / other modules can call app.flushLogsToRTDB()
-    async flushLogsToRTDB() {
-        if (window.flushDebugLogsToRTDB) return window.flushDebugLogsToRTDB();
-        return false;
     }
 }
 

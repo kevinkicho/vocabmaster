@@ -38,7 +38,7 @@ LLMResponseValidator.SCHEMAS = {
             example: { type: 'string', minLength: 1 },
             exercises: {
                 type: 'array',
-                minItems: 12,
+                minItems: 6,
                 maxItems: 12,
                 items: {
                     type: 'object',
@@ -48,15 +48,14 @@ LLMResponseValidator.SCHEMAS = {
                         choices: {
                             type: 'array',
                             minItems: 2,
-                            maxItems: 4,
+maxItems: 2,
                             items: {
                                 type: 'object',
                                 properties: {
                                     letter: { type: 'string', enum: ['A', 'B', 'C', 'D'] },
                                     text: { type: 'string', minLength: 1 }
                                 },
-                                required: ['letter', 'text'],
-                                additionalProperties: false
+                                required: ['letter', 'text']
                             }
                         },
                         answer: { type: 'string', enum: ['A', 'B'] },
@@ -66,8 +65,7 @@ LLMResponseValidator.SCHEMAS = {
                 }
             }
         },
-        required: ['grammar', 'usage', 'example', 'exercises'],
-        additionalProperties: false
+        required: ['grammar', 'usage', 'example', 'exercises']
     },
 
     listeningPassage: {
@@ -98,7 +96,8 @@ LLMResponseValidator.SCHEMAS = {
     storyWithQuestions: {
         type: 'object',
         properties: {
-            story: { type: 'string', minLength: 50 },
+            story: { type: 'string', minLength: 30 },
+            translation: { type: 'string', minLength: 10 },
             questions: {
                 type: 'array',
                 minItems: 2,
@@ -113,8 +112,7 @@ LLMResponseValidator.SCHEMAS = {
                                 text: { type: 'string', minLength: 1 },
                                 translation: { type: 'string' }
                             },
-                            required: ['text', 'translation'],
-                            additionalProperties: false
+                            required: ['text']
                         },
                         wrong: {
                             type: 'object',
@@ -122,18 +120,15 @@ LLMResponseValidator.SCHEMAS = {
                                 text: { type: 'string', minLength: 1 },
                                 translation: { type: 'string' }
                             },
-                            required: ['text', 'translation'],
-                            additionalProperties: false
+                            required: ['text']
                         },
-                        explanation: { type: 'string', minLength: 5 }
+                        explanation: { type: 'string', minLength: 3 }
                     },
-                    required: ['question', 'answer', 'wrong', 'explanation'],
-                    additionalProperties: false
+                    required: ['question', 'answer', 'wrong', 'explanation']
                 }
             }
         },
-        required: ['story', 'questions'],
-        additionalProperties: false
+        required: ['story', 'questions']
     },
 
     criticEvaluation: {
@@ -150,15 +145,13 @@ LLMResponseValidator.SCHEMAS = {
                     culturalAccuracy: { type: 'number', minimum: 0, maximum: 100 },
                     engagement: { type: 'number', minimum: 0, maximum: 100 }
                 },
-                required: ['levelAppropriate', 'pedagogicalValue', 'naturalness', 'diversity', 'culturalAccuracy', 'engagement'],
-                additionalProperties: false
+                required: ['levelAppropriate', 'pedagogicalValue', 'naturalness', 'diversity', 'culturalAccuracy', 'engagement']
             },
             issues: { type: 'array', items: { type: 'string' } },
             suggestedFix: { type: 'string' },
             approve: { type: 'boolean' }
         },
-        required: ['overallScore', 'criteria', 'issues', 'suggestedFix', 'approve'],
-        additionalProperties: false
+        required: ['overallScore', 'criteria', 'issues', 'suggestedFix', 'approve']
     },
 
     paragraph: {

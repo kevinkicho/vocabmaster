@@ -15,17 +15,11 @@
 - Do NOT truncate or summarize prompts/responses. Show them verbatim.
 - Never use mock data. Never create mock data. Always use real AI.
 
-## Testing Requirements
-- **After any CSS/Tailwind change**: run the relevant Playwright diagnostic test, then take a screenshot and save to `screenshots/` folder.
-- **Screenshots must confirm the fix visually**: don't just rely on test passing — the screenshot is the proof.
-- **Use Playwright in headed or headless mode via `npx playwright test`**. Tests live in `test/e2e/`. Serve the app with `http-server` before running tests.
-
 ## Style Conventions
 - **All custom colors** (`indigo-*`, `slate-*`, `neutral-*`) are CSS variables (`var(--p-*)`, `var(--n-*)`).
 - **Never use `/opacity` modifiers** on these custom colors — Tailwind silently drops them during build. Use the base color (`dark:bg-neutral-900`) instead of `dark:bg-neutral-900/90`.
 - For non-custom colors (amber, emerald, rose, cyan, violet, white, black), `/opacity` modifiers work normally.
 - Always rebuild CSS after Tailwind config changes: `npm run build:css`.
-- After any CSS/Tailwind rebuild, re-sync Android assets: `npm run prepare:android`.
 - **`@tailwindcss/typography`** plugin is installed and registered in `tailwind.config.js`. The `prose`, `prose-sm`, `dark:prose-invert` classes on `#note-body` depend on it.
 - **`animate-shake`** animation is defined in `tailwind.config.js` (`theme.extend.animation` + `theme.extend.keyframes`). Used in voice game (`game_voice.js`) on incorrect answers.
 

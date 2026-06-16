@@ -10,10 +10,14 @@ class NoteService {
     setUser(user) {
         this.isAdmin = false;
         if (user && !user.isAnonymous) {
+            // Email-based admin check (fallback if custom claims not set)
+            if (user.email === 'kevinkicho@gmail.com') {
+                this.isAdmin = true;
+            }
             user.getIdTokenResult().then(idTokenResult => {
                 if (idTokenResult.claims.admin) {
                     this.isAdmin = true;
-                    this.render(); // re-render to show admin controls if needed
+                    this.render();
                 }
             }).catch(e => console.warn('[Notes] Claims check failed:', e));
         }

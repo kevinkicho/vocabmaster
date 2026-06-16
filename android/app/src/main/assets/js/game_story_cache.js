@@ -56,9 +56,11 @@ async _loadCacheThenStart() {
         return {
             storyWords: words,
             storyPart: cached.story,
+            translation: cached.translation || null,
             questions: cached.questions,
             lang: this._getTargetLang(),
-            fromCache: true
+            fromCache: true,
+            _key: cached._key || null
         };
     },
 
@@ -93,7 +95,7 @@ async _prefetchNext() {
             if (result && result.story && result.questions && result.questions.length > 0) {
                 var storyPart = result.story;
                 var questions = result.questions;
-                this._prefetched = { storyWords: words, storyPart: storyPart, questions: questions, lang: lang, vocabIds: words.map(function(w) { return w.id; }) };
+                this._prefetched = { storyWords: words, storyPart: storyPart, translation: result.translation || null, questions: questions, lang: lang, vocabIds: words.map(function(w) { return w.id; }) };
                 L('[Story] Prefetch ready:', questions.length, 'questions');
                 this._updateNextButton();
             } else {
@@ -102,7 +104,6 @@ async _prefetchNext() {
         } catch (e) {
             const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud } : null;
             L('[Story] Prefetch failed:', e, 'llm:', llmInfo);
-            if (window.flushDebugLogsToRTDB) window.flushDebugLogsToRTDB().catch(() => {});
         } finally {
             this._prefetching = false;
         }
@@ -134,10 +135,11 @@ async _saveStoryToRTDB(storyText, questions, words, lang) {
 
             const vocabIds = words.map(function(w) { return w.id; }).filter(function(id) { return id !== undefined && id !== null; });
             if (vocabIds.length === 0) { L('[Story] Save skipped: no vocab ids'); return; }
-            var compositeKey = vocabIds.slice().sort().join('-');
+            var compositeKey = vocabIds.slice().sort(function(a,b) { return a - b; }).join('-');
 
             var entry = {
                 story: storyText,
+                translation: this._currentStoryTranslation || '',
                 questions: questions,
                 vocabIds: vocabIds,
                 ts: firebase.database.ServerValue.TIMESTAMP
@@ -147,6 +149,42 @@ async _saveStoryToRTDB(storyText, questions, words, lang) {
             L('[Story] Saved story to RTDB: /stories/' + compositeKey + '/' + lang);
         } catch (e) {
             L('[Story] RTDB save failed:', e.message);
+        }
+    },
+
+    async _deleteStoryFromRTDB() {
+        try {
+            var key = this._currentCompositeKey;
+            var lang = this._currentStoryLang;
+            if (!key || !lang) {
+                // Try reconstructing from current storyWords
+                var vocabIds = (this.storyWords || []).map(function(w) { return w.id; }).filter(function(id) { return id !== undefined && id !== null; });
+                if (vocabIds.length === 0) {
+                    if (app.ui) app.ui.showToast('No story to delete', 'error');
+                    return;
+                }
+                key = vocabIds.slice().sort().join('-');
+                lang = this._getTargetLang();
+            }
+            if (!auth || !auth.currentUser) {
+                if (app.ui) app.ui.showToast('Must be logged in to delete', 'error');
+                return;
+            }
+            await db.ref('stories/' + key + '/' + lang).remove();
+            L('[Story] Deleted story from RTDB: /stories/' + key + '/' + lang);
+            if (app.ui) app.ui.showToast('Story deleted', 'success');
+            // Remove from local cache
+            var cacheKey = key + '/' + lang;
+            this._cachedStories = this._cachedStories.filter(function(s) { return s._key !== cacheKey; });
+            // Re-sort pointer
+            if (this._cachedIndex >= this._cachedStories.length) {
+                this._cachedIndex = Math.max(0, this._cachedStories.length - 1);
+            }
+            // Advance to next
+            this._loadNext();
+        } catch (e) {
+            L('[Story] Delete failed:', e.message);
+            if (app.ui) app.ui.showToast('Delete failed: ' + e.message, 'error');
         }
     }
 });

@@ -7,6 +7,7 @@ class Grammar extends GameMode {
         this.exerciseResults = [];
         this.busy = false;
         this._abortFlag = false;
+        this._grElapsedTimer = null;
         this.setup();
         this.update();
     }
@@ -23,7 +24,7 @@ class Grammar extends GameMode {
                     <div id="gr-content" class="flex-1 flex flex-col items-center justify-center"></div>
                 </div>
                 <div id="gr-audio" class="shrink-0 px-4"></div>
-                <div id="gr-nav" class="shrink-0"></div>
+                <div id="gr-nav" class="shrink-0 px-3 pb-3"></div>
             </div>`;
         this.dom.header = this.root.querySelector('#gr-header');
         this.dom.card = this.root.querySelector('#gr-card');
@@ -31,12 +32,27 @@ class Grammar extends GameMode {
         this.dom.sentence = this.root.querySelector('#gr-sentence');
         this.dom.content = this.root.querySelector('#gr-content');
         this.dom.audio = this.root.querySelector('#gr-audio');
-        this.root.querySelector('#gr-nav').innerHTML = app.ui.nav();
+        this.dom.nav = this.root.querySelector('#gr-nav');
+        this._renderNav();
         this.setupHeader();
 
         if (this.dom.word) {
             this.dom.word.onclick = () => this._playVocab();
         }
+    }
+
+    setupHeader() {
+        if (this.dom.header) {
+            app.score = Math.max(0, Number(app.score) || 0);
+            this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, { showSparkle: true, showDice: true });
+            this.dom.headerInput = this.dom.header.querySelector('input[type="number"]');
+            this.dom.headerScore = this.dom.header.querySelector('.score-display');
+        }
+    }
+
+    _renderNav() {
+        if (!this.dom.nav) return;
+        this.dom.nav.innerHTML = app.ui.nav();
     }
 
     _playVocab() {
@@ -74,7 +90,14 @@ class Grammar extends GameMode {
         this.currentExercise = 0;
         this.exerciseResults = [];
         this.exerciseData = null;
+        this._renderNav();
         const c = this.list[this.i];
+        if (!c) {
+            if (this.dom.content) this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">No vocabulary item found.</p></div>`;
+            if (this.dom.audio) this.dom.audio.innerHTML = '';
+            this.afterRender();
+            return;
+        }
         const p = app.store.prefs;
         const qKey = p.grammarQ || 'ja';
         const aKey = p.grammarA || 'ja';
@@ -99,7 +122,6 @@ class Grammar extends GameMode {
             }
             if (this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
             this.afterRender();
-            // Retry up to 5 times over 10 seconds (autoDetect may still be in progress)
             if (!this._llmRetryTimer) {
                 let attempts = 0;
                 this._llmRetryTimer = setInterval(() => {
@@ -122,17 +144,35 @@ class Grammar extends GameMode {
         this.updateHeader();
         if (this.dom.audio) this.dom.audio.innerHTML = app.ui.audioBar(c);
         this._showGenerating(false);
+        this.afterRender();
         this._fetchGrammarExercise(word, sentenceRaw, qKey, cardLevel, c, false).catch(e => {
             L('[Grammar] Fetch error:', e);
+            if (this.dom.content) {
+                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Failed to load grammar exercise.</p><p class="text-xs text-slate-400 mt-2">${escapeHtml(e.message || e)}</p><button onclick="app.game._generateAnew()" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Try Again</button></div>`;
+                this.afterRender();
+            }
         });
     }
 
     _showGenerating(allowAnew) {
         if (!this.dom.content) return;
+        if (this._grElapsedTimer) clearInterval(this._grElapsedTimer);
+        var startTime = Date.now();
+        this._grElapsedTimer = setInterval(function() {
+            var el = document.getElementById('gr-elapsed');
+            if (el) el.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+        }, 1000);
         const anewBtn = allowAnew ? `<button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button>` : '';
-        this.dom.content.innerHTML = `<div class="flex flex-col items-center justify-center h-full"><p id="gr-gen-text" class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating grammar exercises...</p>${anewBtn}</div>`;
+        this.dom.content.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-1"><p id="gr-gen-text" class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating grammar exercises...</p><p id="gr-elapsed" class="text-[10px] text-slate-300 dark:text-neutral-600"></p>${anewBtn}</div>`;
         const anewBtnEl = document.getElementById('gr-anew-btn');
         if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();
+    }
+
+    _clearElapsedTimer() {
+        if (this._grElapsedTimer) {
+            clearInterval(this._grElapsedTimer);
+            this._grElapsedTimer = null;
+        }
     }
 
     _generateAnew() {
@@ -153,12 +193,17 @@ class Grammar extends GameMode {
         });
     }
 
+    _regenerateGrammar() {
+        this._generateAnew();
+    }
+
     async _fetchGrammarExercise(word, sentence, qKey, level, card, forceAnew) {
         const vocabId = card.id;
         if (!forceAnew) {
             const cached = await app.llm.loadCachedGrammarExercise(vocabId, qKey);
             if (cached) {
                 if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
+                this._clearElapsedTimer();
                 this.exerciseData = cached;
                 this._showExplanation();
                 return;
@@ -173,6 +218,7 @@ class Grammar extends GameMode {
             }
         };
         const result = await app.llm.getGrammarExercise(word, sentence, qKey, level, onProgress, vocabId);
+        this._clearElapsedTimer();
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
         if (!result || !result.exercises || result.exercises.length === 0) {
             if (this.dom.content) {
@@ -243,19 +289,16 @@ class Grammar extends GameMode {
         const p = app.store.prefs;
         const qKey = p.grammarQ || 'ja';
         if (this.dom.content) {
-            const letterLabels = { A: ex.labelA, B: ex.labelB };
             const choicesHtml = ex.choices.map(ch => {
-                const lbl = letterLabels[ch.letter];
-                return `<button data-letter="${ch.letter}" data-text="${escapeHtml(ch.text)}" data-played="0" class="gr-choice w-full text-left p-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 font-bold text-sm text-slate-700 dark:text-neutral-200 hover:border-amber-300 dark:hover:border-amber-600 active:scale-[0.98] transition-all"><span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-black mr-2 shrink-0">${lbl ? '' : ch.letter}</span>${lbl ? '<span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mr-1">' + escapeHtml(lbl) + '</span> ' : ''}${escapeHtml(ch.text)}</button>`;
+                return `<button data-letter="${ch.letter}" data-text="${escapeHtml(ch.text)}" data-played="0" class="gr-choice w-full text-left p-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 font-bold text-sm text-slate-700 dark:text-neutral-200 hover:border-amber-300 dark:hover:border-amber-600 active:scale-[0.98] transition-all">${escapeHtml(ch.text)}</button>`;
             }).join('');
             this.dom.content.innerHTML = `
                 <div class="w-full max-w-md mx-auto">
                     <div class="flex items-center gap-2 mb-3">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Exercise ${idx + 1} of ${total}</span>
-                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center gap-1"><i class="ph-bold ${typeInfo.icon} text-[10px]"></i>${typeInfo.label}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">${typeInfo.label}</span>
                     </div>
                     <p class="text-sm font-bold text-slate-800 dark:text-white mb-4 leading-relaxed">${escapeHtml(ex.question)}</p>
-                    <p class="text-[9px] text-slate-400 mb-2">Tap a choice to hear it, tap again to submit</p>
                     <div id="gr-choices" class="flex flex-col gap-2">${choicesHtml}</div>
                     <div id="gr-feedback" class="mt-3"></div>
                     <button id="gr-next-btn" class="mt-4 w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all hidden">Next</button>

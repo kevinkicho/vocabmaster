@@ -1,12 +1,12 @@
 /* js/llm/llm_prompts.js — All build*Prompt functions for LLMResponseValidator */
-function _getLangName(code) {
+LLMResponseValidator.prototype._getLangName = function(code) {
     var map = {
         ja: 'Japanese', ko: 'Korean', zh: 'Chinese',
         en: 'English', es: 'Spanish', fr: 'French',
         de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian'
     };
     return map[code] || code;
-}
+};
 
 LLMResponseValidator.prototype.buildClozePrompt = function(sentence, target, langCode, level) {
     var levelHint = level && LLMService.LEVEL_DIFFICULTY_MAP[level]
@@ -16,7 +16,7 @@ LLMResponseValidator.prototype.buildClozePrompt = function(sentence, target, lan
 };
 
 LLMResponseValidator.prototype.buildGeneratedClozePrompt = function(target, langCode, level) {
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var levelHint = level && LLMService.LEVEL_DIFFICULTY_MAP[level]
         ? '\nLearner level: ' + LLMService.LEVEL_DIFFICULTY_MAP[level] + '. Ensure grammar and vocabulary are appropriate for this level.'
         : '';
@@ -24,7 +24,7 @@ LLMResponseValidator.prototype.buildGeneratedClozePrompt = function(target, lang
 };
 
 LLMResponseValidator.prototype.buildGrammarPrompt = function(word, context, langCode, level) {
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var levelHint = level && LLMService.LEVEL_DIFFICULTY_MAP[level]
         ? '\nLearner level: ' + LLMService.LEVEL_DIFFICULTY_MAP[level] + '.'
         : '';
@@ -32,7 +32,7 @@ LLMResponseValidator.prototype.buildGrammarPrompt = function(word, context, lang
 };
 
 LLMResponseValidator.prototype.buildListeningPrompt = function(words, langCode, level) {
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var joined = words.join(', ');
     var levelHint = level && LLMService.LEVEL_DIFFICULTY_MAP[level]
         ? '\nLearner level: ' + LLMService.LEVEL_DIFFICULTY_MAP[level] + '.'
@@ -41,32 +41,26 @@ LLMResponseValidator.prototype.buildListeningPrompt = function(words, langCode, 
 };
 
 LLMResponseValidator.prototype.buildGrammarExercisePrompt = function(word, context, langCode, level) {
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var levelHint = '';
     if (level && LLMService.LEVEL_DIFFICULTY_MAP[level]) {
-        var d = LLMService.LEVEL_DIFFICULTY_MAP[level];
-        var tone = d.startsWith('beginner') || d.startsWith('elementary')
-            ? 'light, simple, focused on surviving daily situations (ordering food, asking for prices, greetings)'
-            : d.includes('intermediate')
-                ? 'natural conversations, cultural situations, handling minor conflicts or misunderstandings'
-                : 'sophisticated interactions, professional contexts, humor and wordplay';
-        levelHint = '\nLearner is ' + d + '. Tone should match — ' + tone + '.';
+        levelHint = '\nLearner level: ' + LLMService.LEVEL_DIFFICULTY_MAP[level] + '.';
     }
-    return 'You are a ' + langName + ' language coach. Generate 12 exercises for the grammar rule "' + word + '" from "' + context + '".' + levelHint + '\n\nEach exercise type must be used exactly once: text_dm, you_decide, fix_sign, translation_fail, culture_check, declarative, interrogative, imperative, exclamative, operative, conditional, exhortation.\n\nRules:\n- The correct answer MUST contain or demonstrate the grammar rule.\n- The two choices MUST be different.\n- Give each exercise a unique, real-life scenario with stakes.\n- Questions and explanations in English. Choices in ' + langName + '.\n- Wrong choices must be plausible.\n- ANSWER BALANCE: Exactly 6 of the 12 exercises must have answer="A" and exactly 6 must have answer="B".\n\nOutput only JSON with no extra text:\n{\n  "grammar": "friendly name of the grammar rule",\n  "usage": "how the word works (1-2 sentences, English)",\n  "example": "one ' + langName + ' example NOT used in any exercise",\n  "exercises": [\n    {\n      "type": "text_dm",\n      "question": "Scenario in English (1-3 sentences)",\n      "choices": [\n        {"letter": "A", "text": "option A in ' + langName + '"},\n        {"letter": "B", "text": "option B in ' + langName + '"}\n      ],\n      "answer": "A",\n      "explanation": "Why the correct choice works, then the grammar rule in 1 sentence."\n    }\n  ]\n}';
+    return 'You are a ' + langName + ' language coach. Generate 6-12 exercises (aim for 8) for the grammar rule "' + word + '" from "' + context + '".' + levelHint + '\n\nUse each type at most once: text_dm, you_decide, fix_sign, translation_fail, culture_check, declarative, interrogative, imperative, exclamative, operative, conditional, exhortation.\n\nRules:\n- Correct answer MUST contain or demonstrate the grammar rule.\n- Wrong choices must be plausible.\n\nOutput JSON: { "grammar": "rule name", "usage": "how it works (1-2 sentences)", "example": "one ' + langName + ' example", "exercises": [{ "type": "...", "question": "scenario in English", "choices": [{"letter":"A","text":"option in ' + langName + '"},{"letter":"B","text":"option in ' + langName + '"}], "answer": "A", "explanation": "why correct" }] }';
 };
 
 LLMResponseValidator.prototype.buildStoryPrompt = function(storyWords, langCode, level, isRetry, previousError) {
     if (isRetry === undefined) isRetry = false;
     if (previousError === undefined) previousError = '';
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var wordList = storyWords.map(function(w) { return w[langCode] || w.ja || w.en; }).filter(Boolean).join(', ');
     var levelHint = level && LLMService.LEVEL_DIFFICULTY_MAP[level]
         ? '\nLearner level: ' + LLMService.LEVEL_DIFFICULTY_MAP[level] + '.'
         : '';
     var retryHint = isRetry
-        ? '\n\nPREVIOUS RESPONSE WAS INVALID: ' + previousError + '\nFix the format exactly as specified.'
+        ? '\n\nPREVIOUS ERROR: ' + previousError + '\nFix format.'
         : '';
-    return 'Write a short story in ' + langName + ' using these words: ' + wordList + levelHint + retryHint + '\n\nThe story MUST be written entirely in ' + langName + '. Do not use any other language.\n\nThen write 2 comprehension questions. Each question must have a correct answer (with English translation), one wrong answer (with English translation), and an explanation of why the correct answer is right.\n\nRespond with ONLY this JSON (no extra text, no markdown, no **bold**, no *italic*, no code blocks):\n{\n  "story": "the full story text in ' + langName + ' — plain text only, no formatting",\n  "questions": [\n    {\n      "question": "question 1 in ' + langName + '",\n      "answer": {"text": "correct answer in ' + langName + '", "translation": "English translation of correct answer"},\n      "wrong": {"text": "wrong answer in ' + langName + '", "translation": "English translation of wrong answer"},\n      "explanation": "Why the correct answer is right, referencing the story (1-2 sentences in English)"\n    },\n    {\n      "question": "question 2 in ' + langName + '",\n      "answer": {"text": "correct answer in ' + langName + '", "translation": "English translation of correct answer"},\n      "wrong": {"text": "wrong answer in ' + langName + '", "translation": "English translation of wrong answer"},\n      "explanation": "Why the correct answer is right, referencing the story (1-2 sentences in English)"\n    }\n  ]\n}\n\nRULES:\n- Story: 5-8 sentences, natural flow, all target words used, plain text only (no markdown, no **bold**, no *italic*)\n- Questions: answerable from story only, question text in ' + langName + '\n- answer.text: correct answer in ' + langName + ', directly from the story\n- answer.translation: English translation of the correct answer — REQUIRED\n- wrong.text: plausible but incorrect answer in ' + langName + '\n- wrong.translation: English translation of the wrong answer — REQUIRED\n- explanation: Why the correct answer is right vs wrong. Reference the story. In English. 1-2 sentences. — REQUIRED\n- BOTH answer.translation AND wrong.translation MUST be provided. Never omit either translation.\n- The wrong answer must be different enough from the correct one that the question is meaningful.\n- Output MUST be valid JSON only. No extra text, no explanations, no markdown, no code blocks.\n- The story MUST be written entirely in ' + langName + '. No other language allowed.';
+    return 'Write a story in ' + langName + ' using: ' + wordList + levelHint + retryHint + '\n\nThen write its English translation and 2 comprehension questions (correct + wrong answer, both with translation, plus explanation).\n\nJSON format:\n{\n  "story": "in ' + langName + '",\n  "translation": "English",\n  "questions": [\n    {\n      "question": "in ' + langName + '",\n      "answer": {"text": "", "translation": ""},\n      "wrong": {"text": "", "translation": ""},\n      "explanation": "1-2 sentences in English"\n    }\n  ]\n}\n\nRules: story 5-8 sentences, all target words used naturally. No markdown. Questions answerable from story only. explanation: why correct answer is right vs wrong, in context.';
 };
 
 LLMResponseValidator.prototype.buildParagraphPrompt = function(words, langCode, level, topic, sentenceCount, isRetry, previousError) {
@@ -74,7 +68,7 @@ LLMResponseValidator.prototype.buildParagraphPrompt = function(words, langCode, 
     if (sentenceCount === undefined) sentenceCount = 10;
     if (isRetry === undefined) isRetry = false;
     if (previousError === undefined) previousError = '';
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var cefrMap = { 'N5': 'A1', 'N4': 'A2', 'N3': 'B1', 'N2': 'B2', 'N1': 'C1' };
     var cefr = cefrMap[level] || 'A2';
     var wordList = words.map(function(w) { return w[langCode] || w.ja || w.en; }).filter(Boolean).join(', ');
@@ -88,7 +82,7 @@ LLMResponseValidator.prototype.buildQuizPrompt = function(words, langCode, level
     if (count === undefined) count = 5;
     if (isRetry === undefined) isRetry = false;
     if (previousError === undefined) previousError = '';
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var wordList = words.map(function(w) { return w[langCode] || w.ja || w.en; }).filter(Boolean).join(', ');
     var levelHint = level ? '\nLearner level: ' + (LLMService.LEVEL_DIFFICULTY_MAP[level] || level) + '.' : '';
     var feedback = isRetry ? '\nCRITIC FEEDBACK TO FIX: ' + previousError : '';
@@ -98,7 +92,7 @@ LLMResponseValidator.prototype.buildQuizPrompt = function(words, langCode, level
 LLMResponseValidator.prototype.buildExplanationPrompt = function(word, context, langCode, level, isRetry, previousError) {
     if (isRetry === undefined) isRetry = false;
     if (previousError === undefined) previousError = '';
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var levelHint = level ? '\nLearner level: ' + (LLMService.LEVEL_DIFFICULTY_MAP[level] || level) + '.' : '';
     var feedback = isRetry ? '\nCRITIC FEEDBACK TO FIX: ' + previousError : '';
     return 'Explain the word "' + word + '" as used in this ' + langName + ' sentence: "' + context + '"' + levelHint + '\n\nRespond with ONLY this JSON (no extra text, no markdown):\n{\n  "word": "' + word + '",\n  "definition": "clear 1-sentence definition",\n  "nuance": "when to use this vs similar words, connotations, formality level",\n  "register": "formal|casual|polite|slang|literary",\n  "collocations": ["common phrase 1", "common phrase 2", "common phrase 3"],\n  "culturalNote": "cultural context or null if none",\n  "commonMistakes": [\n    {"mistake": "common error learners make", "correction": "correct form with brief why"}\n  ],\n  "examples": [\n    {"sentence": "simpler example in ' + langName + '", "translation": "English translation"},\n    {"sentence": "another example", "translation": "English translation"}\n  ]\n}\n\nRULES:\n- nuance: specific, not generic (e.g., "implies speaker\'s emotion" not "has nuance")\n- register: single value from enum\n- collocations: 3+ natural phrases native speakers use\n- culturalNote: null or specific cultural insight (e.g., "used when offering food to guests")\n- commonMistakes: real learner errors (particle confusion, wrong conjugation, register mismatch)\n- examples: simpler than context, same grammar pattern, at learner\'s level' + feedback;
@@ -108,7 +102,7 @@ LLMResponseValidator.prototype.buildConversationPrompt = function(words, langCod
     if (scenario === undefined) scenario = 'daily conversation';
     if (isRetry === undefined) isRetry = false;
     if (previousError === undefined) previousError = '';
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var wordList = words.map(function(w) { return w[langCode] || w.ja || w.en; }).filter(Boolean).join(', ');
     var levelHint = level ? '\nLearner level: ' + (LLMService.LEVEL_DIFFICULTY_MAP[level] || level) + '.' : '';
     var feedback = isRetry ? '\nCRITIC FEEDBACK TO FIX: ' + previousError : '';
@@ -122,7 +116,7 @@ LLMResponseValidator.prototype.buildFeedbackPrompt = function(sessionData, isRet
     var interactions = sessionData.interactions;
     var level = sessionData.level;
     var langCode = sessionData.langCode;
-    var langName = _getLangName(langCode);
+    var langName = this._getLangName(langCode);
     var feedback = isRetry ? '\nCRITIC FEEDBACK TO FIX: ' + previousError : '';
     return 'Analyze this ' + langName + ' learning session for a ' + level + ' learner and provide personalized feedback.\n\nSESSION DATA:\n- Overall accuracy: ' + (accuracy.overall * 100).toFixed(0) + '%\n- By activity: ' + JSON.stringify(accuracy.byType) + '\n- Interactions: ' + interactions.length + ' total\n- Recent patterns: ' + this.summarizeInteractions(interactions) + '\n\nRespond with ONLY this JSON (no extra text, no markdown):\n{\n  "summary": "encouraging 2-3 sentence summary highlighting progress and one key insight",\n  "accuracy": {"overall": ' + accuracy.overall + ', "byType": ' + JSON.stringify(accuracy.byType) + '},\n  "weakWords": [\n    {"word": "word", "errors": 3, "pattern": "specific error pattern (e.g., confuses に/で)"}\n  ],\n  "strongWords": [\n    {"word": "word", "streak": 5}\n  ],\n  "recommendations": [\n    {"type": "review|practice|new", "priority": 1, "description": "specific actionable recommendation", "words": ["word1", "word2"]}\n  ],\n  "nextSessionFocus": "one sentence: what to focus on next session"\n}\n\nRULES:\n- summary: positive, specific, references actual data\n- weakWords: max 5, from actual errors, pattern = actionable insight\n- strongWords: max 5, from actual streaks\n- recommendations: 3-5, prioritized, type = review (revisit), practice (drill), new (learn)\n- nextSessionFocus: concrete, one thing' + feedback;
 };

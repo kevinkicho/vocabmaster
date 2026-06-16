@@ -3,18 +3,17 @@ Object.assign(Story.prototype, {
 
 // --- Story-specific header with session progress ---
 _setupStoryHeader() {
-        var num = this.storyNum || 1;
-        var total = this._cachedStories.length || '∞';
+        var adminBtn = (app.notes && app.notes.isAdmin) ? `<button onclick="app.game._deleteStoryFromRTDB()" class="w-9 h-9 bg-white dark:bg-neutral-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 dark:text-rose-400 rounded-full flex items-center justify-center active:scale-90 transition-all border border-slate-200 dark:border-neutral-700 shadow-sm mr-2" title="Delete this story"><i class="ph-bold ph-trash text-sm"></i></button>` : '';
         this.dom.header.innerHTML = `
             <div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">
-                <div class="flex items-center bg-white dark:bg-neutral-800 rounded-full px-4 py-2 shadow-sm border border-slate-200 dark:border-neutral-700 mr-auto">
-                    <i class="ph-duotone ph-book-open-text text-sm text-indigo-500 mr-2"></i>
-                    <span id="story-progress" class="text-sm font-black text-indigo-600 dark:text-indigo-400">${num}</span>
-                    <span class="text-[10px] font-bold text-slate-400 ml-1">/ ${total}</span>
-                </div>
+                <div class="flex-1"></div>
                 <div class="flex items-center">
-                    <button onclick="app.game._surpriseStory()" class="w-9 h-9 bg-amber-400 dark:bg-amber-500 hover:bg-amber-500 dark:hover:bg-amber-400 rounded-full flex items-center justify-center active:scale-90 transition-all text-white mr-2" title="Surprise story with random words">
-                        <i class="ph-bold ph-star text-sm"></i>
+                    ${adminBtn}
+                    <button onclick="app.game._regenerateStory()" class="w-9 h-9 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all border border-slate-200 dark:border-neutral-700 shadow-sm mr-2" title="Regenerate story with same words">
+                        <i class="ph-bold ph-sparkle text-sm"></i>
+                    </button>
+                    <button onclick="app.game._surpriseStory()" class="w-9 h-9 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all border border-slate-200 dark:border-neutral-700 shadow-sm mr-2" title="Surprise story with random words">
+                        <i class="ph-bold ph-dice-five text-sm"></i>
                     </button>
                     <div class="flex items-center gap-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-full px-3 py-1.5 shadow-md text-[11px] font-bold border border-slate-700 mr-2">
                         <span class="text-slate-400">PTS</span>
@@ -31,12 +30,6 @@ _setupStoryHeader() {
     _updateProgress() {
         const el = document.getElementById('story-progress');
         if (el) el.textContent = this.storyNum;
-    },
-
-// --- Streaming card — final UI from the start ---
-_showStreamingCard(wordList) {
-        // Replaced by _showGeneratingCard — kept as transition fallback
-        this._showGeneratingCard(wordList);
     },
 
 // --- Generating spinner card (buffered, no streaming) ---
@@ -62,12 +55,15 @@ _showGeneratingCard(wordList) {
 // --- Display: story + sequential questions ---
     _showStoryWithQuestions(storyPart, lang) {
         this.phase = 'reading';
+        this._currentStoryText = storyPart;
+        this._showTranslation = false;
         const highlighted = this._highlightWords(storyPart);
         const total = this.questions.length;
 
         const wordPills = `<div class="flex flex-wrap gap-1.5 mb-3">${this.storyWords.map(w => {
             const txt = w[lang] || w.ja || '';
-            return `<button data-word="${escapeHtml(txt)}" data-lang="${lang}" class="story-word-chip inline-flex items-center gap-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full active:scale-95 transition-all cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800" title="Tap to hear"><span>${escapeHtml(txt)}</span><i class="ph-bold ph-speaker-high text-[10px] opacity-70"></i></button>`;
+            const nativeTxt = w.en || w.ko || w.zh || '';
+            return `<button data-word="${escapeHtml(txt)}" data-lang="${lang}" data-native="${escapeHtml(nativeTxt)}" data-showing="target" class="story-word-chip inline-flex items-center gap-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full active:scale-95 transition-all cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-800" title="Tap to hear"><span>${escapeHtml(txt)}</span></button>`;
         }).join('')}</div>`;
 
         this.dom.body.innerHTML = `
@@ -76,6 +72,12 @@ _showGeneratingCard(wordList) {
                     <div class="flex items-center gap-2 mb-3">
                         <i class="ph-duotone ph-book-open-text text-lg text-indigo-500"></i>
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Story</span>
+                        <button id="story-highlight-btn" onclick="app.game._toggleHighlights()" class="w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-amber-500 hover:border-amber-300" title="Toggle vocab highlights">
+                            <i class="ph-bold ph-eye text-sm"></i>
+                        </button>
+                        <button id="story-translate-btn" onclick="app.game._toggleTranslation()" class="w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-emerald-500 hover:border-emerald-300" title="Toggle story translation">
+                            <i class="ph-bold ph-translate text-sm"></i>
+                        </button>
                         <button id="story-speak-btn" onclick="app.game._readStory()" class="ml-auto w-8 h-8 rounded-full border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center justify-center active:scale-90 transition-all text-slate-500 dark:text-neutral-400 hover:text-indigo-500 hover:border-indigo-300">
                             <i class="ph-bold ph-speaker-high text-sm"></i>
                         </button>
@@ -92,17 +94,40 @@ _showGeneratingCard(wordList) {
             </button>`;
 
         document.getElementById('story-ready-btn').onclick = () => this._showCurrentQuestion();
-        // Wire up word chip clicks → TTS
+        // Wire up word chip clicks → TTS, long-press → toggle language
         this.dom.body.querySelectorAll('.story-word-chip').forEach(chip => {
-            chip.onclick = (e) => {
-                e.preventDefault();
-                const word = chip.dataset.word || '';
-                const l = chip.dataset.lang || lang;
-                if (app.audio && word) app.audio.play(word, l, null, 0);
-                // Brief visual feedback
-                chip.classList.add('ring-2', 'ring-indigo-400');
-                setTimeout(() => chip.classList.remove('ring-2', 'ring-indigo-400'), 600);
-            };
+            var chipTimer = null;
+            chip.addEventListener('pointerdown', function(e) {
+                chipTimer = setTimeout(function() {
+                    chipTimer = null;
+                    var showing = chip.dataset.showing;
+                    var target = chip.dataset.word;
+                    var native = chip.dataset.native;
+                    if (showing === 'target' && native) {
+                        chip.querySelector('span').textContent = native;
+                        chip.dataset.showing = 'native';
+                    } else if (showing === 'native' && target) {
+                        chip.querySelector('span').textContent = target;
+                        chip.dataset.showing = 'target';
+                    }
+                }, 500);
+            });
+            chip.addEventListener('pointerup', function() {
+                if (chipTimer) {
+                    clearTimeout(chipTimer);
+                    chipTimer = null;
+                    // Short click → TTS
+                    var word = chip.dataset.word || '';
+                    var l = chip.dataset.lang || lang;
+                    if (app.audio && word) app.audio.play(word, l, null, 0);
+                    chip.classList.add('ring-2', 'ring-indigo-400');
+                    setTimeout(function() { chip.classList.remove('ring-2', 'ring-indigo-400'); }, 600);
+                }
+            });
+            chip.addEventListener('pointerleave', function() {
+                if (chipTimer) { clearTimeout(chipTimer); chipTimer = null; }
+            });
+            chip.addEventListener('contextmenu', function(e) { e.preventDefault(); });
         });
         this.afterRender();
 
@@ -132,8 +157,7 @@ _showGeneratingCard(wordList) {
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest">Question ${num} of ${total}</span>
                 </div>
-                <p class="text-sm font-bold text-slate-800 dark:text-white mb-3">${this.wrapHanzi(q.text)}</p>
-                <p class="text-[9px] text-slate-400 mb-2">Tap a choice to hear it, tap again to submit</p>
+                <p class="text-sm font-bold text-slate-800 dark:text-white mb-3">${this.wrapHanzi(q.question)}</p>
                 <div class="grid grid-cols-1 gap-2">
                     <button data-value="answer" data-text="${escapeHtml(q.answer.text)}" data-translation="${escapeHtml(q.answer.translation || '')}" data-longpress="0" data-played="0" class="story-choice text-left px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-bold text-slate-700 dark:text-white active:scale-[0.98] transition-all select-none">
                         ${this.wrapHanzi(q.answer.text)}
@@ -249,9 +273,8 @@ _showGeneratingCard(wordList) {
 
     _showStoryNavFooter() {
         var prefetchReady = !!this._prefetched;
-        var nextCached = this._cachedIndex < this._cachedStories.length;
         var hasPrev = this._cachedIndex > 1;
-        var hasNext = prefetchReady || nextCached;
+        var hasNext = prefetchReady || this._cachedIndex < this._cachedStories.length || true;
 
         this.dom.footer.innerHTML = `
             <div class="space-y-2">
@@ -259,26 +282,21 @@ _showGeneratingCard(wordList) {
                     <button onclick="app.game._prevStory()" class="flex-1 py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-slate-500 to-slate-600 active:scale-95 transition-transform shadow-lg ${hasPrev ? '' : 'opacity-50 cursor-not-allowed'}" ${hasPrev ? '' : 'disabled'}>
                         <i class="ph-bold ph-caret-left mr-1"></i> Previous
                     </button>
-                    <button onclick="app.game._nextStory()" class="flex-1 py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg ${hasNext ? '' : 'opacity-50 cursor-not-allowed'}" ${hasNext ? '' : 'disabled'}>
+                    <button onclick="app.game._nextStory()" class="flex-1 py-3 rounded-2xl text-sm font-black text-white bg-gradient-to-r from-cyan-500 to-indigo-500 active:scale-95 transition-transform shadow-lg">
                         ${hasNext ? 'Next' : 'Generate'} <i class="ph-bold ph-caret-right ml-1"></i>
                     </button>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="app.game._regenerateStory()" class="flex-1 py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-violet-500 to-fuchsia-500 active:scale-95 transition-transform shadow-md">
-                        <i class="ph-bold ph-sparkle mr-1"></i> Regenerate Story
-                    </button>
-                    <button onclick="app.game._surpriseStory()" class="flex-1 py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-amber-400 to-orange-500 active:scale-95 transition-transform shadow-md">
-                        <i class="ph-bold ph-star mr-1"></i> Surprise
+                    <button onclick="app.game._reviewStoryWords()" class="flex-1 py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-rose-500 active:scale-95 transition-transform">
+                        <i class="ph-bold ph-list-checks mr-1"></i> Review words from this story
                     </button>
                 </div>
-                <button onclick="app.game._reviewStoryWords()" class="w-full py-2 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-rose-500 active:scale-95 transition-transform">
-                    <i class="ph-bold ph-list-checks mr-1"></i> Review words from this story
-                </button>
             </div>`;
     },
 
     async _generateAnewStory() {
-        // Skip cache + prefetch, force fresh AI generation reusing current words
+        // Skip cache + prefetch, force fresh AI generation with new random words
+        this.storyWords = [];
         this._prefetched = null;
         this._prefetching = false;
         this.answered = false;
@@ -293,6 +311,7 @@ _showGeneratingCard(wordList) {
 
     async _surpriseStory() {
         // Force random words + fresh AI generation
+        if (app.audio) app.audio.cancel();
         this.storyWords = [];
         this._prefetched = null;
         this._prefetching = false;
@@ -307,6 +326,8 @@ _showGeneratingCard(wordList) {
             var fc = new Flashcard('flashcard');
             fc.list = this.storyWords;
             fc.i = 0;
+            fc.historyStack = [0];
+            fc.historyPtr = 0;
             fc.setup();
             fc.update();
             return fc;
@@ -324,14 +345,13 @@ _showGeneratingCard(wordList) {
     },
 
     _regenerateStory() {
-        this._generateAnewStory();
-    },
-
-    _resetSession() {
-        this.storyNum = 0;
+        // Reuse same 4 vocab words, force fresh AI generation
+        if (app.audio) app.audio.cancel();
         this._prefetched = null;
         this._prefetching = false;
-        this._loadNext();
+        this.answered = false;
+        this.busy = false;
+        this.startStory(true);
     },
 
     _loadNext() {
@@ -386,12 +406,64 @@ _addSpeakerButton(storyPart) {
         const storyText = text || this._currentStoryText;
         if (!storyText || !app.audio) return;
         const lang = this._getTargetLang();
-        app.audio.play(storyText, lang, null, 0);
+        app.audio.play(storyText, lang, null, 0, true);
         // Visual feedback on button
         const btn = document.getElementById('story-speak-btn');
         if (btn) {
             btn.classList.add('text-indigo-500', 'border-indigo-300');
             setTimeout(() => btn.classList.remove('text-indigo-500', 'border-indigo-300'), 1500);
+        }
+    },
+
+    _toggleHighlights() {
+        this._highlightsVisible = !this._highlightsVisible;
+        if (this._highlightsVisible) {
+            this._showTranslation = false;
+            var trBtn = document.getElementById('story-translate-btn');
+            if (trBtn) {
+                trBtn.classList.remove('text-emerald-500', 'border-emerald-300');
+                trBtn.classList.add('text-slate-500', 'border-slate-200');
+            }
+        }
+        const stream = document.getElementById('story-stream');
+        if (stream) {
+            const storyText = this._currentStoryText || stream.textContent;
+            stream.innerHTML = this._highlightWords(storyText);
+        }
+        const btn = document.getElementById('story-highlight-btn');
+        if (btn) {
+            btn.classList.toggle('text-amber-500', this._highlightsVisible);
+            btn.classList.toggle('border-amber-300', this._highlightsVisible);
+            btn.classList.toggle('text-slate-500', !this._highlightsVisible);
+            btn.classList.toggle('border-slate-200', !this._highlightsVisible);
+        }
+    },
+
+    _toggleTranslation() {
+        this._showTranslation = !this._showTranslation;
+        const stream = document.getElementById('story-stream');
+        if (stream) {
+            if (this._showTranslation && this._currentStoryTranslation) {
+                this._highlightsVisible = false;
+                stream.textContent = this._currentStoryTranslation;
+            } else {
+                const storyText = this._currentStoryText;
+                if (storyText) stream.innerHTML = this._highlightWords(storyText);
+            }
+        }
+        var trBtn = document.getElementById('story-translate-btn');
+        if (trBtn) {
+            trBtn.classList.toggle('text-emerald-500', this._showTranslation);
+            trBtn.classList.toggle('border-emerald-300', this._showTranslation);
+            trBtn.classList.toggle('text-slate-500', !this._showTranslation);
+            trBtn.classList.toggle('border-slate-200', !this._showTranslation);
+        }
+        var hlBtn = document.getElementById('story-highlight-btn');
+        if (hlBtn) {
+            hlBtn.classList.toggle('text-amber-500', this._highlightsVisible);
+            hlBtn.classList.toggle('border-amber-300', this._highlightsVisible);
+            hlBtn.classList.toggle('text-slate-500', !this._highlightsVisible);
+            hlBtn.classList.toggle('border-slate-200', !this._highlightsVisible);
         }
     }
 });

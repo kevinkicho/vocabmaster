@@ -1,6 +1,6 @@
 # VocabMaster
 
-**VocabMaster** is a personal-use PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features seven game modes (including AI-powered Story Mode), granular per-mode settings, context-aware audio, LLM integration via Ollama, native Android TTS support, and a smooth render pipeline — all in a single-page app optimized for mobile.
+**VocabMaster** is a personal-use PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features seven game modes (including AI-powered Story Mode and Grammar Gym), granular per-mode settings, context-aware audio, LLM integration via Ollama (local + cloud), native Android TTS support, and a smooth render pipeline — all in a single-page app optimized for mobile.
 
 ---
 
@@ -20,25 +20,6 @@
   </tr>
 </table>
 
-### Desktop
-<table>
-  <tr>
-    <td align="center"><img src="screenshots/desktop/suite_es_2026-06-10_18-50-54.png" width="400" alt="ES Desktop" /><br/>Desktop Flow (Spanish)</td>
-    <td align="center"><img src="screenshots/desktop/suite_story_questions_es_2026-06-10_19-37-52.png" width="400" alt="Story ES" /><br/>AI Story Mode (Spanish)</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/desktop/suite_story_questions_ja_2026-06-10_18-50-13.png" width="400" alt="Story JA" /><br/>AI Story Mode (Japanese)</td>
-    <td align="center"><img src="screenshots/desktop/suite_story_questions_zh_2026-06-10_19-10-01.png" width="400" alt="Story ZH" /><br/>AI Story Mode (Chinese)</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/desktop/cloze_suite_es_2026-06-10_21-41-28.png" width="400" alt="Cloze ES" /><br/>AI Cloze (Spanish)</td>
-    <td align="center"><img src="screenshots/desktop/cloze_suite_ja_answered_2026-06-11_08-44-29.png" width="400" alt="Cloze JA" /><br/>AI Cloze (Japanese)</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/desktop/cloze_suite_zh_2026-06-10_21-42-00.png" width="400" alt="Cloze ZH" /><br/>AI Cloze (Chinese)</td>
-  </tr>
-</table>
-
 ### AI Activities (Story Mode & Grammar Gym)
 <table>
   <tr>
@@ -48,11 +29,16 @@
   </tr>
 </table>
 
-## Current Status (v1195)
-- **Phase C Complete**: Full support for Collections (JLPT N5-N1, HSK levels, Spanish A1-C1). Tiers are now dynamically selectable and natively scope practice modes.
-- **Review Queue Added**: Adaptive learning loop prioritizes missed words across all modes.
-- **LLM/Ollama Backend**: Improved caching, robust error handling, rate-limiting fixes, and seamless integration with `ollama4android`.
-- **Bug Fixes & Refactors**: Cleaned up the project structure, migrated orphaned scripts to `/scripts`, optimized loading times, improved dark mode responsiveness, and addressed N1-N15 UX bugs.
+## Current Status (v1185)
+
+- **Mock data completely removed**: 9 static vocab data files, `vocabulary-collections.js`, `collection-bar.js`, `createMockData()`, `parseCSV()`, `ollama_config.js` all deleted. RTDB is the sole data source.
+- **LLM pipeline refactored**: 7 modular files under `public/js/llm/` — service, validator, schemas, prompts, roles, cache, init. Concurrent queue (max 2), critic validation, compact prompts, manual AbortController.
+- **Story Mode overhaul**: Critic-validated generation, 2-choice Q&A with translation fields, RTDB restructuring (`stories/{compositeVocabId}/{lang}`), stale generation guard, purely random word picking.
+- **Grammar Gym**: `afterRender()` on all `update()` paths, cache threshold 6 (matches schema `minItems: 6`), choices limited to `maxItems: 2`, no letter circles/helper text/icon bullets.
+- **Auth fixes**: `waitForAuth()` resolved flag + 1.5s timeout before anonymous fallback. Native auth `.then(resetBtn)` removed (was overwriting photoURL).
+- **TTS fixes**: `app.audio.cancel()` on Story destroy/navigation. `raw` parameter for story narration (bypasses `sanitizeText`).
+- **Admin**: Email-based check (`kevinkicho@gmail.com`). Delete story button in header (not footer).
+- **SW cache version**: v1185.
 
 ---
 
@@ -64,7 +50,8 @@
 | **Matching** | Grid-based pair matching with responsive tiling. Adaptive layout scoring for portrait/landscape. |
 | **Sentences** | Fill-in-the-blank cloze with smart masking — handles conjugations, multi-word phrases, and CJK. |
 | **Voice** | Speech recognition challenges via Web Speech API. Pronunciation matching with fuzzy comparison. |
-| **Story Mode** | AI-generated stories using your vocab words with real-time streaming display, TTS read-aloud, comprehension questions, and RTDB caching for instant replay. |
+| **Story Mode** | AI-generated stories using your vocab words with TTS read-aloud, comprehension questions, and RTDB caching for instant replay. |
+| **Grammar Gym** | AI-generated grammar exercises (fill-in-the-blank, multiple-choice, error correction, etc.) with RTDB caching, TTS interactions, and per-vocab generation. |
 
 ---
 
@@ -73,36 +60,35 @@
 VocabMaster integrates with [Ollama](https://ollama.com) for AI-powered features:
 
 ### Story Mode
-- Selects vocab words (weighted by struggle analytics), prompts the LLM to generate a short story in the target language
-- **Streaming UI** — Tokens stream directly into the final story card (no raw text → replace flash)
-- **Session progress** — 5 stories per session with progress indicator (1/5) in the header
-- **TTS read-aloud** — Speaker button reads the story via Web Speech API; auto-read setting (on by default)
-- **Comprehension questions** — 2 multiple-choice questions parsed from LLM output after each story
-- **Background prefetch** — Next story generates while you answer the current one
-- **RTDB caching** — Generated stories save to a shared top-level `/stories` node in Firebase so all users benefit from cached content
-- **Smart serving** — Transparently serves prefetched > RTDB cached > fresh AI-generated stories
+- Selects 4 random vocab words, prompts the LLM to generate a short story in the target language
+- **Comprehension questions** — 2 multiple-choice questions with translation fields, parsed from LLM output
+- **TTS read-aloud** — Speaker button reads the story via TTS; `raw` parameter bypasses `sanitizeText()`
+- **RTDB caching** — Generated stories save to `stories/{compositeVocabId}/{lang}` so all users benefit from cached content
+- **Stale generation guard** — `_generationId` prevents old async results from overwriting new ones
+- **Regenerate** (sparkle) reuses same 4 words; **Surprise** (dice) picks random new words
 
-### Smart Cloze
-- LLM-assisted blank placement for the Sentences game, identifying conjugated word forms in CJK languages
-- Two-phase: regex first (instant), LLM fallback (async) when regex finds no match
+### Grammar Gym
+- AI-generated exercises targeting specific grammar patterns for the current vocab word
+- 6-12 exercises per generation (aim for 8), covering 12 type variants
+- **RTDB caching** — Exercises saved to `grammar_gym/{vocabId}/{langCode}/{token}`
+- **TTS interactions** — Clickable vocab, sentence examples, and answer choices with TTS playback
+- **Two-tap answer** — First tap plays TTS, second tap submits
 
 ### Architecture
-- **Direct HTTP** — Communicates with Ollama via `fetch()` + `ReadableStream` for NDJSON streaming, bypassing the Android bridge for speed
-- **Android bridge fallback** — Falls back to native `@JavascriptInterface` bridge if direct HTTP fails
-- **Model-agnostic** — Auto-detects whatever models are available via `/api/tags` (Gemma, Qwen, DeepSeek, Mistral, GLM, etc.)
-- **Cloud model support** — ollama4android transparently proxies cloud models (e.g. `mistral-large-3:675b-cloud`, `glm-5.1:cloud`) through the same Ollama-compatible API
-- **Request serialization** — All LLM calls are queued to avoid overwhelming single-threaded inference on mobile
-- **IndexedDB caching** — LLM cloze responses are cached to avoid redundant generation
+- **7 modular LLM files** under `public/js/llm/` — service, validator, schemas, prompts, roles, cache, init
+- **Concurrent queue** — Max 2 parallel requests, queue cap at 50
+- **Critic validation** — Compact critic prompt (~500 tokens), skipped for simple schemas (cloze, grammar explanation)
+- **Token budgets** — Story: 1024, Grammar: 2048, Others: 384 (with 1.5x retry multiplier)
+- **HTTP transport** — Capacitor HttpProxy with native `fetch()` fallback; manual `AbortController` for timeout
+- **IndexedDB caching** — Cloze responses cached to avoid redundant generation
 
 ### Android App
 
 An Android WebView wrapper (`android/`) provides native Android TTS support and bypasses Chrome's HTTPS-only restriction for localhost, enabling communication with [Ollama4Android](https://github.com/kevinkicho/Ollama4Android) running on the same device.
 
-- **Native TTS bridge** — `TTSBridge.kt` wraps Android's `TextToSpeech` API, exposing 393+ system voices (Google TTS, Samsung TTS, etc.) via `@JavascriptInterface`. Voice selection and preview are handled natively, bypassing Chrome's limited Web Speech API voice set.
-- **JS bridge** — `native_tts.js` provides a promise-based `NativeTTSBridge` matching the `AndroidBridge` pattern, with `getVoices()`, `speak()`, `previewVoice()`, and `stop()`.
-- **Auto-detection** — `AudioService` detects the native bridge at startup and uses it instead of the Web Speech API for all TTS.
+- **Native TTS bridge** — `TTSBridge.kt` wraps Android's `TextToSpeech` API, exposing 393+ system voices (Google TTS, Samsung TTS, etc.) via `@JavascriptInterface`
+- **Native Google Sign-In** — `NativeAuthJSInterface` with Firebase Auth + Google Sign-In SDKs
 - **LLM bridge** — Kotlin `@JavascriptInterface` ↔ `evaluateJavascript()` bridge with promise-based async pattern
-- **Streaming support** — Token-by-token streaming from Ollama via native HTTP, pushed to JS via `onToken` callbacks
 - **Port discovery** — User enters the port shown in Ollama4Android; saved to localStorage for reconnection
 
 Build and install the Android wrapper from the `android/` directory:
@@ -118,8 +104,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 - **14 languages supported** — Japanese, Korean, English, Chinese, Spanish, Portuguese, Italian, French, German, Russian (+ Furigana, Romaji, Pinyin, Transliteration visual columns)
 - **Per-mode settings** — Each game mode has independent controls for language pairs, audio behavior, randomization, and example display
-- **Native Android TTS** — Dedicated Android WebView wrapper with `TTSBridge` providing 393+ system voices (Google & Samsung) via native `TextToSpeech` API, bypassing Chrome's limited voice set
-- **Voice selection** — Per-language TTS voice picker in Settings, with instant preview playback; provider grouping (Google/Samsung/Local) when available
+- **Native Android TTS** — Dedicated Android WebView wrapper with `TTSBridge` providing 393+ system voices via native `TextToSpeech` API
+- **Voice selection** — Per-language TTS voice picker in Settings, with instant preview playback
 - **Context-aware audio** — `playSmartAudio()` detects visible content (word vs. example sentence) and plays the appropriate audio
 - **Auto-play on correct** — Quiz, TF, Voice, and Sentences modes play audio on correct answer with configurable `audioWait`
 - **Render pipeline** — Container hidden during updates, text fitted via binary search, then smooth 0.3s fade-in reveal
@@ -140,15 +126,16 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | File | Purpose |
 | :--- | :--- |
 | `public/index.html` | Single-page shell — settings modal, theme grid, game containers, script loading |
-| `public/js/main.js` | App controller — init, auth listener, routing, home dashboard with conditional AI section |
+| `public/js/main.js` | App controller — init, auth listener, routing, home dashboard |
 | `public/js/config.js` | `LANG_CONFIG` array, `LANG_MAP` (O(1) lookups), `GET_DEFAULTS()`, flag icon helper |
 | `public/js/store.js` | `saveSettings()` reads all UI controls into `prefs`, `applyTheme()`, localStorage persistence |
 | `public/js/ui.js` | Dynamic UI — `header()`, `audioBar()`, `loadSettings()`, theme/font/preset/celeb renderers |
 | `public/js/services.js` | `AudioService` (TTS), `TextFitter` (`fit` + `fitSmart`), `CelebrationService` (confetti) |
 | `public/js/analytics.js` | Per-word accuracy tracking, session recording, weekly/monthly stats, most-missed-words |
-| `public/js/llm.js` | `LLMService` — Direct HTTP streaming, Ollama connection, model auto-detect, cloze matching, bridge fallback |
 | `public/js/android_bridge.js` | Promise-based JS wrapper for Android `@JavascriptInterface` with streaming `onToken` support |
 | `public/js/native_tts.js` | `NativeTTSBridge` — promise-based JS wrapper for native Android TTS (getVoices, speak, preview, stop) |
+| `public/js/native_auth.js` | JS bridge for native Google Sign-In via Android WebView |
+| `public/js/capacitor_tts_bridge.js` | Capacitor TTS bridge for Android |
 | `public/js/game_core.js` | `GameMode` base class — nav, keyboard, scoring, `waitAndNav`, `autoPlay`, `handleInput`, DOM caching |
 | `public/js/game_flashcard.js` | Flip card with 1–4 back panels, speed control, context-aware flip audio |
 | `public/js/game_quiz.js` | 4-choice quiz, flippable question card, correct-answer audio, double-click mode |
@@ -157,15 +144,34 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | `public/js/game_sentences.js` | Cloze generator with variant/token/conjugation matching, LLM-assisted blanks, translation hint |
 | `public/js/game_voice.js` | Web Speech recognition, locale mapping, correct-answer playback, visual feedback |
 | `public/js/game_story.js` | AI Story Mode — word selection, streaming card UI, question parsing, RTDB cache, prefetch, TTS |
-| `public/js/data.js` | CSV parsing, Firebase RTDB read/write, score recording, stats |
-| `public/js/auth.js` | Firebase Auth (anonymous + Google sign-in) |
+| `public/js/game_story_generator.js` | Story generation orchestration — `startStory()`, `_generateStory()`, stale guard, AI offline handling |
+| `public/js/game_story_cache.js` | Story RTDB cache — save, load, delete with composite key sorting |
+| `public/js/game_story_ui.js` | Story UI — question display, nav footer, highlights, translation toggle, TTS, admin controls |
+| `public/js/game_grammar.js` | Grammar Gym — AI-generated grammar exercises with TTS, RTDB cache, per-vocab generation |
+| `public/js/llm/llm_service.js` | LLM HTTP transport — concurrent queue (max 2), Capacitor proxy + native fetch, manual AbortController |
+| `public/js/llm/llm_validator.js` | `generateWithCritic()` — critic validation, `generateValidated()` — retry on schema failure |
+| `public/js/llm/llm_schemas.js` | JSON schemas for all LLM outputs (story, grammar, cloze, quiz, etc.) |
+| `public/js/llm/llm_prompts.js` | Prompt builders for story, grammar, cloze, and other features |
+| `public/js/llm/llm_roles.js` | Feature role methods — `findClozeMatch`, `generateStory`, `getGrammarExercise`, etc. |
+| `public/js/llm/llm_cache.js` | IndexedDB cache for LLM cloze responses |
+| `public/js/llm/llm_init.js` | Re-exports and global assignments for LLM modules |
+| `public/js/data.js` | RTDB read/write, score recording, stats — no CSV/mock data fallback |
+| `public/js/auth.js` | Firebase Auth (anonymous + Google sign-in) with `waitForAuth()` resolved flag |
 | `public/js/notes.js` | Admin note editing, Hanzi character tooltips with long-press support |
 | `public/js/presets.js` | Language pair presets that bulk-configure all game mode settings |
 | `public/js/firebase.js` | Firebase compat SDK v11 initialization |
-| `public/sw.js` | Service worker — versioned cache, stale-while-revalidate, per-asset error handling |
+| `public/js/learning_loop.js` | Adaptive learning loop with session logging and prompt adjustments |
+| `public/js/adaptive.js` | Word difficulty scoring and review selection |
+| `public/js/preferences_registry.js` | Central preference schema and defaults |
+| `public/js/settings_html.js` | Settings HTML templates |
+| `public/js/ui_settings.js` | Settings UI renderers and event handlers |
+| `public/js/ui_stats.js` | Stats dashboard renderers (weekly chart, heatmap, accuracy, words, activity) |
+| `public/js/ui_llm.js` | LLM status UI in settings |
+| `public/js/ui_modals.js` | Modal management utilities |
+| `public/sw.js` | Service worker — versioned cache v1185, stale-while-revalidate, per-asset error handling |
 | `public/style.css` | Custom CSS — fit-target/fit-smart opacity transitions, app-view reveal, Hanzi tooltips |
 | `public/favicon.svg` | Indigo rounded-square "V" icon |
-| `android/` | Android Studio WebView wrapper project with native TTS bridge |
+| `android/` | Android Studio WebView wrapper project with native TTS bridge and native auth |
 
 ---
 
@@ -173,8 +179,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 - **Frontend:** Vanilla JS (ES6+ classes), Tailwind CSS v3 (static build), Phosphor Icons
 - **Backend:** Firebase Hosting, Auth, Realtime Database (compat SDK v11)
-- **AI:** Ollama (local + cloud via ollama4android proxy), model-agnostic — Gemma, Qwen, DeepSeek, Mistral, GLM, etc.
-- **Android:** Kotlin WebView wrapper with native TTS (`TextToSpeech` API) and `@JavascriptInterface` bridge for LLM
+- **AI:** Ollama (local via ollama4android + cloud), model-agnostic — Gemma, Qwen, DeepSeek, Mistral, etc.
+- **Android:** Kotlin WebView wrapper with native TTS (`TextToSpeech` API), native Google Sign-In, and `@JavascriptInterface` bridge for LLM
 - **Audio:** Web Speech Synthesis API (TTS), Web Speech Recognition API (voice mode)
 - **Animations:** canvas-confetti, CSS transitions
 - **Charts:** Chart.js (stats dashboard)
@@ -185,10 +191,11 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ## Firebase RTDB Structure
 
 ```
-/dictionary     — Shared vocab entries (indexed on id, e, k, s, t)
-/users/{uid}    — Per-user scores, prefs, analytics
-/stories        — Shared AI-generated stories (indexed on lang, ts)
-/vocab          — Vocab lists/collections
+/dictionary          — Shared vocab entries (indexed on id, e, k, s, t)
+/users/{uid}         — Per-user scores, prefs, analytics, debug logs
+/stories/{compositeVocabId}/{lang} — Shared AI-generated stories (story, questions, vocabIds, ts)
+/grammar_gym/{vocabId}/{langCode}/{token} — Shared AI-generated grammar exercises
+/vocab               — Vocab lists/collections
 ```
 
 ---
@@ -208,7 +215,7 @@ Or serve locally for development:
 npx serve public
 ```
 
-The Android wrapper (`android/`) loads from Firebase hosting by default. To use a local server instead, edit `MainActivity.kt` and change `APP_URL` to your local address (e.g. `http://10.0.2.2:5000` for Android emulator, or your machine's LAN IP for a physical device).
+The Android wrapper (`android/`) loads from local assets by default. To use a local server instead, edit `MainActivity.kt` and change `APP_URL` to your local address.
 
 ---
 
@@ -233,12 +240,15 @@ The `test/` folder is gitignored — generate it locally by following the layout
 ## Documentation for Agents & Continuity
 
 See the `docs/` folder for living plans:
+- `docs/architecture.md` — Full architecture reference (LLM pipeline, critic, data loading, story mode, grammar gym, audio, error states, admin, connection health, conventions)
 - `docs/current-status-and-roadmap.md`
-- `docs/medium-term-roadmap.md` (collections, review queue, Story + higher tiers)
-- `docs/web-ai-parity-proxy-implementation.md`
+- `docs/medium-term-roadmap.md`
 - `docs/development.md`
-- `docs/architecture.md`
 - `docs/lessons-learned.md`
+- `docs/web-ai-parity-proxy-implementation.md`
+- `docs/audio-tts-architecture.md`
+- `docs/codebase-modularization.md`
+- `docs/telemetry-feedback.md`
 
 ## Related Projects
 

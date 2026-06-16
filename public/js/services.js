@@ -208,13 +208,13 @@ class AudioService {
         return str.trim();
     }
 
-    play(txt, langKey, context, delay = 0) {
+    play(txt, langKey, context, delay = 0, raw = false) {
         return new Promise((resolve) => {
             if (!this.useNative && !this.synth) { resolve(); return; }
             if (this.timer) clearTimeout(this.timer);
             this.cancel();
             if (!txt) { resolve(); return; }
-            const cleanTxt = this.sanitizeText(txt);
+            const cleanTxt = raw ? txt : this.sanitizeText(txt);
             this.timer = setTimeout(() => { if (this.shouldPlay()) { this.speakNow(cleanTxt, langKey, resolve); } else { resolve(); } }, delay);
         });
     }

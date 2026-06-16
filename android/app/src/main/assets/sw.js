@@ -1,5 +1,5 @@
 /* sw.js */
-const CACHE_NAME = 'vocab-master-v1150';
+const CACHE_NAME = 'vocab-master-v1185';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,7 +9,6 @@ const ASSETS_TO_CACHE = [
   './js/analytics.js',
   './js/auth.js',
   './js/capacitor_tts_bridge.js',
-  './js/collection-bar.js',
   './js/config.js',
   './js/data.js',
   './js/escape.js',
@@ -48,7 +47,6 @@ const ASSETS_TO_CACHE = [
   './js/ui_modals.js',
   './js/ui_settings.js',
   './js/ui_stats.js',
-  './js/vocabulary-collections.js',
   // External Libraries
   'https://unpkg.com/@phosphor-icons/web',
   'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js',

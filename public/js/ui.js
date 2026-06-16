@@ -268,8 +268,8 @@ class UIManager {
             <p class="text-[9px] uppercase font-bold text-indigo-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-exam"></i> Exam Level <span class="text-[7px] text-slate-300 dark:text-neutral-600 italic font-normal normal-case">(Basic → Advanced)</span> <i class="ph-bold ph-info text-slate-400 cursor-pointer relative" id="exam-level-info"></i></p>
             <div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px]">Levels are approximate — not all entries have every framework tag</div>
             <div class="flex items-center justify-between mb-3">
-                <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>
                 <p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-indigo-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>
+                <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>
             </div>`;
         for (const group of groups) {
             const existingTags = group.tags.filter(t => allTags.includes(t));

@@ -74,7 +74,7 @@ class LLMService {
      * Unified Ollama call — direct HTTP to local endpoint
      */
     async _ollamaRequest(path, payload, { stream = false, timeout = 45000, method = null, signal = null } = {}) {
-        const useProxy = false;
+        const useProxy = this.useProxy === true;
 
         // For local Ollama, /api/tags must be GET (no body). Cloud/proxy paths stay POST-wrapped.
         const isTags = path === '/api/tags' || path.endsWith('/tags');
@@ -92,7 +92,7 @@ class LLMService {
                 body: JSON.stringify({
                     path,
                     method: reqMethod,
-                    headers: this.apiKey ? { 'Authorization': 'Bearer ' + this.apiKey } : {},
+                    headers: {},
                     body: payload
                 })
             };
@@ -127,9 +127,20 @@ class LLMService {
 
     // --- Preferences ---
     loadPrefs() {
-        this.endpoint = 'http://127.0.0.1:11434';
-        this.useCloud = false;
-        this.apiKey = null;
+        const isBrowser = !window.Capacitor && !window.NativeTTS;
+        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
+            this.useProxy = true;
+            this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
+            this.endpoint = this.proxyUrl;
+            this.useCloud = true;
+            this.apiKey = null; // key lives server-side in Firebase config
+        } else {
+            this.useProxy = false;
+            this.proxyUrl = '';
+            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
+            this.useCloud = window.OLLAMA_USE_CLOUD === true;
+            this.apiKey = window.OLLAMA_API_KEY || null;
+        }
         const p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
         this.model = p.llmModel || '';
     }

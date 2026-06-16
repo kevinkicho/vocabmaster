@@ -134,15 +134,33 @@ async _ping() {
         var reqMethod = method || (isTags ? 'GET' : 'POST');
         var reqBody = (isTags || !payload) ? undefined : JSON.stringify(payload);
 
-        var url = this.endpoint + path;
-        var headers = { 'Content-Type': 'application/json' };
-        if (this.apiKey) headers['Authorization'] = 'Bearer ' + this.apiKey;
-        var fetchOptions = {
-            method: reqMethod,
-            headers: headers,
-            body: reqBody,
-            timeout: timeout
-        };
+        var url, headers = { 'Content-Type': 'application/json' };
+        var fetchOptions;
+
+        if (this.useProxy) {
+            // Route through Firebase Cloud Function proxy (key lives server-side)
+            url = this.proxyUrl;
+            fetchOptions = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: path,
+                    method: reqMethod,
+                    headers: headers,
+                    body: payload
+                }),
+                timeout: timeout
+            };
+        } else {
+            url = this.endpoint + path;
+            if (this.apiKey) headers['Authorization'] = 'Bearer ' + this.apiKey;
+            fetchOptions = {
+                method: reqMethod,
+                headers: headers,
+                body: reqBody,
+                timeout: timeout
+            };
+        }
 
         var controller = new AbortController();
         var timeoutId = setTimeout(function() { controller.abort(); }, timeout);
@@ -170,9 +188,20 @@ async _ping() {
     }
 
     loadPrefs() {
-        this.endpoint = 'http://127.0.0.1:11434';
-        this.useCloud = false;
-        this.apiKey = null;
+        var isBrowser = !window.Capacitor && !window.NativeTTS;
+        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
+            this.useProxy = true;
+            this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
+            this.endpoint = this.proxyUrl;
+            this.useCloud = true;
+            this.apiKey = null; // key lives server-side in Firebase config
+        } else {
+            this.useProxy = false;
+            this.proxyUrl = '';
+            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
+            this.useCloud = window.OLLAMA_USE_CLOUD === true;
+            this.apiKey = window.OLLAMA_API_KEY || null;
+        }
         var p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
         this.model = p.llmModel || '';
     }

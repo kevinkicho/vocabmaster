@@ -26,6 +26,7 @@
 - **Android TTS root cause fixed**: Script loading race condition — `native_tts.js` now loads before `services.js` so `NativeTTSBridge` is defined when `AudioService` constructor runs. R8 obfuscation ruled out as cause.
 - **Admin**: Email-based check (`kevinkicho@gmail.com`). Delete story button in header (not footer).
 - **SW cache version**: v1185.
+- **Tag filter**: 24 tag values (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare) available as client-side filter chips on the home screen. No new vocab planned — current 6035 entries cover all tags.
 
 ---
 

@@ -6,26 +6,36 @@
 
 ## Screenshots
 
-### Mobile
 <table>
   <tr>
-    <td align="center"><img src="screenshots/new/01_home.png" width="200" alt="Main Menu" /><br/>Home</td>
-    <td align="center"><img src="screenshots/new/02_flashcards_front.png" width="200" alt="Flashcard Front" /><br/>Flashcard (Front)</td>
-    <td align="center"><img src="screenshots/new/03_flashcards_back.png" width="200" alt="Flashcard Back" /><br/>Flashcard (Back)</td>
+    <td align="center"><img src="screenshots/01_mainmenu.png" width="200" alt="Main Menu" /><br/>Home</td>
+    <td align="center"><img src="screenshots/02_flashcard1.png" width="200" alt="Flashcard Front" /><br/>Flashcard (Front)</td>
+    <td align="center"><img src="screenshots/02_flashcard2.png" width="200" alt="Flashcard Back" /><br/>Flashcard (Back)</td>
+    <td align="center"><img src="screenshots/03_true-false.png" width="200" alt="True/False" /><br/>True / False</td>
   </tr>
   <tr>
-    <td align="center"><img src="screenshots/new/04_games_menu.png" width="200" alt="Games Menu" /><br/>Games Menu</td>
-    <td align="center"><img src="screenshots/new/05_quiz_game.png" width="200" alt="Quiz Game" /><br/>Quiz Mode</td>
-    <td align="center"><img src="screenshots/new/06_quiz_answered.png" width="200" alt="Quiz Answered" /><br/>Quiz (Answered)</td>
+    <td align="center"><img src="screenshots/04_quiz.png" width="200" alt="Quiz" /><br/>Quiz</td>
+    <td align="center"><img src="screenshots/05_matching1.png" width="200" alt="Matching" /><br/>Matching</td>
+    <td align="center"><img src="screenshots/05_matching2.png" width="200" alt="Matching Complete" /><br/>Matching (Complete)</td>
+    <td align="center"><img src="screenshots/06_story.png" width="200" alt="Story Mode" /><br/>Story Mode</td>
   </tr>
-</table>
-
-### AI Activities (Story Mode & Grammar Gym)
-<table>
   <tr>
-    <td align="center"><img src="screenshots/story_05_answered.png" width="200" alt="Story Mode Answered" /><br/>Story Mode (Answered)</td>
-    <td align="center"><img src="screenshots/grammar_gym_fr_ex_operative.png" width="200" alt="Grammar Gym French" /><br/>Grammar Gym (French)</td>
-    <td align="center"><img src="screenshots/grammar_gym_ai_output.png" width="200" alt="Grammar Gym Output" /><br/>Grammar Gym (Output)</td>
+    <td align="center"><img src="screenshots/07_grammar_gym.png" width="200" alt="Grammar Gym" /><br/>Grammar Gym</td>
+    <td align="center"><img src="screenshots/08_setting1.png" width="200" alt="Settings 1" /><br/>Settings</td>
+    <td align="center"><img src="screenshots/08_setting2.png" width="200" alt="Settings 2" /><br/>Settings (Audio)</td>
+    <td align="center"><img src="screenshots/08_setting3.png" width="200" alt="Settings 3" /><br/>Settings (Theme)</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/08_setting4.png" width="200" alt="Settings 4" /><br/>Settings (Stats)</td>
+    <td align="center"><img src="screenshots/desktop_00.png" width="200" alt="Desktop Home" /><br/>Desktop Home</td>
+    <td align="center"><img src="screenshots/desktop_01.png" width="200" alt="Desktop Flashcards" /><br/>Desktop Flashcards</td>
+    <td align="center"><img src="screenshots/desktop_02.png" width="200" alt="Desktop Quiz" /><br/>Desktop Quiz</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/desktop_03.png" width="200" alt="Desktop Matching" /><br/>Desktop Matching</td>
+    <td align="center"><img src="screenshots/desktop_04.png" width="200" alt="Desktop Story" /><br/>Desktop Story</td>
+    <td align="center"><img src="screenshots/desktop_05.png" width="200" alt="Desktop Grammar" /><br/>Desktop Grammar Gym</td>
+    <td></td>
   </tr>
 </table>
 

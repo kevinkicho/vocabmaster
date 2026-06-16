@@ -92,15 +92,17 @@ class Chat extends GameMode {
                     + '- "text": raw text for TTS (plain, no HTML)\n'
                     + '- "lang": language code for TTS engine (e.g. ja, ko, zh, en, es, fr, de, it, pt, ru)\n'
                     + '- "html": FULL styled HTML for the bubble using inline styles. This is the only styling — style everything: background, color, border-radius, padding, font-size, line-height, margin, etc. Make it look like a modern chat app. Use dark-mode-friendly colors (dark backgrounds use lighter text).\n'
-                    + 'Output ONLY the JSON array. No markdown, no backticks, no extra text:\n'
+                    + 'Output ONLY the JSON array. No markdown, no backticks, no code fences, no extra text:\n'
                     + '[\n'
                     + '  {"text": "...", "lang": "...", "html": "..."}\n'
                     + ']\n\n'
                     + 'Response: "' + text + '"',
-                options: { num_predict: 1024, temperature: 0 },
+                options: { num_predict: 2048, temperature: 0 },
                 timeout: 15000
             });
-            var parsed = JSON.parse(result);
+            // Strip markdown code fences if present
+            var cleaned = result.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+            var parsed = JSON.parse(cleaned);
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
             return [{ text: text, lang: lang, html: escapeHtml(text) }];
         } catch(e) { return [{ text: text, lang: lang, html: escapeHtml(text) }]; }

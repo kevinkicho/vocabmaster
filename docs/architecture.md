@@ -111,6 +111,10 @@ If `load()` returns 0:
 - Start button shows `'Retry'` and calls `window.location.reload()` on click
 - Page `return`s early — modal close events are never bound (not needed since user never reaches main screen)
 
+### 3.3 Tag-based filtering
+
+The home screen has a **Tag Filter** section with 24 clickable tag chips (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare). Selecting a tag filters `app.data.list` client-side via `getFilteredList()`. The filter persists in localStorage and works alongside the existing level filter (both are ANDed). All game modes automatically respect the filtered list since they call `getFilteredList()` in their constructor.
+
 ### 3.3 Why no mock data
 
 Per AGENTS.md: "Never use mock data. Never create mock data. Always use real AI." Mock data would silently mask RTDB connection failures, leading to confusing behavior (stories generated from "Test 0" / "Test 1" etc.).

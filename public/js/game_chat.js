@@ -82,16 +82,26 @@ class Chat extends GameMode {
         } catch(e) {}
     }
 
-    _cleanResponse(text) {
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '$1')
-            .replace(/\*(.*?)\*/g, '$1')
-            .replace(/^#{1,6}\s+/gm, '')
-            .replace(/^[-*]\s+/gm, '')
-            .replace(/^\d+\.\s+/gm, '')
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/`([^`]+)`/g, '$1')
-            .trim();
+    async _criticizePresentation(text, lang) {
+        if (!app.llm || !app.llm.available) return text;
+        try {
+            var result = await app.llm.generate({
+                prompt: 'Reformat this ' + lang + ' language tutor response for clean chat display.\n'
+                    + 'Rules:\n'
+                    + '- Break long paragraphs into individual sentences (one per line)\n'
+                    + '- Ensure all markdown is well-formed (no unmatched ** or *)\n'
+                    + '- Remove any redundant spacing\n'
+                    + '- Keep bold (**) for vocabulary words the user should notice\n'
+                    + '- Keep inline code (`) for example phrases\n'
+                    + '- Keep bullet lists (-) for multiple examples\n'
+                    + '- Remove any headings, horizontal rules, or table syntax\n'
+                    + '- Output ONLY the cleaned text, no explanations\n\n'
+                    + 'Input: "' + text + '"\n\nOutput:',
+                options: { num_predict: 256, temperature: 0 },
+                timeout: 8000
+            });
+            return (result || text).replace(/^["']|["']$/g, '').trim();
+        } catch(e) { return text; }
     }
 
     _buildPrompt(userMessage) {
@@ -118,7 +128,9 @@ class Chat extends GameMode {
         var tagInfo = tagFilter.includes('all') ? 'all levels' : tagFilter.join(', ');
 
         var system = 'You are a ' + lang + ' language tutor. You speak only ' + lang + '.\n'
-            + 'All your responses must be entirely in ' + lang + '.\n\n'
+            + 'You understand English and other languages, but always respond in ' + lang + '.\n\n'
+            + 'The user may sometimes write in English or mix languages when they don\'t know a word.\n'
+            + 'When this happens, respond in ' + lang + ' and include the ' + lang + ' word they were looking for.\n\n'
             + 'Scenario: ' + scenarioDesc + '\n'
             + 'Learner level: ' + level + '\n'
             + 'Vocabulary range: ' + tagInfo + '\n'
@@ -128,8 +140,6 @@ class Chat extends GameMode {
             + '- Use ' + level + '-appropriate vocabulary\n'
             + '- Gently correct mistakes\n'
             + '- End with a follow-up question\n'
-            + '- Do NOT use markdown formatting like **, *, #, -, or numbered lists\n'
-            + '- Write in plain text only\n'
             + '\nAt the end of your response, you may optionally append [MEMORY: ...] with a JSON object to save a compact summary. Example:\n'
             + '[MEMORY: {"summary": "Practiced restaurant vocabulary, struggled with ordering", "topics": ["food", "ordering"], "level": "B1"}]\n'
             + 'Never include full transcripts. Only save meaningful summaries.';
@@ -146,8 +156,9 @@ class Chat extends GameMode {
         var scenario = app.store.prefs.chatScenario || 'daily';
         return {
             system: 'You are a ' + lang + ' language tutor. You speak only ' + lang + '.\n'
+                + 'You understand English but always respond in ' + lang + '.\n'
                 + 'Greet the user in ' + lang + ' and ask an opening question about ' + scenario + '.\n'
-                + '1-2 sentences. Do not use markdown formatting.',
+                + '1-2 sentences.',
             prompt: '[' + lang + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
         };
     }
@@ -186,6 +197,13 @@ class Chat extends GameMode {
     _splitSentences(text) {
         if (!text) return [];
         return text.match(/[^.!?]+[.!?]+/g) || [text];
+    }
+
+    _renderMarkdown(text) {
+        if (typeof snarkdown === 'function') {
+            return snarkdown(text);
+        }
+        return escapeHtml(text);
     }
 
     async _translateMessage(text) {
@@ -227,7 +245,7 @@ class Chat extends GameMode {
                     var hasTranslation = m.translations && m.translations[j];
                     messagesHtml += '<div class="flex justify-start mb-1">'
                         + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
-                        + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(s) + '</p>'
+                        + '<p class="whitespace-pre-wrap break-words">' + this._renderMarkdown(s) + '</p>'
                         + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
                         + '</div></div>';
                 }
@@ -242,14 +260,19 @@ class Chat extends GameMode {
             + '<div id="chat-header" class="flex items-center justify-between px-3 py-2 shrink-0">'
             + '<div class="flex items-center gap-2">'
             + '<span class="text-[10px] font-black text-indigo-500 uppercase">' + scenarioLabel + '</span>'
-            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-300">' + level + '</span>'
+            + '<span class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 dark:text-indigo-300 ring-1 ring-indigo-500/30 text-indigo-600">' + level + '</span>'
             + '</div>'
             + '<div class="flex items-center gap-2">'
             + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
             + '<button onclick="app.goBack()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x text-lg"></i></button>'
             + '</div>'
             + '</div>'
-            + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[250px] break-words whitespace-normal leading-relaxed">Tap a sentence to hear it spoken. Long-press a sentence to see its translation. The AI responds in your target language only, uses vocabulary at your selected level, gently corrects mistakes, and ends with a follow-up question. It can save compact summaries of your progress — never full transcripts.</div>'
+            + '<div id="chat-info-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px] break-words whitespace-normal leading-relaxed">'
+            + '<p class="mb-1">• Tap a sentence to hear it spoken.</p>'
+            + '<p class="mb-1">• Long-press a sentence to see its translation.</p>'
+            + '<p class="mb-1">• The AI responds in your target language only.</p>'
+            + '<p>• Saves compact summaries — never full transcripts.</p>'
+            + '</div>'
             + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
             + '<div id="chat-audio" class="shrink-0 px-3 mb-1"></div>'
             + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
@@ -345,7 +368,6 @@ class Chat extends GameMode {
         if (translation) {
             el.innerHTML = '<p class="whitespace-pre-wrap break-words">' + escapeHtml(text) + '</p>'
                 + '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(translation) + '</p>';
-            // Find which message this sentence belongs to and store translation
             for (var mi = this.messages.length - 1; mi >= 0; mi--) {
                 var msg = this.messages[mi];
                 if (msg.role !== 'assistant') continue;
@@ -394,6 +416,9 @@ class Chat extends GameMode {
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
             this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
             this._updateMessages();
+            if (greetings[lang] && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(greetings[lang], lang, 'chat', 300);
+            }
             return;
         }
         this._setBusyUI(true);
@@ -401,43 +426,30 @@ class Chat extends GameMode {
         this.abortController = new AbortController();
         var self = this;
         var fullText = '';
-        // Create a temporary single-bubble element for streaming
-        this.messages.push({ role: 'assistant', text: '' });
-        var tempIdx = this.messages.length - 1;
-        var container = this.dom.messages;
-        if (container) {
-            container.innerHTML += '<div class="flex justify-start mb-1">'
-                + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="">'
-                + '<p class="whitespace-pre-wrap break-words"></p>'
-                + '</div></div>';
-        }
-        var msgEl = container ? container.lastElementChild : null;
         try {
-            fullText = await app.llm.streamGenerate({
+            fullText = await app.llm.generate({
                 prompt: promptData.prompt,
                 system: promptData.system,
                 options: { num_predict: 128, temperature: 0.7 },
                 signal: this.abortController.signal,
                 timeout: 15000
-            }, function(token) {
-                fullText += token;
-                if (self.messages.length > 0) {
-                    self.messages[self.messages.length - 1].text = fullText;
-                }
-                var p = msgEl ? msgEl.querySelector('p') : null;
-                if (p) p.textContent = fullText;
-                self._scrollToBottom();
             });
-            if (this.messages.length > 0) {
-                this.messages[this.messages.length - 1].text = fullText;
-            }
+            if (!this.root || !this.root.isConnected) return;
+            var cleaned = await this._criticizePresentation(fullText, this._getTargetLang());
+            this.messages.push({ role: 'assistant', text: cleaned });
             this._updateMessages();
+            if (cleaned && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(cleaned, this._getTargetLang(), 'chat', 300);
+            }
         } catch(e) {
             if (e.name === 'AbortError') return;
             var lang = this._getTargetLang();
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
             this.messages.push({ role: 'assistant', text: greetings[lang] || '' });
             this._updateMessages();
+            if (greetings[lang] && app.store.prefs.chatAutoPlay !== false) {
+                app.audio.play(greetings[lang], lang, 'chat', 300);
+            }
         }
         this._setBusyUI(false);
         if (this.dom.input) this.dom.input.focus();
@@ -463,34 +475,15 @@ class Chat extends GameMode {
 
         var promptData = this._buildPrompt(text);
         this.abortController = new AbortController();
-
-        // Create a temporary single-bubble element for streaming
-        this.messages.push({ role: 'assistant', text: '' });
-        var container = this.dom.messages;
-        if (container) {
-            container.innerHTML += '<div class="flex justify-start mb-1">'
-                + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="">'
-                + '<p class="whitespace-pre-wrap break-words"></p>'
-                + '</div></div>';
-        }
-        var msgEl = container ? container.lastElementChild : null;
         var self = this;
 
         try {
-            var fullText = await app.llm.streamGenerate({
+            var fullText = await app.llm.generate({
                 prompt: promptData.prompt,
                 system: promptData.system,
                 options: { num_predict: 256, temperature: 0.5 },
                 signal: this.abortController.signal,
                 timeout: 30000
-            }, function(token) {
-                fullText += token;
-                if (self.messages.length > 0) {
-                    self.messages[self.messages.length - 1].text = fullText;
-                }
-                var p = msgEl ? msgEl.querySelector('p') : null;
-                if (p) p.textContent = fullText;
-                self._scrollToBottom();
             });
 
             if (!this.root || !this.root.isConnected) return;
@@ -502,7 +495,7 @@ class Chat extends GameMode {
                 this._saveMemory(parsed.json);
             }
 
-            cleaned = this._cleanResponse(cleaned);
+            cleaned = await this._criticizePresentation(cleaned, this._getTargetLang());
 
             if (this.messages.length > 0 && this.messages[this.messages.length - 1].role === 'assistant') {
                 this.messages[this.messages.length - 1].text = cleaned;
@@ -547,7 +540,7 @@ class Chat extends GameMode {
                     var hasTranslation = m.translations && m.translations[j];
                     html += '<div class="flex justify-start mb-1">'
                         + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-sentence="' + escapeHtml(s) + '">'
-                        + '<p class="whitespace-pre-wrap break-words">' + escapeHtml(s) + '</p>'
+                        + '<p class="whitespace-pre-wrap break-words">' + this._renderMarkdown(s) + '</p>'
                         + (hasTranslation ? '<p class="text-[10px] mt-1 opacity-70 border-t border-current/20 pt-1">' + escapeHtml(m.translations[j]) + '</p>' : '')
                         + '</div></div>';
                 }

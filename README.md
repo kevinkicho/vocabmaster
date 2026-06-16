@@ -6,12 +6,14 @@
 
 ## Screenshots
 
+<div align="center">
 <table>
   <tr>
     <td align="center"><img src="screenshots/vocabmaster_desktop.gif" width="480" alt="Desktop Demo" /><br/>Desktop</td>
     <td align="center"><img src="screenshots/vocabmaster_mobile.gif" width="200" alt="Mobile Demo" /><br/>Mobile</td>
   </tr>
 </table>
+</div>
 
 ## Current Status (v1185)
 

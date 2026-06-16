@@ -108,7 +108,19 @@ async _ping() {
                 L('[LLM] Capacitor proxy failed, falling back to fetch:', e.message);
             }
         }
-        return fetch(url, options);
+        try {
+            return await fetch(url, options);
+        } catch (e) {
+            // Browser CORS blocks cross-origin requests to localhost (e.g. web app → http://127.0.0.1:11434).
+            // Return a structured error response instead of throwing, so callers can handle gracefully.
+            L('[LLM] fetch failed (likely CORS in browser):', e.message);
+            return {
+                ok: false,
+                status: 0,
+                json: async function() { throw e; },
+                text: async function() { throw e; }
+            };
+        }
     }
 
     async _ollamaRequest(path, payload, opts) {

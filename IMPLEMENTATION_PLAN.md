@@ -1,144 +1,150 @@
 # Implementation Plan
 
-## Feature 1: Typing Indicator Inside Message Stream
+## Feature 9: AI Init Sequence — Block with Timeout + Persistent Status Indicator
 
-**Current:** `#chat-typing` is a separate `<div>` **outside** `#chat-messages`, positioned between messages and the input bar. It's toggled via `_setBusyUI()` which shows/hides it independently of the message list.
+### Current Behavior
 
-**Target:** The typing indicator should appear as a left-aligned assistant bubble **inside** `#chat-messages`, at the bottom of the scrollable area. When the AI starts thinking, a bubble appears inline. When the AI finishes, the bubble is replaced by the actual response.
+```
+init() start
+  → Auth (waitForAuth, blocks 1.5s)
+  → Data (load(), blocks ~1-3s)
+  → LLM loadPrefs() + autoDetect()  ← FIRE-AND-FORGET (no await)
+  → Enable Start button
+  → User clicks → overlay fades → goHome() renders home screen
+  → ...2-10s later... autoDetect() finishes → toast appears (surprise!)
+```
 
-**Changes needed:**
+### Target Behavior
 
-1. **Remove `#chat-typing` from the outer template** (line 271 in `render()`)
-2. **Add a `_typingBubble` property** to track whether a typing indicator is currently shown
-3. **In `_setBusyUI()`**: instead of toggling a separate div, append/remove a typing bubble element inside `#chat-messages`
-4. **In `_updateMessages()`**: if `_typingBubble` is true, append the typing HTML after all messages
-5. **Typing bubble HTML** should match the assistant bubble style: left-aligned, `bg-slate-100 dark:bg-neutral-800`, `rounded-2xl rounded-bl-md`, with the bouncing dots and phase label
+```
+init() start
+  → Auth (waitForAuth, blocks 1.5s)
+  → Data (load(), blocks ~1-3s)
+  → LLM: show "Connecting to AI..." on statusBar
+  → LLM: await autoDetect() with 3s timeout
+    → If proxy responds within 3s: statusBar shows "AI Ready" or "AI Offline"
+    → If timeout: statusBar shows "AI Offline (tap Retry)", autoDetect continues in background
+  → Enable Start button
+  → User clicks → overlay fades → goHome() renders home screen
+  → Home screen shows persistent AI status indicator (green/gray dot + label)
+  → When autoDetect finishes (even after timeout): indicator updates in real-time
+  → _showAIWelcome() toast is REMOVED
+```
+
+### Changes Required
+
+#### 1. Make `autoDetect()` Awaitable with Timeout in `main.js:init()`
+
+**File:** `public/js/main.js` lines 183-187
+
+**Current:**
+```js
+// 2b. Init LLM — auto-detect Ollama (non-blocking)
+if (this.llm) {
+    this.llm.loadPrefs();
+    this.llm.autoDetect().catch(e => L('[Main] autoDetect error:', e));
+}
+```
+
+**Target:**
+```js
+// 2b. Init LLM — try to detect with 3s timeout, continue async if timeout
+if (this.llm) {
+    this.llm.loadPrefs();
+    statusBar.innerText = 'Connecting to AI...';
+    statusBar.classList.add('text-amber-400');
+    const aiReady = await Promise.race([
+        this.llm.autoDetect().then(() => true).catch(() => false),
+        new Promise(function(r) { setTimeout(function() { r('timeout'); }, 3000); })
+    ]);
+    if (aiReady === 'timeout') {
+        statusBar.innerText = 'AI offline (tap Retry in Settings)';
+        statusBar.classList.remove('text-amber-400');
+        statusBar.classList.add('text-slate-400');
+        // autoDetect continues in background, status will update on home screen indicator
+    } else if (aiReady) {
+        statusBar.innerText = this.llm.useCloud ? 'AI Ready (cloud)' : 'AI Ready (local)';
+        statusBar.classList.remove('text-amber-400');
+        statusBar.classList.add('text-emerald-400');
+    } else {
+        statusBar.innerText = 'AI offline';
+        statusBar.classList.remove('text-amber-400');
+        statusBar.classList.add('text-rose-400');
+    }
+}
+```
+
+#### 2. Remove `_showAIWelcome()` Toast
+
+**File:** `public/js/llm/llm_service.js` lines 210 and 389-392
+
+Remove the `_showAIWelcome()` call from `autoDetect()` (line 210). Remove the `_showAIWelcome()` method entirely (lines 389-392). Remove `_showToast()` if nothing else uses it (check callers).
+
+The toast is replaced by the persistent home screen indicator.
+
+#### 3. Add Persistent AI Status Indicator to Home Screen
+
+**File:** `public/js/main.js` in `goHome()` — add a small indicator next to the Daily Score card or in the header area.
+
+Add to the home screen HTML:
+```html
+<div id="ai-status-indicator" class="flex items-center gap-1.5 mt-2 px-2">
+    <span id="ai-status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+    <span id="ai-status-label" class="text-[9px] font-bold text-slate-400 uppercase">AI detecting...</span>
+</div>
+```
+
+**File:** `public/js/ui.js` — add `_updateAIStatus()` method:
+```js
+_updateAIStatus() {
+    const dot = document.getElementById('ai-status-dot');
+    const label = document.getElementById('ai-status-label');
+    if (!dot || !label) return;
+    const llm = app.llm;
+    if (llm && llm.available && llm.hasModel) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        label.textContent = llm.useCloud ? 'AI Online (cloud)' : 'AI Online (local)';
+        label.className = 'text-[9px] font-bold text-emerald-500 uppercase';
+    } else {
+        dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+        label.textContent = 'AI Offline';
+        label.className = 'text-[9px] font-bold text-rose-400 uppercase';
+    }
+}
+```
+
+#### 4. Call `_updateAIStatus()` After autoDetect Completes
+
+**File:** `public/js/llm/llm_service.js` in `autoDetect()`, after setting `hasModel`:
+
+```js
+if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
+```
+
+Also call it in `_ping()` success/failure paths so the indicator updates when the app resumes.
+
+#### 5. Remove Redundant `app.goHome(false)` Call from autoDetect()
+
+**File:** `public/js/llm/llm_service.js` line 212:
+```js
+if (app && !app.game) app.goHome(false);
+```
+
+This was needed because autoDetect was async and the home screen hadn't rendered yet. With the new blocking approach, the home screen renders after autoDetect completes, so this redundant re-render can be removed.
 
 ---
 
-## Feature 2: Sticky Bottom-Scroll
+### Pitfalls & Failure Points
 
-**Current:** `_scrollToBottom()` is called manually after every `_updateMessages()` and `render()`. It always force-scrolls to bottom regardless of user scroll position. No scroll event listener.
-
-**Target:** 
-- Track whether user is at the bottom of the scroll container (within ~40px threshold)
-- On new message: if user was at bottom, auto-scroll down. If user scrolled up, do nothing.
-- On user scroll: if they scroll to the bottom, re-enable sticky mode
-- Enabled by default on first render
-
-**Changes needed:**
-
-1. **Add `_stickToBottom` property** (default `true`)
-2. **Add `onscroll` listener** on `#chat-messages` in `render()`:
-   ```js
-   this.dom.messages.onscroll = function() {
-       var el = this.dom.messages;
-       var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-       this._stickToBottom = atBottom;
-   }.bind(this);
-   ```
-3. **Modify `_scrollToBottom()`**: only scroll if `_stickToBottom` is true
-4. **After `_updateMessages()`**: call `_scrollToBottom()` (which now respects the flag)
-5. **Remove the `setTimeout` wrapper** from `_scrollToBottom()` — use `requestAnimationFrame` instead for immediate scroll after DOM update
-
----
-
-## Feature 3: Save Full Transcript to RTDB
-
-**Current:** Only memory summaries are saved (`chat_memory` path). When the user leaves and comes back, the chat starts fresh with no history.
-
-**Target:** Save the full conversation transcript so the user can see previous chat when they return. Load it on `_init()`.
-
-**Changes needed:**
-
-1. **New RTDB path**: `users/{uid}/chat_transcripts/{timestamp}`
-   - Schema: `{ messages: [...], scenario, level, lang, ts }`
-   - Each session gets one transcript entry
-
-2. **`_saveTranscript()` method**: called in `destroy()` (when user leaves chat):
-   ```js
-   async _saveTranscript() {
-       var uid = auth && auth.currentUser && auth.currentUser.uid;
-       if (!uid || !db || this.messages.length === 0) return;
-       var entry = {
-           messages: this.messages.map(function(m) {
-               return { role: m.role, text: m.text };
-           }),
-           scenario: app.store.prefs.chatScenario || 'daily',
-           level: app.store.prefs.chatLevel || 'B1',
-           lang: this._getTargetLang(),
-           ts: Date.now()
-       };
-       await db.ref('users/' + uid + '/chat_transcripts/' + Date.now()).set(entry);
-   }
-   ```
-
-3. **`_loadTranscripts()` method**: called in `_init()` before `render()`:
-   ```js
-   async _loadTranscripts() {
-       var uid = auth && auth.currentUser && auth.currentUser.uid;
-       if (!uid || !db) return;
-       var snap = await db.ref('users/' + uid + '/chat_transcripts')
-           .orderByChild('ts').limitToLast(5).once('value');
-       if (!snap.exists()) return;
-       var transcripts = [];
-       snap.forEach(function(c) { transcripts.push(c.val()); });
-       // Show a "Resume previous session?" UI or load the most recent
-       // For now: store in this._transcripts for the UI to display
-       this._transcripts = transcripts.reverse();
-   }
-   ```
-
-4. **Transcript picker UI**: When chat opens and transcripts exist, show a list of previous sessions (scenario + date) at the top of the messages area. Tapping one loads those messages into `this.messages` and calls `_updateMessages()`.
-
-5. **`destroy()` override**: call `_saveTranscript()` before `super.destroy()`
-
-6. **Firebase security rules**: Add read/write rules for `users/{uid}/chat_transcripts/`
-
----
-
-## Feature 4: Mic Button Crash Fix (Multi-word STT)
-
-**Root cause analysis:**
-
-The crash happens because `webkitSpeechRecognition` with `continuous: false` can still fire `onresult` **multiple times** for a single utterance when the speech is longer than one word. Each `onresult` event calls `sendMessage()` which is async and not awaited. This creates a race condition:
-
-1. User speaks "what is your name"
-2. `onresult` fires with partial transcript "what is" (even with `interimResults: false`, some browsers fire multiple `onresult` with `isFinal: true` for each segment)
-3. `sendMessage()` starts — sets `this.busy = true`, pushes user message, starts AI generation
-4. `onresult` fires again with full transcript "what is your name"
-5. `sendMessage()` is called again — `this.busy` is true, returns early
-6. But the first call is still running. When it finishes, it calls `_setBusyUI(false)`
-7. User presses mic again → `toggleSpeech()` calls `this.recognition.start()` on an already-used recognition object → **throws `InvalidStateError`** (recognition can't be restarted without creating a new instance)
-
-Additionally, the `onresult` handler doesn't check `e.results[0].isFinal`, so it may act on partial transcripts.
-
-**Fix:**
-
-1. **Check `isFinal`** in `onresult`:
-   ```js
-   this.recognition.onresult = function(e) {
-       if (!e.results[0].isFinal) return;
-       var transcript = e.results[0][0].transcript;
-       ...
-   };
-   ```
-
-2. **Create a new recognition instance** each time `toggleSpeech()` is called, instead of reusing `this.recognition`:
-   ```js
-   toggleSpeech() {
-       if (this.recognition) {
-           try { this.recognition.abort(); } catch(e) {}
-       }
-       this.recognition = new webkitSpeechRecognition();
-       this.recognition.continuous = false;
-       this.recognition.interimResults = false;
-       // Set up handlers on the new instance
-       ...
-   }
-   ```
-
-3. **Guard against concurrent calls**: Add a `_speechActive` flag that prevents `toggleSpeech()` from starting a new recognition while one is already running.
+| # | Pitfall | Mitigation |
+|---|---------|------------|
+| 1 | **3s timeout is too short for cold proxy** — first request after idle can take 5-10s | autoDetect continues in background after timeout. When it completes, `_updateAIStatus()` updates the indicator. The user sees "AI offline" briefly, then it changes to "AI Online" when ready. |
+| 2 | **Status bar text styling conflicts** — `statusBar.classList` add/remove may step on other callers | Wrap in a helper that saves/restores original text, same pattern as `toast()` already uses. |
+| 3 | **`_ping()` also calls autoDetect and could trigger another goHome** | Already removed the `app.goHome(false)` from autoDetect, so _ping → autoDetect → goHome is no longer a risk. |
+| 4 | **AI status indicator element doesn't exist when autoDetect finishes** — if autoDetect completes before goHome renders, `_updateAIStatus()` silently fails | Safe — it checks `document.getElementById()` and returns early if not found. When goHome renders later, it calls `_updateAIStatus()` at render time. |
+| 5 | **`_showToast()` removal might break other callers** | Grep shows only `_showAIWelcome()` calls `_showToast()`. Safe to remove both. |
+| 6 | **Status bar shows "Connecting to AI..." but user clicks Start before it resolves** | The Start button is enabled after the block. If the 3s timeout fires and shows "AI offline", user can still enter. AI-dependent games show their own error if needed. |
+| 7 | **`Promise.race` never rejects** — the timeout path returns `'timeout'` string, not a rejection | The fallback setTimeout resolves with `'timeout'` string. The race always resolves. |
 
 ---
 

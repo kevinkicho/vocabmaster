@@ -3,7 +3,7 @@
 class AudioService {
     constructor() { 
         this.synth = window.speechSynthesis || null; 
-        this.useNative = (typeof NativeTTSBridge !== 'undefined') && NativeTTSBridge.isAvailable();
+        this.useNative = (typeof window.NativeTTSBridge !== 'undefined') && window.NativeTTSBridge.isAvailable();
         // Force native on APK plain WebView (the whole reason for packaging the app):
         // the injected NativeTTS interface (from TTSBridge.kt) gives access to real device TTS engines
         // (Google, Samsung etc) instead of the limited WebView/Chrome speechSynthesis.
@@ -116,7 +116,7 @@ class AudioService {
     loadVoices() { 
         if (this.useNative) {
             try {
-                const raw = NativeTTSBridge.getVoices();
+                const raw = window.NativeTTSBridge.getVoices();
                 if (raw.length === 0) {
                     setTimeout(() => this.loadVoices(), 500);
                     return;
@@ -154,7 +154,7 @@ class AudioService {
             try {
                 const voice = this.voices.find(v => (v.voiceURI || v.name) === voiceURI);
                 const voiceName = voice ? voice.name : '';
-                NativeTTSBridge.previewVoice(voiceName, langKey || 'en');
+                window.NativeTTSBridge.previewVoice(voiceName, langKey || 'en');
             } catch(e) {}
             return;
         }
@@ -232,7 +232,7 @@ class AudioService {
                         if (v) voiceName = v.name || '';
                     }
                 }
-                NativeTTSBridge.speak(txt, voiceName, ttsLang, 0.9).then(() => { if(cb) cb(); }).catch(() => { if(cb) cb(); });
+                window.NativeTTSBridge.speak(txt, voiceName, ttsLang, 0.9).then(() => { if(cb) cb(); }).catch(() => { if(cb) cb(); });
             } catch(e) { if(cb) cb(); }
             return;
         }
@@ -273,7 +273,7 @@ class AudioService {
             this.synth.speak(u);
         } catch(e) { if(cb) cb(); }
     }
-    cancel() { if (this.timer) clearTimeout(this.timer); if (this.useNative) { try { NativeTTSBridge.stop(); } catch(e) {} } if (this.synth) this.synth.cancel(); }
+    cancel() { if (this.timer) clearTimeout(this.timer); if (this.useNative) { try { window.NativeTTSBridge.stop(); } catch(e) {} } if (this.synth) this.synth.cancel(); }
 }
 
 class TextFitter {

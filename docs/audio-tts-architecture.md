@@ -88,14 +88,16 @@ app.audio.play(text, langKey, ...)     [services.js]
 ### Detection Logic (`services.js:6-13`)
 
 ```javascript
-this.useNative = (typeof NativeTTSBridge !== 'undefined') && NativeTTSBridge.isAvailable();
+this.useNative = (typeof window.NativeTTSBridge !== 'undefined') && window.NativeTTSBridge.isAvailable();
 if (!this.useNative && (window.NativeTTS || /VocabMasterApp/i.test(navigator.userAgent || ''))) {
     this.useNative = true;
 }
 ```
 
-1. **Primary check:** Is `NativeTTSBridge` defined AND does `window.NativeTTS.speak` exist?
+1. **Primary check:** Is `window.NativeTTSBridge` defined AND does `window.NativeTTS.speak` exist?
 2. **Fallback:** Is `window.NativeTTS` truthy OR does UA contain "VocabMasterApp"?
+
+**Important:** All references to `NativeTTSBridge` in `services.js` must use `window.NativeTTSBridge` (not bare `NativeTTSBridge`). JavaScript `const` declarations in one `<script>` tag are not visible to other `<script>` tags — only `window.*` globals cross script boundaries. The `const NativeTTSBridge` in `native_tts.js` is a local variable; the actual global is set via `window.NativeTTSBridge = bridge` at line 144.
 
 ### Script Loading Order (Critical Fix)
 

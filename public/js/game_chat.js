@@ -10,12 +10,17 @@ class Chat extends GameMode {
         this.abortController = null;
         this.recognition = null;
         this._setupSTT();
-        this._loadMemories();
+        this._init();
+    }
+
+    async _init() {
+        await this._loadMemories();
         this.render();
     }
 
     _getTargetLang() {
-        return app.store.prefs.presetTarget || '';
+        var p = app.store.prefs;
+        return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
     }
 
     _getSourceLang() {
@@ -83,30 +88,33 @@ class Chat extends GameMode {
     }
 
     _closeTags(html) {
-        return html.replace(/<(strong|em|li)>([^<]*)$/g, '<$1>$2</$1>');
+        return html.replace(/<(strong|em|li)>([^<]*?)(?=<\/(?:strong|em|li)>|$)/g, '<$1>$2</$1>');
     }
 
     async _criticizePresentation(text, lang) {
-        if (!app.llm || !app.llm.available) return [{ text: text, lang: lang, html: escapeHtml(text) }];
-        var tryFormat = async function(timeout) {
-            return await app.llm.generate({
-                prompt: 'Format this ' + lang + ' language tutor response as HTML for chat display.\n'
+        if (!app.llm || !app.llm.available || !app.llm.hasModel) return [{ text: text, lang: lang, html: escapeHtml(text) }];
+        var tryFormat = async function(timeout, simple) {
+            var prompt = simple
+                ? 'Format this ' + lang + ' text as HTML. Use <p> for each sentence. Output ONLY the HTML.\n\nText: "' + text + '"'
+                : 'Format this ' + lang + ' language tutor response as HTML for chat display.\n'
                     + 'Use <p> for each sentence or phrase.\n'
                     + 'Use <strong> for vocabulary words to emphasize.\n'
                     + 'Use <em> for example phrases.\n'
                     + 'Use <ul><li> for bullet lists.\n'
                     + 'Output ONLY the HTML. No markdown, no backticks, no extra text.\n\n'
-                    + 'Response: "' + text + '"',
-                options: { num_predict: 1024, temperature: 0 },
+                    + 'Response: "' + text + '"';
+            return await app.llm.generate({
+                prompt: prompt,
+                options: { num_predict: simple ? 512 : 1024, temperature: 0 },
                 timeout: timeout
             });
         };
         try {
             var result;
-            try { result = await tryFormat(20000); }
+            try { result = await tryFormat(20000, false); }
             catch(e) {
                 L('[Chat] Critic first attempt failed, retrying with simpler prompt');
-                result = await tryFormat(30000);
+                result = await tryFormat(30000, true);
             }
             var cleaned = this._closeTags(result.trim());
             var parts = cleaned.match(/<p[^>]*>[\s\S]*?<\/p>/g) || [cleaned];
@@ -222,16 +230,16 @@ class Chat extends GameMode {
         for (var i = 0; i < this.messages.length; i++) {
             var m = this.messages[i];
             if (m.role === 'user') {
-                messagesHtml += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">'
-                    + '<div class="chat-bubble" style="max-width:80%;background:#6366f1;color:#fff;border-radius:16px 16px 4px 16px;padding:10px 14px;font-size:14px;line-height:1.5;cursor:pointer;user-select:none" data-text="' + escapeHtml(m.text) + '" data-lang="' + lang + '">'
-                    + '<p style="margin:0;white-space:pre-wrap;overflow-wrap:break-word">' + escapeHtml(m.text) + '</p>'
+                messagesHtml += '<div class="flex justify-end mb-2">'
+                    + '<div class="chat-bubble max-w-[80%] bg-indigo-500 text-white rounded-2xl rounded-br-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-text="' + escapeHtml(m.text) + '" data-lang="' + lang + '">'
+                    + '<p class="whitespace-pre-wrap break-words" style="margin:0">' + escapeHtml(m.text) + '</p>'
                     + '</div></div>';
             } else if (m.units) {
                 for (var j = 0; j < m.units.length; j++) {
                     var u = m.units[j];
                     if (!u.text) continue;
-                    messagesHtml += '<div style="display:flex;justify-content:flex-start;margin-bottom:4px">'
-                        + '<div class="chat-sentence" style="max-width:80%;cursor:pointer;user-select:none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || lang) + '">'
+                    messagesHtml += '<div class="flex justify-start mb-1">'
+                        + '<div class="chat-sentence max-w-[80%] cursor-pointer select-none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || lang) + '">'
                         + (u.html || escapeHtml(u.text))
                         + '</div></div>';
                 }
@@ -259,9 +267,8 @@ class Chat extends GameMode {
             + '<p class="mb-1.5">• The AI responds in your target language only.</p>'
             + '<p>Saves compact summaries — never full transcripts.</p>'
             + '</div>'
-            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll min-h-[100px]">' + messagesHtml
-            + '<div id="chat-typing" class="hidden"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 mt-1 inline-block"><span class="inline-flex gap-1 items-center"><span class="typing-label text-[10px] text-slate-400 dark:text-neutral-500 mr-1">Thinking...</span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
-            + '</div>'
+            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll min-h-[100px]">' + messagesHtml + '</div>'
+            + '<div id="chat-typing" class="hidden px-3 pb-2"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 inline-block"><span class="inline-flex gap-1 items-center"><span class="typing-label text-[10px] text-slate-400 dark:text-neutral-500 mr-1">Thinking...</span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
             + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
             + micBtn
             + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600 min-w-0" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
@@ -308,7 +315,9 @@ class Chat extends GameMode {
         var self = this;
         var sentences = this.root.querySelectorAll('.chat-sentence');
         sentences.forEach(function(el) {
+            var longPressed = false;
             el.onclick = function(e) {
+                if (longPressed) { longPressed = false; return; }
                 e.stopPropagation();
                 var text = el.dataset.text;
                 var lang = el.dataset.lang;
@@ -317,6 +326,7 @@ class Chat extends GameMode {
             var pressTimer = null;
             el.onmousedown = function() {
                 pressTimer = setTimeout(function() {
+                    longPressed = true;
                     var text = el.dataset.text;
                     if (text) self._showSentenceTranslation(el, text);
                 }, 500);
@@ -325,6 +335,7 @@ class Chat extends GameMode {
             el.onmouseleave = function() { clearTimeout(pressTimer); };
             el.ontouchstart = function() {
                 pressTimer = setTimeout(function() {
+                    longPressed = true;
                     var text = el.dataset.text;
                     if (text) self._showSentenceTranslation(el, text);
                 }, 500);
@@ -418,6 +429,7 @@ class Chat extends GameMode {
             if (!this.root || !this.root.isConnected) return;
             this._setBusyUI(true, 'formatting');
             var units = await this._criticizePresentation(fullText, this._getTargetLang());
+            this._setBusyUI(false);
             this.messages.push({ role: 'assistant', text: fullText, units: units });
             this._updateMessages();
             if (units.length > 0 && units[0].text && app.store.prefs.chatAutoPlay !== false) {
@@ -425,6 +437,7 @@ class Chat extends GameMode {
             }
         } catch(e) {
             if (e.name === 'AbortError') return;
+            this._setBusyUI(false);
             var lang = this._getTargetLang();
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
             this.messages.push({ role: 'assistant', text: greetings[lang] || '', units: [{ text: greetings[lang] || '', lang: lang, html: escapeHtml(greetings[lang] || '') }] });
@@ -433,7 +446,6 @@ class Chat extends GameMode {
                 app.audio.play(greetings[lang], lang, 'chat', 300);
             }
         }
-        this._setBusyUI(false);
         if (this.dom.input) this.dom.input.focus();
     }
 
@@ -482,6 +494,7 @@ class Chat extends GameMode {
 
             this._setBusyUI(true, 'formatting');
             var units = await this._criticizePresentation(cleaned, this._getTargetLang());
+            this._setBusyUI(false);
             this.messages.push({ role: 'assistant', text: cleaned, units: units });
 
             this._updateMessages();
@@ -494,12 +507,12 @@ class Chat extends GameMode {
         } catch (err) {
             if (err.name === 'AbortError') return;
             if (!this.root || !this.root.isConnected) return;
+            this._setBusyUI(false);
             this.messages.push({ role: 'assistant', text: '[Error: ' + (err.message || 'Failed to get response') + ']' });
             this._updateMessages();
             this._scrollToBottom();
         }
 
-        this._setBusyUI(false);
         if (this.dom.input) this.dom.input.focus();
     }
 

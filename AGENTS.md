@@ -34,3 +34,26 @@
 - **After completing any task**, immediately update the todo list to mark it `completed`. Never leave completed work as `pending` or `in_progress`.
 - **Before replying to the user**, verify all todos reflect their true state. Stale todos are a bug.
 - When a multi-step task finishes, mark all sub-items complete in one batch update.
+
+## Critical: `const`/`let`/`class` Do Not Cross `<script>` Tag Boundaries
+
+In JavaScript, `const`, `let`, and `class` declarations in one `<script>` tag are **not visible** to other `<script>` tags — only `var` and explicit `window.*` assignments cross script boundaries. This is a fundamental JS behavior that differs from how bundled/compiled code works.
+
+**Example of the bug (TTS fix, June 2026):**
+```js
+// native_tts.js — defines NativeTTSBridge
+const NativeTTSBridge = (() => {
+    window.NativeTTSBridge = bridge;  // ← the actual global
+    return bridge;
+})();
+
+// services.js — tries to read it
+this.useNative = (typeof NativeTTSBridge !== 'undefined')  // ← ALWAYS undefined!
+```
+
+**Fix:** Always use `window.*` prefix when accessing a value defined in another `<script>` tag:
+```js
+this.useNative = (typeof window.NativeTTSBridge !== 'undefined') && window.NativeTTSBridge.isAvailable();
+```
+
+This applies to all files loaded via separate `<script>` tags in `index.html` — which is all of them (no bundler).

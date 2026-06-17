@@ -121,17 +121,50 @@ The native `loadVoices()` path retries every 500ms if `getVoices()` returns an e
 
 ## TTS Fix History (June 2026)
 
-### Root Cause Analysis
+### Root Cause Analysis (Final)
 
-The APK was using Chrome's `speechSynthesis` instead of native Android TTS due to a **script loading race condition**:
+The APK was using Chrome's `speechSynthesis` instead of native Android TTS. The root cause was a **JavaScript scope issue with `const` across `<script>` tags**, not just a script ordering problem.
 
-1. `services.js` (containing `AudioService` constructor) loaded **before** `native_tts.js` (containing `NativeTTSBridge` definition).
-2. `AudioService` constructor checked `typeof NativeTTSBridge !== 'undefined'` — it was `undefined`, so `useNative = false`.
-3. The fallback check (`window.NativeTTS` or UA) set `useNative = true`, but `loadVoices()` immediately threw `ReferenceError: NativeTTSBridge is not defined`.
-4. The `catch(e)` block logged the error but did **not** schedule a retry — voice list stayed empty.
-5. All subsequent `speak()` calls fell through to the `window.speechSynthesis` path.
+**The real problem:**
+
+1. `native_tts.js` defines `NativeTTSBridge` using `const`:
+   ```js
+   const NativeTTSBridge = (() => {
+       // ...
+       window.NativeTTSBridge = bridge;  // ← the actual global
+       return bridge;
+   })();
+   ```
+
+2. In JavaScript, `const` (and `let`, `class`) declarations in one `<script>` tag are **not visible** to other `<script>` tags — only `var` and explicit `window.*` assignments cross script boundaries.
+
+3. `services.js` checked `typeof NativeTTSBridge` (without `window.`):
+   ```js
+   this.useNative = (typeof NativeTTSBridge !== 'undefined') && NativeTTSBridge.isAvailable();
+   ```
+   This always returned `'undefined'` because `const NativeTTSBridge` is scoped to `native_tts.js`'s script block.
+
+4. The fallback at line 10 (`window.NativeTTS` exists → `useNative = true`) did fire, but then `loadVoices()` at line 119 called `NativeTTSBridge.getVoices()` (again without `window.`), which threw `ReferenceError: NativeTTSBridge is not defined`.
+
+5. The `catch(e)` block logged the error but did **not** schedule a retry — voice list stayed empty. All subsequent `speak()` calls fell through to the `window.speechSynthesis` path.
 
 ### Fix Applied
 
-- Moved `native_tts.js` script tag **before** `services.js` in both `public/index.html` and `android/app/src/main/assets/index.html`.
-- This ensures `NativeTTSBridge` is defined when `AudioService` constructor runs, so the primary check passes and `loadVoices()` succeeds on first attempt.
+**First attempt (script reordering):** Moved `native_tts.js` script tag **before** `services.js` in both `public/index.html` and `android/app/src/main/assets/index.html`. This was necessary but **not sufficient** — `const` still doesn't cross script boundaries regardless of load order.
+
+**Final fix (June 17, 2026):** Changed all 5 references in `services.js` from bare `NativeTTSBridge` to `window.NativeTTSBridge`:
+
+| Line | Before | After |
+|------|--------|-------|
+| 6 | `typeof NativeTTSBridge` | `typeof window.NativeTTSBridge` |
+| 6 | `NativeTTSBridge.isAvailable()` | `window.NativeTTSBridge.isAvailable()` |
+| 119 | `NativeTTSBridge.getVoices()` | `window.NativeTTSBridge.getVoices()` |
+| 157 | `NativeTTSBridge.previewVoice(...)` | `window.NativeTTSBridge.previewVoice(...)` |
+| 235 | `NativeTTSBridge.speak(...)` | `window.NativeTTSBridge.speak(...)` |
+| 276 | `NativeTTSBridge.stop()` | `window.NativeTTSBridge.stop()` |
+
+The `window.NativeTTSBridge` global was already being set correctly by `native_tts.js` line 144 (`window.NativeTTSBridge = bridge`). The bug was that `services.js` was reading the local `const` variable instead of the `window.*` global.
+
+### Lesson for Future Agents
+
+When accessing a value defined in another `<script>` tag, always use `window.*` prefix. `const`, `let`, and `class` declarations are scoped to their individual script block and are not visible across `<script>` boundaries — only `var` and explicit `window.*` assignments are.

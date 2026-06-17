@@ -82,29 +82,35 @@ class Chat extends GameMode {
         } catch(e) {}
     }
 
+    _closeTags(html) {
+        return html.replace(/<(strong|em|li)>([^<]*)$/g, '<$1>$2</$1>');
+    }
+
     async _criticizePresentation(text, lang) {
         if (!app.llm || !app.llm.available) return [{ text: text, lang: lang, html: escapeHtml(text) }];
         try {
             var result = await app.llm.generate({
-                prompt: 'You are a chat UI designer. Format this ' + lang + ' language tutor response as beautiful chat bubbles.\n'
-                    + 'Output a JSON array. Each array item is one sentence or phrase that becomes its own bubble.\n'
-                    + 'Each item has:\n'
-                    + '- "text": raw text for TTS (plain, no HTML)\n'
-                    + '- "lang": language code for TTS engine (e.g. ja, ko, zh, en, es, fr, de, it, pt, ru)\n'
-                    + '- "html": FULL styled HTML for the bubble using inline styles. This is the only styling — style everything: background, color, border-radius, padding, font-size, line-height, margin, etc. Make it look like a modern chat app. Use dark-mode-friendly colors (dark backgrounds use lighter text).\n'
-                    + 'Output ONLY the JSON array. No markdown, no backticks, no code fences, no extra text:\n'
-                    + '[\n'
-                    + '  {"text": "...", "lang": "...", "html": "..."}\n'
-                    + ']\n\n'
+                prompt: 'Format this ' + lang + ' language tutor response as HTML for chat display.\n'
+                    + 'Use <p> for each sentence or phrase.\n'
+                    + 'Use <strong> for vocabulary words to emphasize.\n'
+                    + 'Use <em> for example phrases.\n'
+                    + 'Use <ul><li> for bullet lists.\n'
+                    + 'Output ONLY the HTML. No markdown, no backticks, no extra text.\n\n'
                     + 'Response: "' + text + '"',
-                options: { num_predict: 2048, temperature: 0 },
-                timeout: 15000
+                options: { num_predict: 1024, temperature: 0 },
+                timeout: 10000
             });
-            // Strip markdown code fences if present
-            var cleaned = result.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-            var parsed = JSON.parse(cleaned);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-            return [{ text: text, lang: lang, html: escapeHtml(text) }];
+            var cleaned = this._closeTags(result.trim());
+            var parts = cleaned.match(/<p[^>]*>[\s\S]*?<\/p>/g) || [cleaned];
+            var units = [];
+            for (var i = 0; i < parts.length; i++) {
+                var html = parts[i].trim();
+                if (!html) continue;
+                var rawText = html.replace(/<[^>]*>/g, '').trim();
+                if (!rawText) continue;
+                units.push({ text: rawText, lang: lang, html: html });
+            }
+            return units.length > 0 ? units : [{ text: text, lang: lang, html: escapeHtml(text) }];
         } catch(e) { return [{ text: text, lang: lang, html: escapeHtml(text) }]; }
     }
 
@@ -245,8 +251,9 @@ class Chat extends GameMode {
             + '<p class="mb-1.5">• The AI responds in your target language only.</p>'
             + '<p>Saves compact summaries — never full transcripts.</p>'
             + '</div>'
-            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll">' + messagesHtml + '</div>'
-            + '<div id="chat-typing" class="hidden flex justify-start px-3 mb-1"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
+            + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll min-h-[100px]">' + messagesHtml
+            + '<div id="chat-typing" class="hidden"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 mt-1 inline-block"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
+            + '</div>'
             + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
             + micBtn
             + '<input id="chat-input" type="text" placeholder="Type your message..." class="flex-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-2xl px-4 py-2.5 text-sm font-bold outline-none text-slate-700 dark:text-neutral-200 placeholder:text-slate-300 dark:placeholder:text-neutral-600 min-w-0" onkeydown="if(event.key===\'Enter\')app.game.sendMessage()">'
@@ -363,12 +370,10 @@ class Chat extends GameMode {
 
     _setBusyUI(busy) {
         this.busy = busy;
-        if (this.dom.send) this.dom.send.classList.toggle('hidden', busy);
         if (this.dom.input) {
             this.dom.input.disabled = busy;
             this.dom.input.placeholder = busy ? '' : 'Type your message...';
         }
-        if (this.dom.mic) this.dom.mic.classList.toggle('hidden', busy);
         var typing = this.root.querySelector('#chat-typing');
         if (typing) typing.classList.toggle('hidden', !busy);
     }

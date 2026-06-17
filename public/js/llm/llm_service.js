@@ -57,7 +57,7 @@ class LLMService {
         }.bind(this));
     }
 
-async _ping() {
+    async _ping() {
         try {
             await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 3000 });
             L('[LLM] Resume ping OK');
@@ -66,10 +66,27 @@ async _ping() {
         } catch (e) {
             L('[LLM] Resume ping failed — connection lost');
             this.available = false;
-            this.hasModel = false;
+            // Don't clear hasModel — it's a transient ping failure, not a model issue
             setTimeout(function() {
                 if (!this.available) this.autoDetect().catch(function() {});
             }.bind(this), 5000);
+            return false;
+        }
+    }
+
+    async _softWakeup() {
+        if (this.available && this.hasModel) return true;
+        try {
+            await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 5000 });
+            this.available = true;
+            if (!this.hasModel) {
+                this.hasModel = true;
+                this.resolvedModel = this.model || 'gemma4:31b-cloud';
+            }
+            L('[LLM] Soft wakeup OK');
+            return true;
+        } catch (e) {
+            L('[LLM] Soft wakeup failed');
             return false;
         }
     }

@@ -88,8 +88,8 @@ class Chat extends GameMode {
 
     async _criticizePresentation(text, lang) {
         if (!app.llm || !app.llm.available) return [{ text: text, lang: lang, html: escapeHtml(text) }];
-        try {
-            var result = await app.llm.generate({
+        var tryFormat = async function(timeout) {
+            return await app.llm.generate({
                 prompt: 'Format this ' + lang + ' language tutor response as HTML for chat display.\n'
                     + 'Use <p> for each sentence or phrase.\n'
                     + 'Use <strong> for vocabulary words to emphasize.\n'
@@ -98,8 +98,16 @@ class Chat extends GameMode {
                     + 'Output ONLY the HTML. No markdown, no backticks, no extra text.\n\n'
                     + 'Response: "' + text + '"',
                 options: { num_predict: 1024, temperature: 0 },
-                timeout: 10000
+                timeout: timeout
             });
+        };
+        try {
+            var result;
+            try { result = await tryFormat(20000); }
+            catch(e) {
+                L('[Chat] Critic first attempt failed, retrying with simpler prompt');
+                result = await tryFormat(30000);
+            }
             var cleaned = this._closeTags(result.trim());
             var parts = cleaned.match(/<p[^>]*>[\s\S]*?<\/p>/g) || [cleaned];
             var units = [];
@@ -252,7 +260,7 @@ class Chat extends GameMode {
             + '<p>Saves compact summaries — never full transcripts.</p>'
             + '</div>'
             + '<div id="chat-messages" class="flex-1 overflow-y-auto px-3 pb-2 thin-scroll min-h-[100px]">' + messagesHtml
-            + '<div id="chat-typing" class="hidden"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 mt-1 inline-block"><span class="inline-flex gap-1"><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
+            + '<div id="chat-typing" class="hidden"><div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 mt-1 inline-block"><span class="inline-flex gap-1 items-center"><span class="typing-label text-[10px] text-slate-400 dark:text-neutral-500 mr-1">Thinking...</span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span></span></div></div>'
             + '</div>'
             + '<div class="flex items-center gap-2 px-3 pb-3 shrink-0">'
             + micBtn
@@ -368,14 +376,20 @@ class Chat extends GameMode {
         if (el) setTimeout(function() { el.scrollTop = el.scrollHeight; }, 50);
     }
 
-    _setBusyUI(busy) {
+    _setBusyUI(busy, phase) {
         this.busy = busy;
         if (this.dom.input) {
             this.dom.input.disabled = busy;
             this.dom.input.placeholder = busy ? '' : 'Type your message...';
         }
         var typing = this.root.querySelector('#chat-typing');
-        if (typing) typing.classList.toggle('hidden', !busy);
+        if (typing) {
+            typing.classList.toggle('hidden', !busy);
+            if (busy) {
+                var label = typing.querySelector('.typing-label');
+                if (label) label.textContent = phase === 'formatting' ? 'Formatting...' : 'Thinking...';
+            }
+        }
     }
 
     async _generateOpening() {
@@ -389,7 +403,7 @@ class Chat extends GameMode {
             }
             return;
         }
-        this._setBusyUI(true);
+        this._setBusyUI(true, 'thinking');
         var promptData = this._buildOpeningPrompt();
         this.abortController = new AbortController();
         var self = this;
@@ -402,6 +416,7 @@ class Chat extends GameMode {
                 timeout: 15000
             });
             if (!this.root || !this.root.isConnected) return;
+            this._setBusyUI(true, 'formatting');
             var units = await this._criticizePresentation(fullText, this._getTargetLang());
             this.messages.push({ role: 'assistant', text: fullText, units: units });
             this._updateMessages();
@@ -430,13 +445,16 @@ class Chat extends GameMode {
         if (!text) return;
 
         if (!app.llm || !app.llm.available || !app.llm.hasModel) {
-            if (app.ui) app.ui.toast('AI is not available. Check Settings > AI.', 'error');
-            return;
+            var woke = app.llm._softWakeup ? await app.llm._softWakeup() : false;
+            if (!woke) {
+                if (app.ui) app.ui.toast('AI is not available. Check Settings > AI.', 'error');
+                return;
+            }
         }
 
         this.messages.push({ role: 'user', text: text });
         input.value = '';
-        this._setBusyUI(true);
+        this._setBusyUI(true, 'thinking');
         this._updateMessages();
         this._scrollToBottom();
 
@@ -462,6 +480,7 @@ class Chat extends GameMode {
                 this._saveMemory(parsed.json);
             }
 
+            this._setBusyUI(true, 'formatting');
             var units = await this._criticizePresentation(cleaned, this._getTargetLang());
             this.messages.push({ role: 'assistant', text: cleaned, units: units });
 

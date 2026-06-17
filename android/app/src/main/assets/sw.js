@@ -12,6 +12,7 @@ const ASSETS_TO_CACHE = [
   './js/config.js',
   './js/data.js',
   './js/escape.js',
+  './js/ollama_config.js',
   './js/firebase.js',
   './js/game_core.js',
   './js/game_flashcard.js',

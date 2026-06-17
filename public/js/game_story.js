@@ -25,6 +25,10 @@ class Story extends GameMode {
         this._currentCompositeKey = null;
         this._currentStoryLang = null;
         this._generationId = 0;
+        this._storyLevel = (function(self) {
+            var p = app.store.prefs;
+            return p.chatLevel || 'B1';
+        })(this);
 
         this.render();
     }
@@ -103,7 +107,8 @@ class Story extends GameMode {
     }
 
     _getTargetLang() {
-        return app.store.prefs.sentencesQ || 'ja';
+        var p = app.store.prefs;
+        return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
     }
 
     destroy() {

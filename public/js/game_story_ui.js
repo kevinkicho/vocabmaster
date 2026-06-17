@@ -1,12 +1,49 @@
 // Extracted UI methods for Story mode
 Object.assign(Story.prototype, {
 
+// --- Language-aware level framework ---
+_getLevelsForLang(lang) {
+        if (lang === 'ja') return [
+            { code: 'N5', desc: 'Beginner — basic grammar, simple sentences', framework: 'JLPT' },
+            { code: 'N4', desc: 'Elementary — everyday conversations, past tense', framework: 'JLPT' },
+            { code: 'N3', desc: 'Intermediate — opinions, newspaper headlines', framework: 'JLPT' },
+            { code: 'N2', desc: 'Upper intermediate — complex texts, nuanced speech', framework: 'JLPT' },
+            { code: 'N1', desc: 'Advanced — academic, professional, native-like', framework: 'JLPT' },
+        ];
+        if (lang === 'zh') return [
+            { code: 'HSK1', desc: 'Beginner — basic phrases, pinyin', framework: 'HSK' },
+            { code: 'HSK2', desc: 'Elementary — simple conversations', framework: 'HSK' },
+            { code: 'HSK3', desc: 'Intermediate — daily topics, 600 words', framework: 'HSK' },
+            { code: 'HSK4', desc: 'Upper intermediate — news, 1200 words', framework: 'HSK' },
+            { code: 'HSK5', desc: 'Advanced — complex texts, 2500 words', framework: 'HSK' },
+            { code: 'HSK6', desc: 'Proficient — fluent, 5000+ words', framework: 'HSK' },
+        ];
+        if (lang === 'ko') return [
+            { code: 'TOPIK1', desc: 'Beginner — basic greetings, hangul', framework: 'TOPIK' },
+            { code: 'TOPIK2', desc: 'Elementary — daily life, simple sentences', framework: 'TOPIK' },
+            { code: 'TOPIK3', desc: 'Intermediate — opinions, social topics', framework: 'TOPIK' },
+            { code: 'TOPIK4', desc: 'Upper intermediate — news, academic texts', framework: 'TOPIK' },
+            { code: 'TOPIK5', desc: 'Advanced — professional, nuanced speech', framework: 'TOPIK' },
+        ];
+        return [
+            { code: 'A1', desc: 'Beginner — simple words, short sentences', framework: 'CEFR' },
+            { code: 'A2', desc: 'Elementary — past tense, everyday topics', framework: 'CEFR' },
+            { code: 'B1', desc: 'Intermediate — opinions, travel situations', framework: 'CEFR' },
+            { code: 'B2', desc: 'Upper intermediate — idioms, fluent topics', framework: 'CEFR' },
+            { code: 'C1', desc: 'Advanced — complex ideas, academic language', framework: 'CEFR' },
+            { code: 'C2', desc: 'Proficient — near-native, subtle nuance', framework: 'CEFR' },
+        ];
+    },
+
 // --- Story-specific header with session progress ---
 _setupStoryHeader() {
         var adminBtn = (app.notes && app.notes.isAdmin) ? `<button onclick="app.game._deleteStoryFromRTDB()" class="w-9 h-9 bg-white dark:bg-neutral-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 dark:text-rose-400 rounded-full flex items-center justify-center active:scale-90 transition-all border border-slate-200 dark:border-neutral-700 shadow-sm mr-2" title="Delete this story"><i class="ph-bold ph-trash text-sm"></i></button>` : '';
         this.dom.header.innerHTML = `
             <div class="flex justify-between items-center mb-2 shrink-0 w-full px-1 min-h-[50px]">
-                <div class="flex-1"></div>
+                <div class="flex items-center gap-1">
+                    <span id="story-level-badge" class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-neutral-700 dark:text-indigo-300 ring-1 ring-indigo-500/40 text-indigo-600 cursor-pointer active:scale-90 transition-all">${escapeHtml(this._storyLevel)}</span>
+                    <div id="story-level-popover" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[280px] w-auto break-words whitespace-normal leading-relaxed"></div>
+                </div>
                 <div class="flex items-center">
                     ${adminBtn}
                     <button onclick="app.game._regenerateStory()" class="w-9 h-9 bg-white dark:bg-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all border border-slate-200 dark:border-neutral-700 shadow-sm mr-2" title="Regenerate story with same words">
@@ -25,6 +62,59 @@ _setupStoryHeader() {
                 </div>
             </div>`;
         this.dom.headerScore = this.dom.header.querySelector('.score-display');
+        this._setupStoryLevelPicker();
+    },
+
+    _setupStoryLevelPicker() {
+        var badge = document.getElementById('story-level-badge');
+        var popover = document.getElementById('story-level-popover');
+        if (!badge || !popover) return;
+        var lang = this._getTargetLang();
+        var levels = this._getLevelsForLang(lang);
+        var current = this._storyLevel;
+        var framework = levels.length > 0 ? levels[0].framework : 'CEFR';
+        var html = '<p class="text-[9px] font-bold text-indigo-300 mb-1.5">AI Tutor Level</p>';
+        for (var i = 0; i < levels.length; i++) {
+            var lv = levels[i];
+            var active = lv.code === current ? ' bg-indigo-600 text-white' : ' hover:bg-slate-700';
+            html += '<div class="flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors' + active + '" data-level="' + lv.code + '"><span class="font-bold text-[11px] w-5 shrink-0">' + lv.code + '</span><span class="text-[10px] text-slate-300 whitespace-nowrap">' + lv.desc + '</span></div>';
+        }
+        html += '<p class="text-[8px] text-slate-500 mt-1.5 border-t border-slate-700 pt-1">' + framework + ' — based on ' + (framework === 'JLPT' ? 'Japanese Language Proficiency Test' : framework === 'HSK' ? 'Hanyu Shuiping Kaoshi' : framework === 'TOPIK' ? 'Test of Proficiency in Korean' : 'Common European Framework of Reference for Languages') + '</p>';
+        popover.innerHTML = html;
+        var self = this;
+        badge.onclick = function(e) {
+            e.stopPropagation();
+            popover.classList.toggle('hidden');
+            if (popover.classList.contains('hidden')) return;
+            requestAnimationFrame(function() {
+                var rect = badge.getBoundingClientRect();
+                var pw = popover.offsetWidth;
+                var ph = popover.offsetHeight;
+                var left = rect.left + rect.width / 2 - pw / 2;
+                var top = rect.bottom + 4;
+                if (left + pw > window.innerWidth) left = window.innerWidth - pw - 8;
+                if (left < 8) left = 8;
+                if (top + ph > window.innerHeight) top = rect.top - ph - 4;
+                if (top < 8) top = 8;
+                popover.style.left = left + 'px';
+                popover.style.top = top + 'px';
+                popover.style.transform = 'none';
+            });
+        };
+        popover.querySelectorAll('[data-level]').forEach(function(el) {
+            el.onclick = function() {
+                var level = el.dataset.level;
+                self._storyLevel = level;
+                if (badge) badge.textContent = level;
+                popover.classList.add('hidden');
+                if (app.ui) app.ui.showToast('Level set to ' + level + ' — next story will use this level', 'info');
+            };
+        });
+        document.addEventListener('click', function _closeStoryLevelPopover(e) {
+            if (popover && !popover.classList.contains('hidden') && !e.target.closest('#story-level-badge') && !e.target.closest('#story-level-popover')) {
+                popover.classList.add('hidden');
+            }
+        });
     },
 
     _updateProgress() {

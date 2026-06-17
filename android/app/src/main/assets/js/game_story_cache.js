@@ -58,7 +58,7 @@ async _loadCacheThenStart() {
             storyPart: cached.story,
             translation: cached.translation || null,
             questions: cached.questions,
-            lang: this._getTargetLang(),
+            lang: cached._lang || this._getTargetLang(),
             fromCache: true,
             _key: cached._key || null
         };
@@ -88,7 +88,7 @@ async _prefetchNext() {
 
             const words = await this._pickWords(4);
             const lang = this._getTargetLang();
-            const storyLevel = words.map(function(w) { return w.level; }).find(Boolean) || null;
+            const storyLevel = this._storyLevel;
             if (words.length === 0) { this._prefetching = false; return; }
 
             var result = await app.llm.generateStory(words, lang, storyLevel);

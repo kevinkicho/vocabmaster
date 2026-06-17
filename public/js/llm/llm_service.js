@@ -14,7 +14,7 @@
  *
  * === Connection health ===
  *   _ping() runs on visibilitychange (app resume). 3s timeout /api/tags.
- *   On failure: clears available+hasModel flags, schedules autoDetect() in 5s.
+ *   On failure: clears available flag, schedules autoDetect() in 5s.
  *   On success: restores available=true.
  *
  * See docs/architecture.md §1 for full pipeline description.
@@ -66,48 +66,11 @@ class LLMService {
         } catch (e) {
             L('[LLM] Resume ping failed — connection lost');
             this.available = false;
-            // Don't clear hasModel — it's a transient ping failure, not a model issue
             setTimeout(function() {
                 if (!this.available) this.autoDetect().catch(function() {});
             }.bind(this), 5000);
             return false;
         }
-    }
-
-    async _softWakeup() {
-        if (this.available && this.hasModel) return true;
-        try {
-            await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 5000 });
-            this.available = true;
-            if (!this.hasModel) {
-                this.hasModel = true;
-                this.resolvedModel = this.model || 'gemma4:31b-cloud';
-            }
-            L('[LLM] Soft wakeup OK');
-            return true;
-        } catch (e) {
-            L('[LLM] Soft wakeup failed');
-            return false;
-        }
-    }
-
-    _pickBestLocalModel() {
-        var cands = this.availableModels || [];
-        var preferred = 'gemma4:31b-cloud';
-        var found = cands.find(function(m) { return m.toLowerCase() === preferred; });
-        if (found) return found;
-        if (cands.length === 0) return preferred;
-        if (this.resolvedModel && this.resolvedModel === preferred) return preferred;
-        var localCands = cands.filter(function(m) { return !m.toLowerCase().includes('cloud') && !m.includes('ollama.com'); });
-        if (localCands.length > 0) {
-            var prefOrder = ['gemma2:27b', 'llama3.1:70b', 'mistral-nemo:12b'];
-            for (var i = 0; i < prefOrder.length; i++) {
-                var match = localCands.find(function(m) { return m.toLowerCase() === prefOrder[i]; });
-                if (match) return match;
-            }
-            return localCands[0];
-        }
-        return cands[0];
     }
 
     async _fetch(url, options) {
@@ -238,37 +201,11 @@ class LLMService {
         L('[LLM] autoDetect endpoint:', this.endpoint);
 
         var ok = await this.checkConnection();
-        L('[LLM] checkConnection result:', ok, 'models:', JSON.stringify(this.availableModels));
+        L('[LLM] checkConnection result:', ok);
 
-        var preferred = 'gemma4:31b-cloud';
-        var inTags = this.availableModels.some(function(m) { return m.toLowerCase() === preferred; });
-
-        if (ok && this.availableModels.length > 0) {
-            if (inTags) {
-                this.resolvedModel = preferred;
-                this.hasModel = true;
-                L('[LLM] Found', preferred, 'in tags');
-            } else {
-                L('[LLM]', preferred, 'not in tags — probing directly...');
-                try {
-                    var resp = await this._ollamaRequest('/api/generate', {
-                        model: preferred,
-                        prompt: 'Say ok',
-                        stream: false
-                    }, { stream: false, timeout: 10000 });
-                    if (resp && resp.response) {
-                        this.resolvedModel = preferred;
-                        this.hasModel = true;
-                        L('[LLM]', preferred, 'responds — using it');
-                    } else {
-                        throw new Error('empty response');
-                    }
-                } catch (e) {
-                    L('[LLM]', preferred, 'not reachable, falling back to local model');
-                    this.resolvedModel = this._pickBestLocalModel();
-                    this.hasModel = true;
-                }
-            }
+        if (ok) {
+            this.resolvedModel = 'gemma4:31b-cloud';
+            this.hasModel = true;
             L('[LLM] Ready with model:', this.resolvedModel);
             this._showAIWelcome();
             if (app && app.ui) app.ui.renderAISettings();
@@ -292,12 +229,12 @@ class LLMService {
         }
     }
 
-    _enqueue(fn) {
+    _enqueue(fn, timeout) {
         if (this._queue.length >= 50) {
             return Promise.reject(new Error('LLM queue full (50 queued), try again later'));
         }
         return new Promise(function(resolve, reject) {
-            this._queue.push({ fn: fn, resolve: resolve, reject: reject });
+            this._queue.push({ fn: fn, resolve: resolve, reject: reject, timeout: timeout });
             this._processQueue();
         }.bind(this));
     }
@@ -306,11 +243,25 @@ class LLMService {
         while (this._activeRequests < this._maxConcurrent && this._queue.length > 0) {
             var item = this._queue.shift();
             this._activeRequests++;
+            var timeoutId = null;
+            var timedOut = false;
+            if (item.timeout) {
+                timeoutId = setTimeout(function() {
+                    timedOut = true;
+                    item.reject(new Error('LLM request timed out after ' + item.timeout + 'ms'));
+                    this._activeRequests--;
+                    this._processQueue();
+                }.bind(this), item.timeout + 5000);
+            }
             item.fn().then(function(result) {
+                if (timedOut) return;
+                if (timeoutId) clearTimeout(timeoutId);
                 item.resolve(result);
                 this._activeRequests--;
                 this._processQueue();
             }.bind(this), function(err) {
+                if (timedOut) return;
+                if (timeoutId) clearTimeout(timeoutId);
                 item.reject(err);
                 this._activeRequests--;
                 this._processQueue();
@@ -319,14 +270,10 @@ class LLMService {
     }
 
     async generate(opts) {
-        var model = this.resolvedModel || this.model;
-        if (!model && this.availableModels && this.availableModels.length > 0) {
-            model = this._pickBestLocalModel();
-            this.resolvedModel = model;
-        }
+        var model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
 
         var body = {
-            model: model || 'gemma4:31b-cloud',
+            model: model,
             prompt: opts.prompt,
             stream: false
         };
@@ -347,7 +294,7 @@ class LLMService {
                 L('[LLM] Ollama generate failed:', err.message);
                 throw err;
             }
-        }.bind(this));
+        }.bind(this), opts.timeout || 45000);
     }
 
     async streamGenerate(opts, onToken) {
@@ -358,14 +305,10 @@ class LLMService {
             return;
         }
 
-        var model = this.resolvedModel || this.model;
-        if (!model && this.availableModels && this.availableModels.length > 0) {
-            model = this._pickBestLocalModel();
-            this.resolvedModel = model;
-        }
+        var model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
 
         var body = {
-            model: model || 'gemma4:31b-cloud',
+            model: model,
             prompt: opts.prompt,
             stream: true
         };
@@ -386,6 +329,13 @@ class LLMService {
             } catch (err) {
                 L('[LLM] Ollama streamGenerate failed:', err.message);
                 throw err;
+            }
+
+            if (!resp.body) {
+                L('[LLM] streamGenerate: resp.body is null, falling back to non-streaming');
+                var fullText = await this.generate(opts);
+                if (onToken) onToken(fullText);
+                return fullText;
             }
 
             var reader = resp.body.getReader();
@@ -425,7 +375,7 @@ class LLMService {
                 } catch (e) { L('[LLM] stream parse error:', e); }
             }
             return fullText;
-        }.bind(this));
+        }.bind(this), opts.timeout || 180000);
     }
 
     _showToast(msg, icon, iconColor) {

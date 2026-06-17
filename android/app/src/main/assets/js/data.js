@@ -82,7 +82,36 @@ class DataService {
             });
         }
 
+        // Tag filter
+        if (prefs && prefs.tagFilter && !prefs.tagFilter.includes('all')) {
+            const selectedTags = prefs.tagFilter;
+            list = list.filter(item => {
+                if (item.tags && item.tags.some(t => selectedTags.includes(t))) return true;
+                return false;
+            });
+        }
+
         return list.length > 0 ? list : this.list;
+    }
+
+    getAllTags() {
+        const tagSet = new Set();
+        for (const item of this.list) {
+            if (item && item.tags) {
+                for (const t of item.tags) {
+                    tagSet.add(t);
+                }
+            }
+        }
+        const order = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6','common','uncommon','rare'];
+        return Array.from(tagSet).sort((a, b) => {
+            const ia = order.indexOf(a);
+            const ib = order.indexOf(b);
+            if (ia !== -1 && ib !== -1) return ia - ib;
+            if (ia !== -1) return -1;
+            if (ib !== -1) return 1;
+            return a.localeCompare(b);
+        });
     }
     
     resetSession() {

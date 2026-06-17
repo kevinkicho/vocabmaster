@@ -394,9 +394,9 @@ class GameMode {
 
     getLevelBadge(item) {
         if (!item) return '';
-        const jlptLevels = ['N5','N4','N3','N2','N1'];
+        const frameworkLevels = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'];
         const tags = item.tags || [];
-        const level = tags.find(t => jlptLevels.includes(t));
+        const level = tags.find(t => frameworkLevels.includes(t));
         if (!level) return '';
         const color = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors[level]) ? LEVEL_CONFIG.colors[level] : '#6366f1';
         return `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold text-white ml-1.5" style="background:${color}">${escapeHtml(level)}</span>`;

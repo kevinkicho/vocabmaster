@@ -103,7 +103,7 @@ class DataService {
                 }
             }
         }
-        const order = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','common','uncommon','rare'];
+        const order = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6','common','uncommon','rare'];
         return Array.from(tagSet).sort((a, b) => {
             const ia = order.indexOf(a);
             const ib = order.indexOf(b);

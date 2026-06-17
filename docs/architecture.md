@@ -257,7 +257,7 @@ Admin controls:
 On `visibilitychange` (app returns to foreground):
 1. `_ping()` does `/api/tags` with 3s timeout
 2. If success: sets `this.available = true`
-3. If failure: sets `this.available = false`, `this.hasModel = false`, schedules `autoDetect()` retry in 5s
+3. If failure: sets `this.available = false`, schedules `autoDetect()` retry in 5s
 
 This prevents stale connection state from causing silent hangs after app resume.
 
@@ -265,8 +265,7 @@ This prevents stale connection state from causing silent hangs after app resume.
 
 - **Never use mock data.** RTDB is the only data source. CSV and `createMockData()` were removed.
 - **Never extend timeouts to fix hangs.** Find the root cause (queue blocking, truncated tokens, CORS fallback).
-- **`additionalProperties: false` removed from schemas** — it causes validation failures on minor extra fields.
-- **Critic always runs** for complex schemas. It's made efficient via compact prompts, not by skipping it.
+- **`additionalProperties: false` is set on all schemas** — prevents unexpected fields from passing validation.
 - **`_enqueue` allows max 2 concurrent** — not serial. This prevents one slow request from blocking all others.
 - **Capacitor proxy does not support `AbortSignal`** — timeout is enforced via proxy's own `readTimeout`.
 - **`num_predict` is a ceiling, not a budget** — model stops at EOS. Higher ceilings don't slow normal outputs.

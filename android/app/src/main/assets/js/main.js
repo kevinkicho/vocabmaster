@@ -352,6 +352,7 @@ class App {
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
+                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'amber', ()=>new Chat('chat'))}
                     </div>
 
                     <!-- AI section is *always* rendered (no app.llm guard) so that Story Mode and AI Cloze
@@ -370,10 +371,13 @@ class App {
                     <div class="mt-1 px-2">
                         <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
                     </div>
+
+                    <!-- Tag Filter -->
+                    <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            if(this.fitter) this.fitter.fitAll().then(() => view.classList.add('visible')).catch(()=>view.classList.add('visible'));
-            else view.classList.add('visible');
+            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }).catch(()=>{ view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); });
+            else { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }
         });
     }
 
@@ -391,6 +395,7 @@ class App {
         else if (mode === 'sentences') this.game = new Sentences('sentences');
         else if (mode === 'story') this.game = new Story('story');
         else if (mode === 'grammar') this.game = new Grammar('grammar');
+        else if (mode === 'chat') this.game = new Chat('chat');
     }
 
     launch(fn) { 

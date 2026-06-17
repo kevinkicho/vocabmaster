@@ -21,7 +21,23 @@ class UIManager {
         });
     }
 
-    toast(msg, type = 'info') {
+    _syncRadioVisual(name) {
+        const group = document.querySelectorAll(`input[name="${name}"]`);
+        group.forEach(function(r) {
+            const span = r.nextElementSibling;
+            if (span) {
+                if (r.checked) {
+                    span.classList.add('bg-white', 'dark:bg-neutral-600', 'text-slate-700', 'dark:text-white', 'shadow-sm');
+                    span.classList.remove('text-slate-400');
+                } else {
+                    span.classList.remove('bg-white', 'dark:bg-neutral-600', 'text-slate-700', 'dark:text-white', 'shadow-sm');
+                    span.classList.add('text-slate-400');
+                }
+            }
+        });
+    }
+
+    showToast(msg, type = 'info') {
         const bar = document.getElementById('status-bar');
         if (!bar) return;
         const orig = bar.dataset.origText || bar.innerText;
@@ -74,7 +90,26 @@ class UIManager {
     loadSettings() {
         const setChk = (id, val) => { const el = document.getElementById(id); if(el) el.checked = val; }; 
         const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; }; 
-        const setRad = (name, val) => { const el = document.querySelector(`input[name="${name}"][value="${val}"]`); if(el) el.checked = true; };
+        const setRad = (name, val) => { 
+            const el = document.querySelector(`input[name="${name}"][value="${val}"]`); 
+            if(el) {
+                el.checked = true;
+                // Sync visual state for radio button groups (peer-checked CSS is unreliable when set programmatically)
+                const group = document.querySelectorAll(`input[name="${name}"]`);
+                group.forEach(function(r) {
+                    const span = r.nextElementSibling;
+                    if (span) {
+                        if (r.checked) {
+                            span.classList.add('bg-white', 'dark:bg-neutral-600', 'text-slate-700', 'dark:text-white', 'shadow-sm');
+                            span.classList.remove('text-slate-400');
+                        } else {
+                            span.classList.remove('bg-white', 'dark:bg-neutral-600', 'text-slate-700', 'dark:text-white', 'shadow-sm');
+                            span.classList.add('text-slate-400');
+                        }
+                    }
+                });
+            }
+        };
         const p = this.store.prefs;
         try { 
             const settingsList = document.getElementById('settings-list');
@@ -193,8 +228,14 @@ class UIManager {
         document.documentElement.style.setProperty('--font-weight-base', wMap[p.fontWeight] || '400');
     }
 
+    _getActiveLang() {
+        var p = this.store.prefs;
+        return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
+    }
+
     renderThemeGrid() { const container = document.getElementById('theme-grid'); if(!container) return; const themes = [{ id: 'classic', color: '#6366f1', label: 'Classic' }, { id: 'sakura',  color: '#ec4899', label: 'Sakura' }, { id: 'ocean',   color: '#14b8a6', label: 'Ocean' }, { id: 'coffee',  color: '#f59e0b', label: 'Coffee' }, { id: 'cyber',   color: '#06b6d4', label: 'Cyber' }]; const cur = this.store.prefs.theme || 'classic'; container.innerHTML = themes.map(t => { const isActive = t.id === cur; const ring = isActive ? `ring-2 ring-offset-2 ring-${t.id === 'classic' ? 'indigo' : 'gray'}-400 dark:ring-offset-neutral-800` : ''; return `<button onclick="app.store.setTheme('${t.id}')" class="flex flex-col items-center gap-1 group"><div class="w-8 h-8 rounded-full shadow-sm border border-slate-200 dark:border-neutral-600 ${ring} transition-all active:scale-95" style="background-color: ${t.color}"></div><span class="text-[9px] font-bold text-slate-500 dark:text-neutral-400 ${isActive?'text-indigo-600 dark:text-indigo-400':''}">${t.label}</span></button>`; }).join(''); }
-    renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container || container.childElementCount > 0) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; const src = document.getElementById('preset-source'); const tgt = document.getElementById('preset-target'); if(src) src.value = 'en'; if(tgt) tgt.value = 'ja'; }
+    _getActiveLang() { var p = this.store.prefs; return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja'; }
+    renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container || container.childElementCount > 0) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; const src = document.getElementById('preset-source'); const tgt = document.getElementById('preset-target'); if(src) src.value = app.store.prefs.presetSource || 'en'; if(tgt) tgt.value = app.store.prefs.presetTarget || 'ja'; }
     renderLevelFilter() {
         const container = document.getElementById('level-filter-container');
         if (!container) return;
@@ -209,7 +250,7 @@ class UIManager {
             <div class="flex flex-wrap gap-1.5 mb-2">
             <button data-level="all" class="level-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>`;
         for (const group of LEVEL_CONFIG.groups) {
-            const isRelevant = group.langs.some(l => p.flashFront === l || p.flashBack1 === l || p.flashBack2 === l || p.sentencesQ === l || p.quizQ === l || p.tfFront === l || p.voiceDispFront === l);
+            var isRelevant = group.langs.some(function(l) { return l === this._getActiveLang(); }.bind(this));
             if (!isRelevant) continue;
             html += `<span class="text-[9px] font-black text-slate-400 mx-1">${group.label}</span>`;
             for (const lvl of group.levels) {
@@ -217,14 +258,13 @@ class UIManager {
                 const color = LEVEL_CONFIG.colors[lvl] || '#6366f1';
                 const btnClass = isActive ? 'text-white border-transparent shadow-sm' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 border-slate-200 dark:border-neutral-700';
                 const style = isActive ? `background:${color}; border-color:${color}` : '';
-                html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}" style="${style}">${lvl}</button>`;
+                html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 whitespace-nowrap ${btnClass}" style="${style}">${lvl}</button>`;
             }
         }
         const unassignedActive = selected.includes('unassigned');
         const unClass = unassignedActive ? 'bg-slate-600 text-white border-slate-600' : 'bg-white dark:bg-neutral-700 text-slate-400 dark:text-neutral-500 border-slate-200 dark:border-neutral-600';
         html += `<button data-level="unassigned" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${unClass}">Untagged</button>`;
-        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>`;
-        html += `<p class="text-[8px] text-slate-400 dark:text-neutral-600 mt-1 italic">TOPIK &amp; CEFR levels are approximated from JLPT proficiency</p></div>`;
+        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p></div>`;
         container.innerHTML = html;
         container.querySelectorAll('.level-filter-btn').forEach(btn => {
             btn.onclick = () => { this.toggleLevel(btn.dataset.level); };
@@ -257,16 +297,26 @@ class UIManager {
         const p = this.store.prefs;
         const selected = p.tagFilter || ['all'];
         const allBtnClass = selected.includes('all') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
-        const groups = [
-            { label: 'JLPT', tags: ['N5','N4','N3','N2','N1'] },
-            { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'], stripPrefix: 'HSK' },
-            { label: 'CEFR', tags: ['A1','A2','B1','B2','C1'] },
-            { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'], stripPrefix: 'TOPIK' },
-            { label: 'Frequency', tags: ['common','uncommon','rare'] },
+        var currentLang = this._getActiveLang();
+        var allGroups = [
+            { label: 'JLPT', tags: ['N5','N4','N3','N2','N1'], langs: ['ja','ja_furi','ja_roma'] },
+            { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'], langs: ['zh','zh_pin'], stripPrefix: 'HSK' },
+            { label: 'CEFR', tags: ['A1','A2','B1','B2','C1'], langs: ['en','es','fr','de','it','pt','ru','ru_tr'] },
+            { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'], langs: ['ko','ko_roma'], stripPrefix: 'TOPIK' },
+            { label: 'Frequency', tags: ['common','uncommon','rare'], langs: null },
         ];
+        var groups = allGroups.filter(function(g) {
+            return !g.langs || g.langs.indexOf(currentLang) !== -1;
+        });
         let html = `<div class="bg-white dark:bg-neutral-900 rounded-2xl p-3 border border-slate-200 dark:border-neutral-800">
             <p class="text-[9px] uppercase font-bold text-indigo-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-exam"></i> Exam Level <span class="text-[7px] text-slate-300 dark:text-neutral-600 italic font-normal normal-case">(Basic → Advanced)</span> <i class="ph-bold ph-info text-slate-400 cursor-pointer relative" id="exam-level-info"></i></p>
-            <div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px]">Levels are approximate — not all entries have every framework tag</div>
+            <div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-4 py-3 shadow-lg max-w-[280px] w-auto leading-relaxed">
+              <p class="mb-1"><strong class="text-indigo-300">JLPT</strong> — Japanese-Language Proficiency Test (N5→N1)</p>
+              <p class="mb-1"><strong class="text-indigo-300">HSK</strong> — Hanyu Shuiping Kaoshi (HSK1→HSK6)</p>
+              <p class="mb-1"><strong class="text-indigo-300">TOPIK</strong> — Test of Proficiency in Korean (TOPIK1→TOPIK6)</p>
+              <p class="mb-1"><strong class="text-indigo-300">CEFR</strong> — Common European Framework (A1→C2)</p>
+              <p class="text-slate-400 mt-1">Not all entries have every framework tag.</p>
+            </div>
             <div class="flex items-center justify-between mb-3">
                 <p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-indigo-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>
                 <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>
@@ -290,16 +340,26 @@ class UIManager {
         section.innerHTML = html;
         const infoIcon = document.getElementById('exam-level-info');
         if (infoIcon) {
-            infoIcon.onclick = (e) => {
+            infoIcon.onclick = function(e) {
                 e.stopPropagation();
-                const tooltip = document.getElementById('exam-level-tooltip');
-                if (tooltip) {
-                    tooltip.classList.toggle('hidden');
-                    const rect = infoIcon.getBoundingClientRect();
-                    tooltip.style.top = (rect.bottom + 4) + 'px';
-                    tooltip.style.left = (rect.left + rect.width / 2) + 'px';
-                    tooltip.style.transform = 'translateX(-50%)';
-                }
+                var tooltip = document.getElementById('exam-level-tooltip');
+                if (!tooltip) return;
+                tooltip.classList.toggle('hidden');
+                if (tooltip.classList.contains('hidden')) return;
+                requestAnimationFrame(function() {
+                    var rect = infoIcon.getBoundingClientRect();
+                    var tw = tooltip.offsetWidth;
+                    var th = tooltip.offsetHeight;
+                    var left = rect.left + rect.width / 2 - tw / 2;
+                    var top = rect.bottom + 4;
+                    if (left + tw > window.innerWidth) left = window.innerWidth - tw - 8;
+                    if (left < 8) left = 8;
+                    if (top + th > window.innerHeight) top = rect.top - th - 4;
+                    if (top < 8) top = 8;
+                    tooltip.style.left = left + 'px';
+                    tooltip.style.top = top + 'px';
+                    tooltip.style.transform = 'none';
+                });
             };
             document.addEventListener('click', function _closeExamTooltip(e) {
                 const tooltip = document.getElementById('exam-level-tooltip');
@@ -488,7 +548,7 @@ class UIManager {
             btn.classList.add('bg-emerald-500');
             setTimeout(() => { btn.innerText = origText; btn.classList.remove('bg-emerald-500'); }, 1500);
         } catch(e) {
-            app.ui.toast("Save failed", "error");
+            app.ui.showToast("Save failed", "error");
             btn.innerText = origText;
         }
     }
@@ -496,7 +556,7 @@ class UIManager {
     closeEditModal() { document.getElementById('modal-edit').classList.add('hidden'); }
     async saveEdit() { if(!app.game || app.game.i === undefined) return; const currentItem = app.game.list[app.game.i]; const updates = { ...currentItem }; if(typeof LANG_CONFIG !== 'undefined') { LANG_CONFIG.forEach(conf => { const el = document.getElementById(`edit-field-${conf.key}`); if(el) updates[conf.key] = el.value.trim(); if(conf.exKey) { const elEx = document.getElementById(`edit-field-${conf.exKey}`); if(elEx) updates[conf.exKey] = elEx.value.trim(); } }); } const btn = document.querySelector('#modal-edit button[onclick="app.ui.saveEdit()"]'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i> Saving...`; btn.disabled = true; try { await app.data.saveCorrection(updates); this.closeEditModal(); 
         if (app.game && typeof app.game.update === 'function') { app.game.update(); } 
-        const bar = document.getElementById('status-bar'); bar.innerText = "Correction Saved!"; bar.classList.add('text-emerald-500'); setTimeout(() => bar.classList.remove('text-emerald-500'), 2000); } catch(e) { app.ui.toast("Save failed: " + e.message, "error"); } finally { btn.innerHTML = origText; btn.disabled = false; } }
+        const bar = document.getElementById('status-bar'); bar.innerText = "Correction Saved!"; bar.classList.add('text-emerald-500'); setTimeout(() => bar.classList.remove('text-emerald-500'), 2000); } catch(e) { app.ui.showToast("Save failed: " + e.message, "error"); } finally { btn.innerHTML = origText; btn.disabled = false; } }
 
     showTooltip(e, char, isLongPress = false) { 
         if (app.store.prefs.hanziEnableTooltip === false) return; 
@@ -1170,7 +1230,7 @@ class UIManager {
 
     dumpVoices() {
         const voices = app.audio ? app.audio.voices : [];
-        if (voices.length === 0) { app.ui.toast('No voices loaded yet. Tap Detect first, then Dump.', 'error'); return; }
+        if (voices.length === 0) { app.ui.showToast('No voices loaded yet. Tap Detect first, then Dump.', 'error'); return; }
         const sample = voices.slice(0, 10).map(v => ({
             name: v.name,
             lang: v.lang,

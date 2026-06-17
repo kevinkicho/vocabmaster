@@ -1,0 +1,13 @@
+=== Japanese (ja) ===
+Opening greeting sentences: 1
+Opening text: "こんにちは！今日は天気について話しましょう。..."
+After prompt 1 ("天気について話したいです。..."): 2 sentences, 1 user bubbles
+After prompt 2 ("いい天気ですね。どこかへ行きますか？..."): 3 sentences, 2 user bubbles
+After prompt 3 ("公園へ散歩に行きます。..."): 4 sentences, 3 user bubbles
+Tap-to-TTS: clicked first sentence (no crash)
+Long-press translation: triggered (no crash)
+Translation UI appeared correctly
+Info tooltip visible: true
+Header contains scenario: false
+Header contains level: true
+

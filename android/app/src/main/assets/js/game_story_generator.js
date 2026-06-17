@@ -3,6 +3,17 @@ Object.assign(Story.prototype, {
 
 // --- Main flow ---
 async startStory(forceAnew = false) {
+        if (app.audio) app.audio.cancel();
+        var currentLang = this._getTargetLang();
+        if (this._currentStoryLang && this._currentStoryLang !== currentLang) {
+            if (app.llm && app.llm.available && app.llm.hasModel) {
+                this._cacheLoaded = false;
+                this._cachedStories = [];
+                this._cachedIndex = 0;
+                this._prefetched = null;
+            }
+            this._currentStoryLang = null;
+        }
         this._generationId++;
         var genId = this._generationId;
         this.storyNum++;
@@ -17,6 +28,7 @@ async startStory(forceAnew = false) {
                 this.questions = cached.questions;
                 this.qIndex = 0;
                 this._currentStoryTranslation = cached.translation || null;
+                this._currentStoryLang = cached.lang;
                 this._showStoryWithQuestions(cached.storyPart, cached.lang);
                 return;
             }
@@ -82,9 +94,17 @@ async startStory(forceAnew = false) {
         const lang = this._getTargetLang();
         const langName = app.llm._getLangName(lang);
         const wordList = this.storyWords.map(w => w[lang]).filter(Boolean);
-        const storyLevel = this.storyWords.map(w => w.level).find(Boolean) || null;
+        var self = this;
+        var langLevels = this._getLevelsForLang(lang);
+        var langCodes = langLevels.map(function(l) { return l.code; });
+        var foundLevels = this.storyWords.map(function(w) {
+            return (w.tags || []).find(function(t) { return langCodes.indexOf(t) !== -1; });
+        }).filter(Boolean);
+        this._storyLevel = foundLevels.length > 0
+            ? foundLevels.sort(function(a,b) { return langCodes.indexOf(a) - langCodes.indexOf(b); }).pop()
+            : app.store.prefs.chatLevel || 'B1';
 
-        L('[Story] Picked words:', wordList, 'lang:', lang, 'level:', storyLevel);
+        L('[Story] Picked words:', wordList, 'lang:', lang, 'level:', this._storyLevel);
 
         if (wordList.length === 0) {
             this.dom.body.innerHTML = `
@@ -102,7 +122,7 @@ async startStory(forceAnew = false) {
         this._showGeneratingCard(wordList);
 
         try {
-            await this._generateStory(this.storyWords, wordList, langName, storyLevel, lang);
+            await this._generateStory(this.storyWords, wordList, langName, this._storyLevel, lang);
         } catch (e) {
             const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud, available: app.llm.available, hasModel: app.llm.hasModel } : null;
             L('[Story] Generation failed:', e, 'llm:', llmInfo, 'wordList:', wordList, 'lang:', lang);

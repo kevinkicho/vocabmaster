@@ -56,7 +56,11 @@ class PresetManager {
             app.store.clearMatch();
         }
 
-        // FIX: Auto-refresh active game
+        // Soft refresh: update home screen filters and active game
+        if (window.app && window.app.ui) {
+            if (window.app.ui.renderTagFilter) window.app.ui.renderTagFilter();
+            if (window.app.ui.renderLevelFilter) window.app.ui.renderLevelFilter();
+        }
         if (window.app && window.app.game) {
             // Match game needs a hard reset (deal new cards)
             if (window.app.game.key === 'match' && typeof window.app.game.newGame === 'function') {

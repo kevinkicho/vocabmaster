@@ -1,364 +1,592 @@
-# VocabMaster Code Audit — Implementation Plan
+# Implementation Plan
 
-## 🔴 CRITICAL
+## Feature 1: Typing Indicator Inside Message Stream
 
-### C1: Firebase Service Account Key in Git History
-- **Effort:** Medium (lines of code: 4)
-- **Risk:** HIGH — live key with Firebase Admin access
-- **Dependencies:** Firebase Console access to revoke key
+**Current:** `#chat-typing` is a separate `<div>` **outside** `#chat-messages`, positioned between messages and the input bar. It's toggled via `_setBusyUI()` which shows/hides it independently of the message list.
 
-#### Steps:
-1. **Immediately** go to [Firebase Console](https://console.firebase.google.com/project/vocabmaster112225/settings/serviceaccounts/adminsdk) and **revoke/delete** the service account key (`vocabmaster112225-1e8a10d5f0a9.json`)
-2. Stop exposing via git: `git rm --cached vocabmaster112225-1e8a10d5f0a9.json`
-3. Add to `.gitignore` (already has pattern but confirm): `echo "vocabmaster112225-*.json" >> .gitignore`
-4. Purge from all git history using `git filter-repo` or BFG:
-   ```bash
-   git filter-repo --path vocabmaster112225-1e8a10d5f0a9.json --invert-paths
-   ```
-5. Force-push all branches after purge
-6. Generate a new service account key and store it in GitHub Secrets / Firebase Config (never in repo)
-7. Update `scripts/sync-env.js` to read from env vars or a secure config path instead of `.env` for service account keys
+**Target:** The typing indicator should appear as a left-aligned assistant bubble **inside** `#chat-messages`, at the bottom of the scrollable area. When the AI starts thinking, a bubble appears inline. When the AI finishes, the bubble is replaced by the actual response.
 
-#### Validation:
-- Verify `git log --all -- vocabmaster112225-1e8a10d5f0a9.json` returns nothing
-- Verify Firebase Admin SDK still works with new key
+**Changes needed:**
+
+1. **Remove `#chat-typing` from the outer template** (line 271 in `render()`)
+2. **Add a `_typingBubble` property** to track whether a typing indicator is currently shown
+3. **In `_setBusyUI()`**: instead of toggling a separate div, append/remove a typing bubble element inside `#chat-messages`
+4. **In `_updateMessages()`**: if `_typingBubble` is true, append the typing HTML after all messages
+5. **Typing bubble HTML** should match the assistant bubble style: left-aligned, `bg-slate-100 dark:bg-neutral-800`, `rounded-2xl rounded-bl-md`, with the bouncing dots and phase label
 
 ---
 
-### C2: API Keys Exposed as `window.*` Globals
-- **Effort:** Large (affects architecture)
-- **Risk:** MEDIUM — requires XSS to exploit but widespread exposure
-- **Dependencies:** C1 (key revocation)
+## Feature 2: Sticky Bottom-Scroll
 
-#### Options (pick one):
+**Current:** `_scrollToBottom()` is called manually after every `_updateMessages()` and `render()`. It always force-scrolls to bottom regardless of user scroll position. No scroll event listener.
 
-**Option A — Proxy all LLM calls through Firebase Function (recommended)**
-1. The existing `ollamaProxy` Firebase Function already supports proxying. Ensure it's the **only** route used in production.
-2. Set `window.OLLAMA_PROXY_URL` as the default (already exists at `llm.js:28`)
-3. Remove direct endpoint configuration from client settings UI (keep local-only for development)
-4. The Firebase function holds the API key server-side, client never sees it
+**Target:** 
+- Track whether user is at the bottom of the scroll container (within ~40px threshold)
+- On new message: if user was at bottom, auto-scroll down. If user scrolled up, do nothing.
+- On user scroll: if they scroll to the bottom, re-enable sticky mode
+- Enabled by default on first render
 
-**Option B — Strip API keys from generated JS, load after auth**
-1. Remove `window.ZEN_API_KEY` from `ollama_config.js`
-2. After user authenticates (Firebase Auth), fetch API key from Firestore/RTDB
-3. Cache in memory only (not localStorage)
-4. This still exposes key at runtime but only to authenticated users
+**Changes needed:**
 
-**Option C — Accept the risk (if app runs only on-device via Android APK)**
-- Document that API keys are only safe when running via Capacitor APK (not web)
-- Add a warning in settings UI: "API keys are visible to browser extensions"
-
-#### Validation:
-- Verify `window.ZEN_API_KEY` is not readable from browser devtools console (if Option A/B)
-
----
-
-### C3: Plain-Text API Keys in `.env`
-- **Effort:** Small
-- **Risk:** LOW (`.env` is gitignored)
-- **Dependencies:** C2
-
-#### Steps:
-1. Document in `.env.example` (create if missing) with placeholder values only
-2. Add `.env` to `.gitignore` (already done — confirm with `git check-ignore .env`)
-3. Add comment at top of `.env`: `# WARNING: Never commit this file. Never share these keys.`
-4. Ensure `scripts/sync-env.js` warns if `.env` has world-readable permissions
-5. Recommend OS keychain for local development
-
-#### Validation:
-- `git check-ignore .env` returns the path
-- Running `git add .env` is rejected (dry run)
-
----
-
-## 🟠 HIGH
-
-### H1: `loadPrefs()` No Guard on `app.store`
-- **Effort:** Trivial (1 line)
-- **File:** `public/js/llm.js:192`
-
-#### Steps:
-```diff
-- const p = app.store.prefs;
-+ const p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
-```
-Or more concisely:
-```diff
-- const p = app.store.prefs;
-+ const p = app?.store?.prefs || {};
-```
-(Optional chaining may need transpilation if supporting older Android WebViews — test first.)
-
-#### Validation:
-- `app.store.prefs` access is guarded in all code paths
-- Starting the app before store init doesn't crash
-
----
-
-### H2: `_callZenCompletion()` — No JSON Parse Timeout
-- **Effort:** Trivial (5 lines)
-- **File:** `public/js/llm.js:187`
-
-#### Steps:
-```diff
-- const data = await resp.json();
-+ const data = await Promise.race([
-+     resp.json(),
-+     new Promise((_, reject) =>
-+         setTimeout(() => reject(new Error('Zen JSON parse timeout')), 10000)
-+     )
-+ ]);
-```
-
-#### Validation:
-- Unit test with a slow JSON response
-- Error message includes "Zen JSON parse timeout"
-
----
-
-### H3: `game_grammar.js` Untracked
-- **Effort:** Trivial
-- **Files:** `public/js/game_grammar.js`, `android/app/src/main/assets/js/game_grammar.js`
-
-#### Steps:
-```bash
-git add public/js/game_grammar.js
-git add android/app/src/main/assets/js/game_grammar.js
-```
-(Only if these files should be part of the project. If Grammar Gym is experimental, decide whether to track or gitignore.)
-
-#### Validation:
-- `git status` shows no `??` for these files
-
----
-
-### H4: `additionalProperties: false` Causes Full Rejection on Extra LLM Fields
-- **Effort:** Small (2-3 lines)
-- **File:** `public/js/llm.js:1233` (grammarExercise schema)
-
-#### Options:
-
-**Option A — Remove `additionalProperties: false` from exercise items (recommended)**
-```diff
-- additionalProperties: false
-```
-Remove it from the exercise item schema (line 1233). The `required` array already ensures all mandatory fields are present. Extra fields are harmless — they just get ignored by the renderer.
-
-**Option B — Strip unknown fields after validation**
-In `validate()` method, after validation passes, strip any fields not in the schema's `properties` list before returning.
-
-#### Validation:
-- LLM response with `"id": 123` or `"hint": "..."` passes validation
-- The 12 exercises render correctly ignoring extra fields
-
----
-
-### H5: `sync-env.js` Parsing Brittle
-- **Effort:** Small
-- **File:** `scripts/sync-env.js`
-
-#### Steps:
-1. Install `dotenv`: `npm install dotenv`
-2. Rewrite parsing:
+1. **Add `_stickToBottom` property** (default `true`)
+2. **Add `onscroll` listener** on `#chat-messages` in `render()`:
    ```js
-   require('dotenv').config({ path: envPath });
-   // process.env now has all values with proper quoting/escaping
+   this.dom.messages.onscroll = function() {
+       var el = this.dom.messages;
+       var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+       this._stickToBottom = atBottom;
+   }.bind(this);
    ```
-   Or if avoiding dependencies, improve the manual parser:
+3. **Modify `_scrollToBottom()`**: only scroll if `_stickToBottom` is true
+4. **After `_updateMessages()`**: call `_scrollToBottom()` (which now respects the flag)
+5. **Remove the `setTimeout` wrapper** from `_scrollToBottom()` — use `requestAnimationFrame` instead for immediate scroll after DOM update
+
+---
+
+## Feature 3: Save Full Transcript to RTDB
+
+**Current:** Only memory summaries are saved (`chat_memory` path). When the user leaves and comes back, the chat starts fresh with no history.
+
+**Target:** Save the full conversation transcript so the user can see previous chat when they return. Load it on `_init()`.
+
+**Changes needed:**
+
+1. **New RTDB path**: `users/{uid}/chat_transcripts/{timestamp}`
+   - Schema: `{ messages: [...], scenario, level, lang, ts }`
+   - Each session gets one transcript entry
+
+2. **`_saveTranscript()` method**: called in `destroy()` (when user leaves chat):
    ```js
-   function parseEnv(raw) {
-     const result = {};
-     for (const line of raw.split('\n')) {
-       const trimmed = line.trim();
-       if (!trimmed || trimmed.startsWith('#')) continue;
-       const eq = trimmed.indexOf('=');
-       if (eq === -1) continue;
-       const key = trimmed.slice(0, eq).trim();
-       let val = trimmed.slice(eq + 1).trim();
-       if ((val.startsWith('"') && val.endsWith('"')) ||
-           (val.startsWith("'") && val.endsWith("'"))) {
-         val = val.slice(1, -1);
+   async _saveTranscript() {
+       var uid = auth && auth.currentUser && auth.currentUser.uid;
+       if (!uid || !db || this.messages.length === 0) return;
+       var entry = {
+           messages: this.messages.map(function(m) {
+               return { role: m.role, text: m.text };
+           }),
+           scenario: app.store.prefs.chatScenario || 'daily',
+           level: app.store.prefs.chatLevel || 'B1',
+           lang: this._getTargetLang(),
+           ts: Date.now()
+       };
+       await db.ref('users/' + uid + '/chat_transcripts/' + Date.now()).set(entry);
+   }
+   ```
+
+3. **`_loadTranscripts()` method**: called in `_init()` before `render()`:
+   ```js
+   async _loadTranscripts() {
+       var uid = auth && auth.currentUser && auth.currentUser.uid;
+       if (!uid || !db) return;
+       var snap = await db.ref('users/' + uid + '/chat_transcripts')
+           .orderByChild('ts').limitToLast(5).once('value');
+       if (!snap.exists()) return;
+       var transcripts = [];
+       snap.forEach(function(c) { transcripts.push(c.val()); });
+       // Show a "Resume previous session?" UI or load the most recent
+       // For now: store in this._transcripts for the UI to display
+       this._transcripts = transcripts.reverse();
+   }
+   ```
+
+4. **Transcript picker UI**: When chat opens and transcripts exist, show a list of previous sessions (scenario + date) at the top of the messages area. Tapping one loads those messages into `this.messages` and calls `_updateMessages()`.
+
+5. **`destroy()` override**: call `_saveTranscript()` before `super.destroy()`
+
+6. **Firebase security rules**: Add read/write rules for `users/{uid}/chat_transcripts/`
+
+---
+
+## Feature 4: Mic Button Crash Fix (Multi-word STT)
+
+**Root cause analysis:**
+
+The crash happens because `webkitSpeechRecognition` with `continuous: false` can still fire `onresult` **multiple times** for a single utterance when the speech is longer than one word. Each `onresult` event calls `sendMessage()` which is async and not awaited. This creates a race condition:
+
+1. User speaks "what is your name"
+2. `onresult` fires with partial transcript "what is" (even with `interimResults: false`, some browsers fire multiple `onresult` with `isFinal: true` for each segment)
+3. `sendMessage()` starts — sets `this.busy = true`, pushes user message, starts AI generation
+4. `onresult` fires again with full transcript "what is your name"
+5. `sendMessage()` is called again — `this.busy` is true, returns early
+6. But the first call is still running. When it finishes, it calls `_setBusyUI(false)`
+7. User presses mic again → `toggleSpeech()` calls `this.recognition.start()` on an already-used recognition object → **throws `InvalidStateError`** (recognition can't be restarted without creating a new instance)
+
+Additionally, the `onresult` handler doesn't check `e.results[0].isFinal`, so it may act on partial transcripts.
+
+**Fix:**
+
+1. **Check `isFinal`** in `onresult`:
+   ```js
+   this.recognition.onresult = function(e) {
+       if (!e.results[0].isFinal) return;
+       var transcript = e.results[0][0].transcript;
+       ...
+   };
+   ```
+
+2. **Create a new recognition instance** each time `toggleSpeech()` is called, instead of reusing `this.recognition`:
+   ```js
+   toggleSpeech() {
+       if (this.recognition) {
+           try { this.recognition.abort(); } catch(e) {}
        }
-       result[key] = val;
-     }
-     return result;
-   }
-   ```
-3. Add warning if `.env` is missing:
-   ```js
-   if (!fs.existsSync(envPath)) {
-     console.warn('⚠ .env not found at', envPath, '— using defaults only');
+       this.recognition = new webkitSpeechRecognition();
+       this.recognition.continuous = false;
+       this.recognition.interimResults = false;
+       // Set up handlers on the new instance
+       ...
    }
    ```
 
-#### Validation:
-- `.env` with `KEY="value with spaces"` parses correctly
-- `.env` with `KEY=value'with'quotes` parses correctly
-- Missing `.env` warns but doesn't crash
-- Generated `ollama_config.js` is valid JS
+3. **Guard against concurrent calls**: Add a `_speechActive` flag that prevents `toggleSpeech()` from starting a new recognition while one is already running.
 
 ---
 
-## 🟡 MEDIUM
+## Feature 5: AI Tutor Level in Story Mode
 
-### M1: Move "Alternate A/B" Instruction in Grammar Prompt
-- **Effort:** Trivial (1 line moved)
-- **File:** `public/js/llm.js:1700-1704`
+**Current:** Story Mode extracts level from `this.storyWords.map(w => w.level).find(Boolean)` — but vocab items have `tags` (array like `['N5']`), not a `level` property. So `storyLevel` is **always `null`**. The LLM prompt never gets a level hint — the AI generates at whatever its default is (likely intermediate/advanced).
 
-#### Steps:
-Move the instruction from the TONE RULES section to right before the JSON template:
-```
-OUTPUT ONLY THIS JSON (no extra text, no markdown):
-IMPORTANT: The correct answer MUST alternate between "A" and "B". Do NOT always pick "A".
-{
-  "grammar": ...
-```
+**Target:** Story Mode should use the same level system as Chat Mode — extract level from vocab tags, fall back to `chatLevel` preference, and show a clickable level badge in the header.
 
-#### Validation:
-- Generated exercises have a mix of A and B answers (statistical check over multiple generations)
+### Step 1: Fix vocab-level extraction
 
----
+**File:** `public/js/game_story_generator.js`  
+**Line:** 85
 
-### M2: Harden Model Filtering
-- **Effort:** Small
-- **File:** `public/js/llm.js:43-46`
-
-#### Options:
-- **Do nothing** — current heuristic works for all known model names
-- Add explicit allowlist: prefer models from `this.availableModels` that explicitly match known local models
-- Use endpoint-based detection: if endpoint is `localhost` or `127.0.0.1`, don't filter at all
-
-#### Steps (if implementing):
-```diff
-- return all.filter(m => !s.includes('cloud') && !s.includes('ollama.com'));
-+ if (this.endpoint.includes('localhost') || this.endpoint.includes('127.0.0.1')) {
-+   return all; // local endpoint — trust whatever ollama4android reports
-+ }
-+ return all.filter(m => !s.includes('ollama.com'));
+**Current:**
+```js
+const storyLevel = this.storyWords.map(w => w.level).find(Boolean) || null;
 ```
 
----
+**Target:** Use the same pattern as Grammar Gym (`game_grammar.js:111`):
+```js
+const jlptLevels = ['N5','N4','N3','N2','N1'];
+const storyLevel = this.storyWords.map(function(w) {
+    return (w.tags || []).find(function(t) { return jlptLevels.includes(t); });
+}).find(Boolean) || app.store.prefs.chatLevel || 'B1';
+```
 
-### M3: Add "Test Backup Connection" Button
-- **Effort:** Small
-- **Files:** `public/js/ui_llm.js`, `public/js/llm.js`
+This:
+- Extracts JLPT level from `tags` array (same as Grammar Gym)
+- Falls back to `chatLevel` preference (same as Chat Mode)
+- Falls back to `'B1'` if nothing is set
 
-#### Steps:
-1. Add a method to `LLMService`:
-   ```js
-   async testZenConnection() {
-     if (!this.zenApiKey) return { ok: false, error: 'No API key configured' };
-     try {
-       const resp = await this._fetch(this.zenEndpoint + '/models', {
-         headers: { 'Authorization': 'Bearer ' + this.zenApiKey }
-       });
-       const data = await resp.json();
-       return { ok: resp.ok, models: data?.data?.length || 0 };
-     } catch (e) {
-       return { ok: false, error: e.message };
-     }
-   }
-   ```
-2. Add a button in settings HTML:
+### Step 2: Map JLPT to CEFR for the LLM prompt
+
+The `buildStoryPrompt` in `llm_prompts.js` uses `LEVEL_DIFFICULTY_MAP` which already maps JLPT to CEFR descriptions (e.g., `'N5': 'beginner (N5)'`). Since `storyLevel` will now be a JLPT code like `'N5'`, the existing map handles it correctly — no change needed in prompts.
+
+### Step 3: Add level badge to Story header
+
+**File:** `public/js/game_story_ui.js`  
+**Function:** `_setupStoryHeader()`
+
+Add a clickable level badge next to the "Story" label, same style as Chat Mode's badge. The badge shows the current level (e.g., "N5" or "B1"). Clicking it opens a popover to change the level.
+
+**Changes:**
+1. Add `_storyLevel` property to Story constructor (default from `chatLevel` or `'B1'`)
+2. In `_setupStoryHeader()`, add the badge HTML:
    ```html
-   <button onclick="app.llm.testZenConnection().then(r => alert(r.ok ? 'Connected (' + r.models + ' models)' : 'Failed: ' + r.error))" ...>Test Backup</button>
+   <span id="story-level-badge" class="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-neutral-700 dark:text-indigo-300 ring-1 ring-indigo-500/40 text-indigo-600 cursor-pointer active:scale-90 transition-all">N5</span>
    ```
+3. Add `_setupStoryLevelPicker()` method — same popover logic as Chat's `_setupLevelPicker()`, but with JLPT levels (N5–N1) instead of CEFR (A1–C2), since Story Mode vocab is tagged with JLPT
+4. When user changes level, update `this._storyLevel` and regenerate the story with the new level
 
-#### Validation:
-- Button shows "Connected" with model count or error message
+### Step 4: Pass `_storyLevel` to generation
+
+**File:** `public/js/game_story_generator.js`  
+**Line:** 105
+
+Change the `_generateStory()` call to pass `this._storyLevel` instead of the extracted `storyLevel`:
+
+```js
+await this._generateStory(this.storyWords, wordList, langName, this._storyLevel, lang);
+```
+
+### Step 5: Level descriptions for the popover
+
+Since Story Mode vocab is tagged with JLPT (N5–N1) but the fallback is CEFR (A1–C2 from `chatLevel`), the popover must show **both** frameworks. The badge shows whichever is active.
+
+| Level | Framework | Description |
+|-------|-----------|-------------|
+| N5 | JLPT | Beginner — basic grammar, simple sentences |
+| N4 | JLPT | Elementary — everyday conversations, past tense |
+| N3 | JLPT | Intermediate — opinions, newspaper headlines |
+| N2 | JLPT | Upper intermediate — complex texts, nuanced speech |
+| N1 | JLPT | Advanced — academic, professional, native-like |
+| A1 | CEFR | Beginner — simple words, short sentences |
+| A2 | CEFR | Elementary — past tense, everyday topics |
+| B1 | CEFR | Intermediate — opinions, travel situations |
+| B2 | CEFR | Upper intermediate — idioms, fluent topics |
+| C1 | CEFR | Advanced — complex ideas, academic language |
+| C2 | CEFR | Proficient — near-native, subtle nuance |
+
+With a footnote: "JLPT for Japanese vocab, CEFR for general level"
 
 ---
 
-### M4: Validate `zenEndpoint` URL
-- **Effort:** Trivial
-- **File:** `public/js/preferences_registry.js:90`
+## Pitfalls & Mitigations
 
-#### Steps:
-```diff
-- { key: 'zenEndpoint', type: 'text', ... }
-+ { key: 'zenEndpoint', type: 'url', ... }
-```
-If `type: 'url'` is not supported by the preferences system, add client-side validation:
+### Pitfall 1: Only JLPT levels checked, not HSK/TOPIK/CEFR
+
+**Problem:** The proposed fix only checks `['N5','N4','N3','N2','N1']`. If the user studies Chinese (HSK) or Korean (TOPIK), the level always falls back to `chatLevel` (B1). The badge shows "B1" even for HSK-tagged vocab.
+
+**Mitigation:** Expand the tag check to include all framework levels:
 ```js
-function isValidUrl(str) {
-  try { new URL(str); return true; } catch { return false; }
+const frameworkLevels = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'];
+const storyLevel = this.storyWords.map(function(w) {
+    return (w.tags || []).find(function(t) { return frameworkLevels.includes(t); });
+}).find(Boolean) || app.store.prefs.chatLevel || 'B1';
+```
+
+### Pitfall 2: Multiple words may have different levels
+
+**Problem:** `_pickWords(4)` picks 4 random words. Word A could be N5, Word B could be N3. `.find(Boolean)` returns the **first** match (N5), but the story needs to be appropriate for N3 (the hardest word). Using the easiest level means the story is too simple for harder words.
+
+**Mitigation:** Use the **highest (hardest)** level instead of first match. Sort the found levels by difficulty and pick the last:
+```js
+const difficultyOrder = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'];
+const foundLevels = this.storyWords.map(function(w) {
+    return (w.tags || []).find(function(t) { return difficultyOrder.includes(t); });
+}).filter(Boolean);
+const storyLevel = foundLevels.length > 0
+    ? foundLevels.sort(function(a,b) { return difficultyOrder.indexOf(a) - difficultyOrder.indexOf(b); }).pop()
+    : app.store.prefs.chatLevel || 'B1';
+```
+
+### Pitfall 3: `chatLevel` is CEFR, vocab tags are JLPT — popover must show both
+
+**Problem:** `chatLevel` defaults to `'B1'` (CEFR). Vocab tags are `'N5'` (JLPT). If no vocab has JLPT tags, the badge shows "B1" but the popover (Step 5) only lists JLPT levels. The user can't select "B1" from the popover.
+
+**Mitigation:** The popover shows both JLPT (N5–N1) and CEFR (A1–C2) levels. The badge displays whichever is active. When the user selects a level, it updates `this._storyLevel` directly (not `chatLevel`), so it doesn't interfere with Chat Mode's preference.
+
+### Pitfall 4: Story header is crowded on mobile
+
+**Problem:** Current header: admin delete, sparkle, dice, PTS score, close button = 5 elements. Adding a level badge = 6. On 375px mobile, this may overflow.
+
+**Mitigation:** Reduce the PTS score display to a compact pill (remove "PTS" label, show just the number). The level badge is small (8px font, ~30px wide) and fits between the "Story" label and the action buttons.
+
+### Pitfall 5: Level change requires regeneration
+
+**Problem:** If user changes level via popover, the current story was generated at the old level. Auto-regenerating is slow (10-30s). Not regenerating means the badge changes but the story content doesn't match.
+
+**Mitigation:** When the level changes, show a toast: "Level set to N3 — next story will use this level." The new level takes effect on the **next** story generation (sparkle/dice/next). The current story is not regenerated. This avoids the slow regeneration UX.
+
+### Pitfall 6: Prefetch path has the same bug
+
+**Problem:** `game_story_cache.js:91` has the same broken `w.level` extraction:
+```js
+const storyLevel = words.map(function(w) { return w.level; }).find(Boolean) || null;
+```
+If we fix `startStory()` but not `_prefetchNext()`, prefetched stories are still generated without a level hint.
+
+**Mitigation:** Fix `_prefetchNext()` to use the same level extraction logic (Pitfall 1 + Pitfall 2), using `this._storyLevel` instead of re-extracting from words:
+```js
+// In _prefetchNext(), line 91:
+// Before:
+const storyLevel = words.map(function(w) { return w.level; }).find(Boolean) || null;
+// After:
+const storyLevel = this._storyLevel;
+```
+
+### Pitfall 7: Cached stories have no level metadata
+
+**Problem:** `_nextCachedStory()` returns `{storyWords, storyPart, translation, questions, lang}` — no `level` field. If the user changes the level, cached stories (generated at the old level) are still served. The badge shows the new level, but the story content is at the old level.
+
+**Mitigation:** Add a `level` field to the RTDB cache entry when saving (`_saveStoryToRTDB`). When loading from cache, store the cached level. The badge shows the cached level for cached stories, and the user's selected level for fresh generations. This is a **future enhancement** — for now, cached stories are served as-is and the badge shows the user's selected level.
+
+### Pitfall 8: Popover only shows JLPT but fallback is CEFR
+
+**Problem:** The popover lists N5–N1. But if vocab has no JLPT tags, the level falls back to `chatLevel` which is `'B1'` (CEFR). The badge shows "B1" but the popover has no "B1" option. User can't change it.
+
+**Mitigation:** Already covered by Pitfall 3 — the popover includes both JLPT and CEFR levels. The active level is highlighted regardless of framework.
+
+---
+
+## Implementation Order
+
+1. **Mic crash fix** (Feature 4) — highest priority, blocks usability
+2. **Sticky bottom-scroll** (Feature 2) — improves UX immediately
+3. **Typing indicator in message stream** (Feature 1) — visual polish
+4. **Transcript save/load** (Feature 3) — persistence feature
+5. **AI Tutor Level in Story Mode** (Feature 5) — consistency with Chat Mode
+6. **Language-aware level extraction** (Feature 6) — use `_getLevelsForLang()` instead of hardcoded `difficultyOrder`
+7. **Cancel audio + clear cache on language change** (Feature 7) — prevent stale TTS and wrong-language cached stories
+
+---
+
+## Feature 6: Language-Aware Level Extraction
+
+**Bug:** `game_story_generator.js` used a hardcoded `difficultyOrder` array with all frameworks (JLPT, HSK, CEFR, TOPIK). Spanish vocab with `HSK5` tags showed wrong levels.
+
+**Fix:** Replaced with `this._getLevelsForLang(lang)` which returns only the levels relevant to the target language.
+
+**Files changed:** `public/js/game_story_generator.js` lines 86-92
+
+---
+
+## Feature 7: Cancel Audio + Clear Cache on Language Change
+
+**Bug 1:** When changing language mid-session, old TTS kept playing because `startStory()` didn't call `app.audio.cancel()`.
+
+**Bug 2:** Old cached stories from the previous language were still served because `_currentStoryLang` was never set in the cache path, so language-change detection never fired.
+
+**Bug 3:** `_nextCachedStory()` returned `this._getTargetLang()` (current language) instead of the actual cached story's language, causing TTS to read Portuguese text with a Japanese voice.
+
+**Fixes:**
+
+### 7a: Cancel audio on story start
+**File:** `public/js/game_story_generator.js` line 6
+```js
+if (app.audio) app.audio.cancel();
+```
+
+### 7b: Clear cache on language change (only if AI available)
+**File:** `public/js/game_story_generator.js` lines 7-15
+```js
+var currentLang = this._getTargetLang();
+if (this._currentStoryLang && this._currentStoryLang !== currentLang) {
+    if (app.llm && app.llm.available && app.llm.hasModel) {
+        this._cacheLoaded = false;
+        this._cachedStories = [];
+        this._cachedIndex = 0;
+        this._prefetched = null;
+    }
+    this._currentStoryLang = null;
 }
 ```
+- AI online → clear cache, fresh generation in new language
+- AI offline → keep old cache, serve whatever's available (wrong language is better than blank error)
 
-#### Validation:
-- Entering `not-a-url` shows validation error
-- Entering `https://opencode.ai/zen/go/v1/chat/completions` passes
+### 7c: Set `_currentStoryLang` when serving from cache
+**File:** `public/js/game_story_generator.js` line 27
+```js
+this._currentStoryLang = cached.lang;
+```
+
+### 7d: Return actual cached language from `_nextCachedStory()`
+**File:** `public/js/game_story_cache.js` line 61
+```js
+lang: cached._lang || this._getTargetLang(),
+```
+
+### Use cases covered
+
+| # | Scenario | Result |
+|---|----------|--------|
+| 1 | Change language mid-session (AI online) | Cache cleared, fresh generation in new language |
+| 2 | First time entering Story mode | `_currentStoryLang` is null → no cache clearing |
+| 3 | Navigate between cached stories (same language) | `_currentStoryLang` matches current language |
+| 4 | Change language, then change back | Both changes detected, cache cleared each time |
+| 5 | AI offline, cached stories exist, user changes language | Cache preserved, old stories served (wrong language but no error) |
+| 6 | AI offline, no cached stories for new language | "AI Not Connected" error (acceptable) |
+| 7 | `_nextCachedStory()` returns wrong language | Fixed — returns `cached._lang` |
+| 8 | `_currentStoryLang` not set in cache path | Fixed — set when serving from cache |
+| 9 | Prefetched story from old language | `_prefetched = null` clears stale data |
+| 10 | Language changes during active generation | `_generationId` stale guard handles it |
 
 ---
 
-### M5: Accept 2-4 Choices in Grammar Exercises
-- **Effort:** Small
-- **File:** `public/js/llm.js:1217-1218`
+## Feature 8: Fix HSK/TOPIK Display Issues
 
-#### Steps:
-```diff
-- minItems: 2, maxItems: 2,
-+ minItems: 2, maxItems: 4,
-```
-Update renderer in `game_grammar.js:144` to handle variable number of choices:
+### 8a: Tag Filter — Show Only Relevant Frameworks for Current Language
+
+**File:** `public/js/ui.js` lines 295-301
+
+**Current:** The tag filter always shows all 5 groups (JLPT, HSK, CEFR, TOPIK, Frequency) regardless of what language the user is studying. A Spanish learner sees JLPT and HSK chips.
+
+**Fix:** Filter groups by current language using `LEVEL_CONFIG.groups[].langs`, same pattern as `renderLevelFilter()` at line 211-212:
+
 ```js
-const choicesHtml = ex.choices.map(ch => {
-  // ... existing code handles any number of choices via .map()
-}).join('');
+var currentLang = app.store.prefs.presetTarget || app.store.prefs.chatLang || app.store.prefs.flashFront || app.store.prefs.sentencesQ || 'ja';
+var groups = [
+    { label: 'JLPT', tags: ['N5','N4','N3','N2','N1'], langs: ['ja','ja_furi','ja_roma'] },
+    { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'], langs: ['zh','zh_pin'], stripPrefix: 'HSK' },
+    { label: 'CEFR', tags: ['A1','A2','B1','B2','C1'], langs: ['en','es','fr','de','it','pt','ru','ru_tr'] },
+    { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'], langs: ['ko','ko_roma'], stripPrefix: 'TOPIK' },
+    { label: 'Frequency', tags: ['common','uncommon','rare'], langs: null }, // always show
+];
+var filteredGroups = groups.filter(function(g) {
+    return !g.langs || g.langs.indexOf(currentLang) !== -1;
+});
 ```
 
-#### Validation:
-- LLM response with 3 choices renders all 3 buttons
-- 2-choice exercises still work
+Then iterate `filteredGroups` instead of the hardcoded groups array.
+
+### 8b: Add TOPIK6 to Tag Filter Groups
+
+**File:** `public/js/ui.js` line 299
+
+**Current:**
+```js
+{ label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'], stripPrefix: 'TOPIK' },
+```
+
+**Fix:** Add `'TOPIK6'`:
+```js
+{ label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'], stripPrefix: 'TOPIK' },
+```
+
+### 8c: Add TOPIK6 to `getAllTags()` Sort Order
+
+**File:** `public/js/data.js` line 106
+
+**Current:**
+```js
+const order = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','common','uncommon','rare'];
+```
+
+**Fix:** Add `'TOPIK6'` after `'TOPIK5'`:
+```js
+const order = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6','common','uncommon','rare'];
+```
+
+### 8d: Update Exam Level Tooltip to Explain Frameworks
+
+**File:** `public/js/ui.js` line 304
+
+**Current:**
+```html
+<div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg max-w-[220px]">Levels are approximate — not all entries have every framework tag</div>
+```
+
+**Fix:** Replace with a tooltip that explains each framework:
+```html
+<div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-4 py-3 shadow-lg max-w-[280px] w-auto leading-relaxed">
+  <p class="mb-1"><strong class="text-indigo-300">JLPT</strong> — Japanese-Language Proficiency Test (N5→N1)</p>
+  <p class="mb-1"><strong class="text-indigo-300">HSK</strong> — Hanyu Shuiping Kaoshi (HSK1→HSK6)</p>
+  <p class="mb-1"><strong class="text-indigo-300">TOPIK</strong> — Test of Proficiency in Korean (TOPIK1→TOPIK6)</p>
+  <p class="mb-1"><strong class="text-indigo-300">CEFR</strong> — Common European Framework (A1→C2)</p>
+  <p class="text-slate-400 mt-1">Not all entries have every framework tag.</p>
+</div>
+```
+
+### 8e: Remove Stale Footnote from Level Filter
+
+**File:** `public/js/ui.js` line 262
+
+**Current:**
+```js
+html += `<p class="text-[8px] text-slate-400 dark:text-neutral-600 mt-1 italic">TOPIK &amp; CEFR levels are approximated from JLPT proficiency</p></div>`;
+```
+
+**Fix:** Remove this line entirely — the app now has real HSK, TOPIK, and CEFR tags in the vocab data.
+
+### 8f: Prevent Chip Wrapping in Level Filter
+
+**File:** `public/js/ui.js` line 255
+
+**Current:**
+```js
+html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}" style="${style}">${lvl}</button>`;
+```
+
+**Fix:** Add `whitespace-nowrap` to prevent wrapping:
+```js
+html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 whitespace-nowrap ${btnClass}" style="${style}">${lvl}</button>`;
+```
+
+### 8g: Apply Viewport-Clamped Positioning to Exam Level Tooltip
+
+**File:** `public/js/ui.js` lines 327-333
+
+**Current:** The tooltip uses `fixed` positioning with `translateX(-50%)` — same pattern as the old chat tooltip that overflowed on mobile.
+
+**Fix:** Replace with `requestAnimationFrame` + viewport clamping, same as the chat tooltip fix:
+
+```js
+infoIcon.onclick = function(e) {
+    e.stopPropagation();
+    tooltip.classList.toggle('hidden');
+    if (tooltip.classList.contains('hidden')) return;
+    requestAnimationFrame(function() {
+        var rect = infoIcon.getBoundingClientRect();
+        var tw = tooltip.offsetWidth;
+        var th = tooltip.offsetHeight;
+        var left = rect.left + rect.width / 2 - tw / 2;
+        var top = rect.bottom + 4;
+        if (left + tw > window.innerWidth) left = window.innerWidth - tw - 8;
+        if (left < 8) left = 8;
+        if (top + th > window.innerHeight) top = rect.top - th - 4;
+        if (top < 8) top = 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+        tooltip.style.transform = 'none';
+    });
+};
+```
 
 ---
 
-### M6: Warn if `.env` Has World-Readable Permissions
-- **Effort:** Trivial
-- **File:** `scripts/sync-env.js`
+## Feature 8: Pitfalls & Mitigations
 
-#### Steps:
+### Pitfall 1: Language detection inconsistency between tag filter and level filter
+
+**Problem:** The tag filter (Feature 8a) would use `presetTarget` for language detection, but the level filter (`renderLevelFilter()` at `ui.js:211-212`) uses a different check: `p.flashFront === l || p.flashBack1 === l || ...`. If a user has `flashFront='ja'` but `presetTarget='ko'`, the two filters would show different frameworks.
+
+**Mitigation:** Use the same language detection function for both filters. Extract a shared helper:
 ```js
-const stat = fs.statSync(envPath);
-const mode = stat.mode & 0o777;
-if (mode & 0o004) {
-  console.warn('⚠ .env is world-readable (mode', mode.toString(8), '). Run: chmod 600 .env');
+function _getActiveLang() {
+    var p = app.store.prefs;
+    return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
 }
 ```
+Use this in both `renderTagFilter()` and `renderLevelFilter()` instead of each having its own logic.
 
----
+### Pitfall 2: Tag filter only renders on home screen
 
-## 🟢 LOW
+**Problem:** `renderTagFilter()` is called from `goHome()` inside `requestAnimationFrame`. If the language changes while a game is active (not on home screen), the tag filter isn't visible — it only renders on the home screen. The change takes effect when the user returns home.
 
-### L1: Export ZEN_ENDPOINT/ZEN_MODEL Even Without ZEN_API_KEY
-- **Effort:** Trivial
-- **File:** `scripts/sync-env.js`
+**Mitigation:** This is acceptable behavior. The tag filter is a home-screen-only UI element. When the user returns to home, `goHome()` calls `renderTagFilter()` which picks up the current language. No code change needed.
 
-#### Steps:
-```diff
-- if (env.ZEN_API_KEY) {
-+ // Always export Zen endpoint/model if configured, even without API key
-+ if (env.ZEN_ENDPOINT || env.ZEN_MODEL || env.ZEN_API_KEY) {
-```
-This lets the UI pre-fill endpoint and model fields even if the user hasn't entered the key yet.
+### Pitfall 3: `getLevelBadge()` in game headers only checks JLPT
 
----
-
-### L2: Deduplicate `.env` in `.gitignore`
-- **Effort:** Trivial
-
-#### Steps:
-Remove duplicate `.env` line from `.gitignore` (there are two — lines 76 and 86).
-
----
-
-### L3: Fix `ollama_config.js` Permissions
-- **Effort:** Trivial
-
-#### Steps:
-Add to `scripts/sync-env.js`:
+**Problem:** `game_core.js:397` only checks JLPT levels for the colored badge in game headers:
 ```js
-fs.chmodSync(configPath, 0o600); // owner read/write only
+const jlptLevels = ['N5','N4','N3','N2','N1'];
+const level = tags.find(t => jlptLevels.includes(t));
 ```
+HSK, TOPIK, and CEFR levels get no badge. Same for Grammar Gym's level extraction at `game_grammar.js:111`.
+
+**Mitigation:** Expand the check to include all frameworks:
+```js
+const frameworkLevels = ['N5','N4','N3','N2','N1','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','A1','A2','B1','B2','C1','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'];
+const level = tags.find(t => frameworkLevels.includes(t));
+```
+This is a **separate fix** from Feature 8 — it affects game headers, not the filter UI. Can be done as a follow-up.
+
+### Pitfall 4: TOPIK6 already exists in `LEVEL_CONFIG` and `LEVEL_DIFFICULTY_MAP`
+
+**Problem:** TOPIK6 is already defined in `config.js:75` and `llm_service.js:411`, but was missing from the tag filter group and sort order. Adding it is safe and consistent — no conflicts.
+
+**Mitigation:** None needed. The addition is purely additive and matches existing data.
+
+### Pitfall 5: Frequency group always shows even if no frequency tags exist
+
+**Problem:** The Frequency group has `langs: null` (always show), but if the vocab data has no frequency tags (`common`, `uncommon`, `rare`), the group is skipped by the existing `existingTags` filter at `ui.js:310`.
+
+**Mitigation:** This is correct behavior — the `existingTags` filter handles it. No code change needed.
+
+### Pitfall 6: Removing the stale footnote is safe
+
+**Problem:** The footnote at `ui.js:262` says "TOPIK & CEFR levels are approximated from JLPT proficiency." This is only in the level filter, not the tag filter. Need to verify it's not referenced elsewhere.
+
+**Mitigation:** Grep confirms the footnote text only appears in `ui.js:262`. Removing it is safe.
+
+### Pitfall 7: Tooltip click-outside listener may conflict with other click-outside listeners
+
+**Problem:** The exam level tooltip has a `document.addEventListener('click', ...)` listener (ui.js:304-309). If the user opens the exam tooltip and then opens the chat info tooltip (or vice versa), both click-outside listeners fire. This is fine — each only closes its own tooltip.
+
+**Mitigation:** None needed. The listeners are scoped to their respective tooltip IDs and don't interfere.
 
 ---
+
+## Implementation Order
+
+1. **Mic crash fix** (Feature 4) — highest priority, blocks usability
+2. **Sticky bottom-scroll** (Feature 2) — improves UX immediately
+3. **Typing indicator in message stream** (Feature 1) — visual polish
+4. **Transcript save/load** (Feature 3) — persistence feature
+5. **AI Tutor Level in Story Mode** (Feature 5) — consistency with Chat Mode
+6. **Language-aware level extraction** (Feature 6) — use `_getLevelsForLang()` instead of hardcoded `difficultyOrder`
+7. **Cancel audio + clear cache on language change** (Feature 7) — prevent stale TTS and wrong-language cached stories
+8. **Fix HSK/TOPIK display issues** (Feature 8) — framework-aware tag filter, TOPIK6, tooltip, wrapping

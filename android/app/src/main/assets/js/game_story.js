@@ -25,6 +25,10 @@ class Story extends GameMode {
         this._currentCompositeKey = null;
         this._currentStoryLang = null;
         this._generationId = 0;
+        this._storyLevel = (function(self) {
+            var p = app.store.prefs;
+            return p.chatLevel || 'B1';
+        })(this);
 
         this.render();
     }
@@ -61,21 +65,22 @@ class Story extends GameMode {
 
     _highlightWords(text) {
         const lang = this._getTargetLang();
-        // First wrap hanzi characters
-        let html = this.wrapHanziOnEscaped(escapeHtml(text));
-        if (!this._highlightsVisible) return html;
-        for (const w of this.storyWords) {
-            const word = w[lang] || w.ja || '';
-            if (!word) continue;
-            const variants = word.split(/[·・,;、\/|]/).map(s => s.trim()).filter(Boolean);
-            for (const v of variants) {
-                const escapedHtml = escapeHtml(v);
-                const escaped = escapedHtml.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(escaped, 'gi');
-                html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">$&</mark>`);
+        let html = escapeHtml(text);
+        if (this._highlightsVisible) {
+            for (const w of this.storyWords) {
+                const word = w[lang] || w.ja || '';
+                if (!word) continue;
+                const variants = word.split(/[·・,;、\/|]/).map(s => s.trim()).filter(Boolean);
+                for (const v of variants) {
+                    const escaped = escapeHtml(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const re = new RegExp(escaped, 'gi');
+                    html = html.replace(re, `<mark class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-0.5 rounded font-bold">$&</mark>`);
+                }
             }
         }
-        return html;
+        // Wrap hanzi characters, but skip content inside HTML tags
+        return html.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])(?![^<]*>)/g,
+            '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
     }
 
     async _pickWords(count) {
@@ -102,7 +107,8 @@ class Story extends GameMode {
     }
 
     _getTargetLang() {
-        return app.store.prefs.sentencesQ || 'ja';
+        var p = app.store.prefs;
+        return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja';
     }
 
     destroy() {

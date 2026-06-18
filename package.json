@@ -5,11 +5,11 @@
     "build": "npm run build:css",
     "build:css": "npx tailwindcss -i ./public/style.css -o ./public/tailwind.css --minify",
     "watch:css": "npx tailwindcss -i ./public/style.css -o ./public/tailwind.css --watch",
-    "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:android:emulator": "npx playwright test test/e2e/android.spec.js",
-    "validate": "node test/tools/check_critical.js && npx playwright test test/e2e/app.spec.js",
-    "validate:critical": "node test/tools/check_critical.js",
+    "test": "vitest run tests/unit",
+    "test:e2e": "playwright test tests/e2e",
+    "test:android:emulator": "npx playwright test tests/e2e/android.spec.js",
+    "validate": "node tests/tools/check_critical.js && npx playwright test tests/e2e/app.spec.js",
+    "validate:critical": "node tests/tools/check_critical.js",
     "// Android asset + build helpers (short-term hygiene win)": "",
     "prepare:android": "npm run build && node -e \"const fs=require('fs'),path=require('path'); const src='public', dst='android/app/src/main/assets'; fs.rmSync(dst,{recursive:true,force:true}); fs.mkdirSync(dst,{recursive:true}); fs.cpSync(src,dst,{recursive:true}); console.log('✅ Synced',src,'→',dst) \"",
     "sync:android": "npm run prepare:android",
@@ -17,10 +17,10 @@
     "prebuild:android": "npm run validate",
     "build:android": "npm run prepare:android && cd android && gradlew clean assembleDebug --no-daemon",
     "test:runtime:emulator": "bash scripts/verify-runtime-emulator.sh",
-    "audit": "node test/audit/grammar_audit.mjs",
-    "feedback": "node test/audit/grammar_feedback.mjs",
-    "feedback:summary": "node test/audit/grammar_feedback.mjs --summary",
-    "regenerate": "node test/audit/grammar_feedback.mjs --regenerate",
+    "audit": "node tests/audit/grammar_audit.mjs",
+    "feedback": "node tests/audit/grammar_feedback.mjs",
+    "feedback:summary": "node tests/audit/grammar_feedback.mjs --summary",
+    "regenerate": "node tests/audit/grammar_feedback.mjs --regenerate",
     "prepare": "husky",
     "dev": "vite",
     "preview": "vite preview"
@@ -32,7 +32,6 @@
     "vitest": "^4.1.4"
   },
   "dependencies": {
-    "@rolldown/binding-linux-x64-gnu": "^1.1.1",
     "@tailwindcss/typography": "^0.5.20"
   }
 }

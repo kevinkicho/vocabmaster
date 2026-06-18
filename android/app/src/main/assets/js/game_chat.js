@@ -1,4 +1,29 @@
-/* js/game_chat.js */
+/* js/game_chat.js — Chat Practice mode (AI conversation)
+ *
+ * Extends GameMode. Provides an AI conversation partner that:
+ *   - Maintains a rolling message history (max 6 turns) + memory summaries
+ *     to keep prompts compact across long conversations.
+ *   - Generates the first AI message with a scenario-aware greeting in the
+ *     target language (daily/travel/business/etc. per chatScenario pref).
+ *   - Streams AI responses via app.llm.streamGenerate with a typing indicator
+ *     and cancel button.
+ *   - Renders markdown in AI bubbles (snarkdown) with TTS playback on first
+ *     bubble; tap-to-TTS on subsequent bubbles.
+ *   - Supports speech-to-text input via webkitSpeechRecognition (mic button),
+ *     with locale mapping per target language.
+ *   - Is exam-level aware: extracts level from vocab tags or chatLevel pref,
+ *     shows a clickable level badge in the header (JLPT N5-N1 + CEFR A1-C2
+ *     popover) to control the AI's output difficulty.
+ *   - Uses a two-phase critic pipeline: the LLM outputs raw HTML, the client
+ *     splits by <p> tags for stable layout. The critic owns all bubble styling.
+ *
+ * Instance state: messages[], turn, busy, maxHistory, memories[], abortController,
+ *   recognition (SpeechRecognition), _speechActive, _storyLevel.
+ *
+ * Depends on: GameMode (game_core.js), app.llm (llm/), app.audio (services.js),
+ *   app.store.prefs.chat* (store.js), escapeHtml + L (escape.js), snarkdown.
+ */
+
 class Chat extends GameMode {
     constructor(k) {
         super(k);

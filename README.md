@@ -118,6 +118,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | `public/js/config.js` | `LANG_CONFIG` array, `LANG_MAP` (O(1) lookups), `GET_DEFAULTS()`, flag icon helper |
 | `public/js/store.js` | `saveSettings()` reads all UI controls into `prefs`, `applyTheme()`, localStorage persistence |
 | `public/js/ui.js` | Dynamic UI — `header()`, `audioBar()`, `loadSettings()`, theme/font/preset/celeb renderers |
+| `public/js/ui_home.js` | Home screen filters — level filter chips, tag filter chips (JLPT/HSK/CEFR/TOPIK/Frequency) |
+| `public/js/ui_tooltips.js` | Hanzi character tooltip — dictionary lookup, cursor/touch positioning, auto-close |
 | `public/js/services.js` | `AudioService` (TTS), `TextFitter` (`fit` + `fitSmart`), `CelebrationService` (confetti) |
 | `public/js/analytics.js` | Per-word accuracy tracking, session recording, weekly/monthly stats, most-missed-words |
 | `public/js/android_bridge.js` | Promise-based JS wrapper for Android `@JavascriptInterface` with streaming `onToken` support |
@@ -131,6 +133,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | `public/js/game_match.js` | Grid matching — adaptive `calcLayout()`, pair restore, hint highlighting |
 | `public/js/game_sentences.js` | Cloze generator with variant/token/conjugation matching, LLM-assisted blanks, translation hint |
 | `public/js/game_voice.js` | Web Speech recognition, locale mapping, correct-answer playback, visual feedback |
+| `public/js/game_chat.js` | Chat Practice — AI conversation with memory summaries, STT input, TTS playback, exam-level awareness, markdown rendering |
 | `public/js/game_story.js` | AI Story Mode — word selection, streaming card UI, question parsing, RTDB cache, prefetch, TTS |
 | `public/js/game_story_generator.js` | Story generation orchestration — `startStory()`, `_generateStory()`, stale guard, AI offline handling |
 | `public/js/game_story_cache.js` | Story RTDB cache — save, load, delete with composite key sorting |
@@ -210,14 +213,14 @@ The Android wrapper (`android/`) loads from local assets by default. To use a lo
 ## Test Structure
 
 ```
-test/
-├── e2e/         # Playwright browser specs
-├── unit/        # Vitest unit tests
+tests/
+├── e2e/         # Playwright browser specs (run with `npm run test:e2e`)
+├── unit/        # Vitest unit tests (run with `npm test`)
 ├── audit/       # Standalone audit scripts (run with `npm run audit`)
-└── tools/       # One-off scripts (check_critical, ocr, etc.)
+└── tools/       # Pre-build checker + one-off scripts (check_critical, ocr, etc.)
 ```
 
-The `test/` folder is gitignored — generate it locally by following the layout above. Playwright config points to `test/e2e/`; unit tests run from `test/unit/`.
+All test directories are committed. `npm run validate` runs the critical checker (`tests/tools/check_critical.js`) + Playwright smoke (`tests/e2e/app.spec.js`). `npm run validate:critical` runs just the fast node-based checker. The old `test/` directory is gitignored and kept only as a local scratch space — it is no longer referenced by any script.
 
 ## Firebase Android Setup (gitignored)
 

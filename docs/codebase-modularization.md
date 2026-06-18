@@ -27,7 +27,7 @@ The `Story` class was broken down using prototype mixins:
 
 ### 3. LLM Service & Validators (`llm_*.js`)
 The massive AI logic was decomposed into:
-- `llm.js`: Core network and model selection.
+- `llm/llm_service.js`: Core network and model selection.
 - `llm_features.js`: Cloze, grammar, and listening mode helpers.
 - `llm_cache.js`: IndexedDB caching logic.
 - `llm_response_validator.js`: The central validation engine.

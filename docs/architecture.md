@@ -261,11 +261,60 @@ On `visibilitychange` (app returns to foreground):
 
 This prevents stale connection state from causing silent hangs after app resume.
 
-## 10. Conventions for Future Agents
+## 10. Auth Init (`waitForAuth`)
+
+### 10.1 Flow
+
+```
+init() → await this.auth.waitForAuth() → data.load() → LLM autoDetect → enable Start
+```
+
+`waitForAuth()` (`auth.js`) returns a Promise that resolves when:
+1. A real Firebase user is already signed in (cached session), OR
+2. The 1.5s timeout fires and `auth.signInAnonymously()` succeeds, OR
+3. The 1.5s timeout fires and anonymous sign-in fails (resolves with `null` — app continues in degraded mode)
+
+### 10.2 `onAuthStateChanged(null)` handling (fixed 2026-06-17)
+
+**Bug (pre-existing)**: `waitForAuth()` registered both a 1.5s timeout (for `signInAnonymously()`) AND an `onAuthStateChanged` listener. When Firebase fires `onAuthStateChanged(null)` (no user signed in — the default state in a fresh browser context), the listener would set `resolved = true` and clear the timeout, then do nothing because `user` is `null`. The Promise hung forever. `init()` never proceeded. The Start button stayed disabled.
+
+This bug was invisible in production because:
+- Android WebView has a cached anonymous session from prior app launches — `onAuthStateChanged` fires with the real user, not `null`.
+- Browsers with existing Firebase auth state likewise fire with the cached user.
+- Only a **fresh browser context** (e.g., Playwright headless, incognito with no cached auth) triggers `onAuthStateChanged(null)` first, exposing the hang.
+
+**Fix**: When `onAuthStateChanged` fires with `null`, do NOT set `resolved = true`. Only set it when a real `user` arrives. This lets the 1.5s timeout fire and call `signInAnonymously()`, which creates the anonymous session. On the next `onAuthStateChanged` callback (with the new anon user), the listener resolves the Promise.
+
+```js
+// auth.js waitForAuth() — fixed onAuthStateChanged handler
+var unsubscribe = auth.onAuthStateChanged(function(user) {
+    if (resolved) return;
+    if (user) {                    // ← only act on a real user
+        resolved = true;
+        clearTimeout(timeout);
+        unsubscribe();
+        this.currentUser = user;
+        resolve(user);
+    }
+    // If user is null, do NOT set resolved=true — let the timeout fire
+    // to call signInAnonymously(). Setting resolved=true on null would
+    // hang the Promise forever (pre-existing bug).
+}.bind(this));
+```
+
+### 10.3 Anonymous auth + RTDB
+
+Firebase RTDB rules allow anonymous read/write under `users/{uid}/...`. `signInAnonymously()` creates a stable UID that persists across sessions (via Firebase's local token cache). This means:
+- Scores, analytics, debug logs, and AI-generated content caches all persist per-device.
+- No Google Sign-In is required for basic functionality — anonymous auth is sufficient.
+- Google Sign-In (native bridge on Android, popup on web) upgrades the session to a real account with email + photoURL.
+
+## 11. Conventions for Future Agents
 
 - **Never use mock data.** RTDB is the only data source. CSV and `createMockData()` were removed.
-- **Never extend timeouts to fix hangs.** Find the root cause (queue blocking, truncated tokens, CORS fallback).
+- **Never extend timeouts to fix hangs.** Find the root cause (queue blocking, truncated tokens, CORS fallback, auth Promise hanging).
 - **`additionalProperties: false` is set on all schemas** — prevents unexpected fields from passing validation.
 - **`_enqueue` allows max 2 concurrent** — not serial. This prevents one slow request from blocking all others.
 - **Capacitor proxy does not support `AbortSignal`** — timeout is enforced via proxy's own `readTimeout`.
 - **`num_predict` is a ceiling, not a budget** — model stops at EOS. Higher ceilings don't slow normal outputs.
+- **`onAuthStateChanged(null)` is not a terminal state** — it means "no user signed in yet." Don't treat it as a resolution; let the timeout fire to trigger `signInAnonymously()`.

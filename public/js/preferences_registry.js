@@ -189,17 +189,28 @@ function readPrefFromDom(entry) {
 // Write a single pref to its DOM element
 function writePrefToDom(entry, value) {
   if (!entry.domId) return;
+  // For radios, domId is the radio group name — there's no element with
+  // that id, so skip the getElementById check and go straight to the
+  // querySelector lookup by name.
+  if (entry.type === 'radio') {
+    const rad = document.querySelector('input[name="' + entry.domId + '"][value="' + value + '"]');
+    if (rad) {
+      rad.checked = true;
+      // Sync visual state — peer-checked CSS is unreliable when set
+      // programmatically. Without this, the span labels stay greyed
+      // out even though the radio is checked.
+      if (window.app && app.ui && typeof app.ui._syncRadioVisual === 'function') {
+        app.ui._syncRadioVisual(entry.domId);
+      }
+    }
+    return;
+  }
   const el = document.getElementById(entry.domId);
   if (!el) return;
   switch (entry.type) {
     case 'bool':
       el.checked = value;
       break;
-    case 'radio': {
-      const rad = document.querySelector('input[name="' + entry.domId + '"][value="' + value + '"]');
-      if (rad) rad.checked = true;
-      break;
-    }
     default:
       el.value = value != null ? value : '';
   }

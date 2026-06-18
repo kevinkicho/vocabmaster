@@ -14,7 +14,14 @@ vocabmaster-master/
 │   │   ├── services.js      # AudioService, TextFitter, CelebrationService
 │   │   ├── data.js          # CSV parsing, Firebase RTDB read/write
 │   │   ├── analytics.js     # Per-word accuracy tracking
-│   │   ├── llm.js           # Ollama LLM integration
+│   │   ├── llm/             # LLM pipeline (service, validator, schemas, prompts, roles, cache, init)
+│   │   │   ├── llm_service.js    # HTTP transport, concurrent queue, autoDetect
+│   │   │   ├── llm_validator.js # generateWithCritic, generateValidated
+│   │   │   ├── llm_schemas.js    # JSON schemas for all LLM outputs
+│   │   │   ├── llm_prompts.js    # Prompt builders
+│   │   │   ├── llm_roles.js      # Feature role methods
+│   │   │   ├── llm_cache.js       # IndexedDB cache for cloze
+│   │   │   └── llm_init.js        # Re-exports + global assignments
 │   │   ├── native_tts.js    # Android native TTS bridge
 │   │   ├── native_auth.js    # Android native Google Sign-In bridge
 │   │   ├── android_bridge.js # Android LLM bridge
@@ -144,7 +151,7 @@ firebase deploy --only functions
 
 ### Grammar Gym (`scripts/pregenerate-grammar.js`)
 
-Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}`. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm.js`) to avoid ~30-100s waits on first visit.
+Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}`. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm/llm_roles.js`) to avoid ~30-100s waits on first visit.
 
 ```bash
 cd scripts

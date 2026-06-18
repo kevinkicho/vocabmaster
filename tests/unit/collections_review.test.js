@@ -4,9 +4,9 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const collectionsSrc = readFileSync(join(__dirname, '..', 'public', 'js', 'vocabulary-collections.js'), 'utf8');
-const dataSrc = readFileSync(join(__dirname, '..', 'public', 'js', 'data.js'), 'utf8');
-const adaptiveSrc = readFileSync(join(__dirname, '..', 'public', 'js', 'adaptive.js'), 'utf8');
+const collectionsSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'vocabulary-collections.js'), 'utf8');
+const dataSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'data.js'), 'utf8');
+const adaptiveSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'adaptive.js'), 'utf8');
 
 let COLLECTIONS, getCollection, getWordsForCollection, listCollections;
 let DataService;
@@ -142,7 +142,7 @@ describe('DataService review + filtering (runtime critical)', () => {
 describe('Story _pickWords respects collections (runtime)', () => {
     // We test the logic path statically + with mock
     it('_pickWords code uses getFilteredList when available', () => {
-        const src = readFileSync(join(__dirname, '..', 'public', 'js', 'game_story.js'), 'utf8');
+        const src = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'game_story.js'), 'utf8');
         expect(src).toMatch(/getFilteredList|currentCollection/);
     });
 });

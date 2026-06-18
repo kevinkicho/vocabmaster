@@ -33,7 +33,10 @@ Object.assign(UIManager.prototype, {
                                 case 'bool': el.checked = val; break;
                                 case 'radio': {
                                     const rad = document.querySelector('input[name="' + entry.domId + '"][value="' + val + '"]');
-                                    if (rad) rad.checked = true;
+                                    if (rad) {
+                                        rad.checked = true;
+                                        if (typeof this._syncRadioVisual === 'function') this._syncRadioVisual(entry.domId);
+                                    }
                                     break;
                                 }
                                 default: el.value = val;

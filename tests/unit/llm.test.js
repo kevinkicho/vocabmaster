@@ -4,8 +4,8 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const escapeSrc = readFileSync(join(__dirname, '..', 'public', 'js', 'escape.js'), 'utf8');
-const src = escapeSrc + '\n' + readFileSync(join(__dirname, '..', 'public', 'js', 'llm.js'), 'utf8');
+const escapeSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'escape.js'), 'utf8');
+const src = escapeSrc + '\n' + readFileSync(join(__dirname, '..', '..', 'public', 'js', 'llm.js'), 'utf8');
 
 let LLMService, service;
 beforeAll(() => {

@@ -236,161 +236,7 @@ class UIManager {
     renderThemeGrid() { const container = document.getElementById('theme-grid'); if(!container) return; const themes = [{ id: 'classic', color: '#6366f1', label: 'Classic' }, { id: 'sakura',  color: '#ec4899', label: 'Sakura' }, { id: 'ocean',   color: '#14b8a6', label: 'Ocean' }, { id: 'coffee',  color: '#f59e0b', label: 'Coffee' }, { id: 'cyber',   color: '#06b6d4', label: 'Cyber' }]; const cur = this.store.prefs.theme || 'classic'; container.innerHTML = themes.map(t => { const isActive = t.id === cur; const ring = isActive ? `ring-2 ring-offset-2 ring-${t.id === 'classic' ? 'indigo' : 'gray'}-400 dark:ring-offset-neutral-800` : ''; return `<button onclick="app.store.setTheme('${t.id}')" class="flex flex-col items-center gap-1 group"><div class="w-8 h-8 rounded-full shadow-sm border border-slate-200 dark:border-neutral-600 ${ring} transition-all active:scale-95" style="background-color: ${t.color}"></div><span class="text-[9px] font-bold text-slate-500 dark:text-neutral-400 ${isActive?'text-indigo-600 dark:text-indigo-400':''}">${t.label}</span></button>`; }).join(''); }
     _getActiveLang() { var p = this.store.prefs; return p.presetTarget || p.chatLang || p.flashFront || p.sentencesQ || 'ja'; }
     renderPresetsUI() { const container = document.getElementById('preset-container'); if(!container || container.childElementCount > 0) return; if(!window.app.presets) return; const langs = window.app.presets.languages; const opts = langs.map(l => `<option value="${l.key}">${l.label} ${l.icon}</option>`).join(''); container.innerHTML = `<div class="grid grid-cols-2 gap-3 mb-3"><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I know...</span><select id="preset-source" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200">${opts}</select></div><div class="flex flex-col"><span class="text-[9px] uppercase font-bold text-slate-400 mb-1">I want to learn...</span><select id="preset-target" class="bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-xl px-3 py-2 text-sm font-bold outline-none shadow-sm text-slate-700 dark:text-neutral-200"><option value="" disabled selected>Select...</option>${opts}</select></div></div><button onclick="app.presets.apply(document.getElementById('preset-source').value, document.getElementById('preset-target').value)" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-xl text-sm shadow-md active:scale-95 transition-all">Apply Preset</button>`; const src = document.getElementById('preset-source'); const tgt = document.getElementById('preset-target'); if(src) src.value = app.store.prefs.presetSource || 'en'; if(tgt) tgt.value = app.store.prefs.presetTarget || 'ja'; }
-    renderLevelFilter() {
-        const container = document.getElementById('level-filter-container');
-        if (!container) return;
-        const p = this.store.prefs;
-        if (typeof LEVEL_CONFIG === 'undefined') return;
-        const selected = p.levelFilter || ['all'];
-        const hasLevelData = app.data.list.some(item => item.level || item.tags);
-        if (!hasLevelData) { container.classList.add('hidden'); return; }
-        container.classList.remove('hidden');
-        const allBtnClass = selected.includes('all') ? 'bg-violet-500 text-white border-violet-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
-        let html = `<p class="text-[9px] uppercase font-bold text-violet-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-barbell"></i> Level Filter</p>
-            <div class="flex flex-wrap gap-1.5 mb-2">
-            <button data-level="all" class="level-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>`;
-        for (const group of LEVEL_CONFIG.groups) {
-            var isRelevant = group.langs.some(function(l) { return l === this._getActiveLang(); }.bind(this));
-            if (!isRelevant) continue;
-            html += `<span class="text-[9px] font-black text-slate-400 mx-1">${group.label}</span>`;
-            for (const lvl of group.levels) {
-                const isActive = selected.includes(lvl);
-                const color = LEVEL_CONFIG.colors[lvl] || '#6366f1';
-                const btnClass = isActive ? 'text-white border-transparent shadow-sm' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 border-slate-200 dark:border-neutral-700';
-                const style = isActive ? `background:${color}; border-color:${color}` : '';
-                html += `<button data-level="${lvl}" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 whitespace-nowrap ${btnClass}" style="${style}">${lvl}</button>`;
-            }
-        }
-        const unassignedActive = selected.includes('unassigned');
-        const unClass = unassignedActive ? 'bg-slate-600 text-white border-slate-600' : 'bg-white dark:bg-neutral-700 text-slate-400 dark:text-neutral-500 border-slate-200 dark:border-neutral-600';
-        html += `<button data-level="unassigned" class="level-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${unClass}">Untagged</button>`;
-        html += `</div><p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-violet-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p></div>`;
-        container.innerHTML = html;
-        container.querySelectorAll('.level-filter-btn').forEach(btn => {
-            btn.onclick = () => { this.toggleLevel(btn.dataset.level); };
-        });
-    }
-    toggleLevel(level) {
-        const p = this.store.prefs;
-        let selected = [...(p.levelFilter || ['all'])];
-        if (level === 'all') { selected = ['all']; }
-        else {
-            selected = selected.filter(l => l !== 'all');
-            if (selected.includes(level)) { selected = selected.filter(l => l !== level); if (selected.length === 0) selected = ['all']; }
-            else { selected.push(level); }
-        }
-        p.levelFilter = selected;
-        localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
-        this.renderLevelFilter();
-        if (app.game) {
-            app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
-            if (app.game.i >= app.game.list.length) app.game.i = 0;
-            if (app.game.update) app.game.update(); else app.game.render();
-        }
-    }
-    renderTagFilter() {
-        const section = document.getElementById('tag-filter-section');
-        if (!section || !app.data) return;
-        const allTags = app.data.getAllTags();
-        if (!allTags || allTags.length === 0) { section.innerHTML = ''; return; }
-        const p = this.store.prefs;
-        const selected = p.tagFilter || ['all'];
-        const allBtnClass = selected.includes('all') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-600';
-        var currentLang = this._getActiveLang();
-        var allGroups = [
-            { label: 'JLPT', tags: ['N5','N4','N3','N2','N1'], langs: ['ja','ja_furi','ja_roma'] },
-            { label: 'HSK', tags: ['HSK1','HSK2','HSK3','HSK4','HSK5','HSK6'], langs: ['zh','zh_pin'], stripPrefix: 'HSK' },
-            { label: 'CEFR', tags: ['A1','A2','B1','B2','C1'], langs: ['en','es','fr','de','it','pt','ru','ru_tr'] },
-            { label: 'TOPIK', tags: ['TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5','TOPIK6'], langs: ['ko','ko_roma'], stripPrefix: 'TOPIK' },
-            { label: 'Frequency', tags: ['common','uncommon','rare'], langs: null },
-        ];
-        var groups = allGroups.filter(function(g) {
-            return !g.langs || g.langs.indexOf(currentLang) !== -1;
-        });
-        let html = `<div class="bg-white dark:bg-neutral-900 rounded-2xl p-3 border border-slate-200 dark:border-neutral-800">
-            <p class="text-[9px] uppercase font-bold text-indigo-500 mb-2 flex items-center gap-1"><i class="ph-bold ph-exam"></i> Exam Level <span class="text-[7px] text-slate-300 dark:text-neutral-600 italic font-normal normal-case">(Basic → Advanced)</span> <i class="ph-bold ph-info text-slate-400 cursor-pointer relative" id="exam-level-info"></i></p>
-            <div id="exam-level-tooltip" class="hidden fixed z-50 bg-slate-800 text-white text-[10px] rounded-lg px-4 py-3 shadow-lg max-w-[280px] w-auto leading-relaxed">
-              <p class="mb-1"><strong class="text-indigo-300">JLPT</strong> — Japanese-Language Proficiency Test (N5→N1)</p>
-              <p class="mb-1"><strong class="text-indigo-300">HSK</strong> — Hanyu Shuiping Kaoshi (HSK1→HSK6)</p>
-              <p class="mb-1"><strong class="text-indigo-300">TOPIK</strong> — Test of Proficiency in Korean (TOPIK1→TOPIK6)</p>
-              <p class="mb-1"><strong class="text-indigo-300">CEFR</strong> — Common European Framework (A1→C2)</p>
-              <p class="text-slate-400 mt-1">Not all entries have every framework tag.</p>
-            </div>
-            <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] text-slate-400 dark:text-neutral-500"><span class="font-bold text-indigo-500">${app.data.getFilteredList().length}</span> of ${app.data.list.length} words selected</p>
-                <button data-tag="all" class="tag-filter-btn px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${allBtnClass}">All</button>
-            </div>`;
-        for (const group of groups) {
-            const existingTags = group.tags.filter(t => allTags.includes(t));
-            if (existingTags.length === 0) continue;
-            html += `<div class="w-full flex items-start gap-2 mt-1">
-                <span class="text-[9px] font-black text-slate-400 dark:text-neutral-500 uppercase tracking-wider whitespace-nowrap mt-1.5 min-w-[52px]">${group.label}</span>
-                <div class="flex flex-wrap gap-1.5 items-center">`;
-            for (const tag of existingTags) {
-                const isActive = selected.includes(tag);
-                const btnClass = isActive ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 border-slate-200 dark:border-neutral-700';
-                const display = group.stripPrefix ? tag.replace(group.stripPrefix, '') : tag;
-                html += `<button data-tag="${tag}" class="tag-filter-btn px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${btnClass}">${display}</button>`;
-            }
-            html += `</div></div>`;
-        }
-        html += `</div>
-        </div>`;
-        section.innerHTML = html;
-        const infoIcon = document.getElementById('exam-level-info');
-        if (infoIcon) {
-            infoIcon.onclick = function(e) {
-                e.stopPropagation();
-                var tooltip = document.getElementById('exam-level-tooltip');
-                if (!tooltip) return;
-                tooltip.classList.toggle('hidden');
-                if (tooltip.classList.contains('hidden')) return;
-                requestAnimationFrame(function() {
-                    var rect = infoIcon.getBoundingClientRect();
-                    var tw = tooltip.offsetWidth;
-                    var th = tooltip.offsetHeight;
-                    var left = rect.left + rect.width / 2 - tw / 2;
-                    var top = rect.bottom + 4;
-                    if (left + tw > window.innerWidth) left = window.innerWidth - tw - 8;
-                    if (left < 8) left = 8;
-                    if (top + th > window.innerHeight) top = rect.top - th - 4;
-                    if (top < 8) top = 8;
-                    tooltip.style.left = left + 'px';
-                    tooltip.style.top = top + 'px';
-                    tooltip.style.transform = 'none';
-                });
-            };
-            document.addEventListener('click', function _closeExamTooltip(e) {
-                const tooltip = document.getElementById('exam-level-tooltip');
-                if (tooltip && !tooltip.classList.contains('hidden') && !e.target.closest('#exam-level-info')) {
-                    tooltip.classList.add('hidden');
-                }
-            });
-        }
-        section.querySelectorAll('.tag-filter-btn').forEach(btn => {
-            btn.onclick = () => { this.toggleTag(btn.dataset.tag); };
-        });
-    }
-    toggleTag(tag) {
-        const p = this.store.prefs;
-        let selected = [...(p.tagFilter || ['all'])];
-        if (tag === 'all') { selected = ['all']; }
-        else {
-            selected = selected.filter(t => t !== 'all');
-            if (selected.includes(tag)) { selected = selected.filter(t => t !== tag); if (selected.length === 0) selected = ['all']; }
-            else { selected.push(tag); }
-        }
-        p.tagFilter = selected;
-        localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
-        this.renderTagFilter();
-        if (app.game) {
-            app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.tagFilter = ['all']; }
-            if (app.game.i >= app.game.list.length) app.game.i = 0;
-            if (app.game.update) app.game.update(); else app.game.render();
-        }
-    }
+    // R3: renderLevelFilter, toggleLevel, renderTagFilter, toggleTag moved to ui_home.js
     renderSettingsUI() { const p = this.store.prefs; if(typeof LANG_CONFIG === 'undefined') return; const createOpts = (selId, selectedVal, hideVisuals = false) => { const el = document.getElementById(selId); if(!el) return; const list = hideVisuals ? LANG_CONFIG.filter(l => !l.visualOnly) : LANG_CONFIG; let html = '<option value="">(None)</option>'; html += list.map(l => { let str = `<option value="${l.key}" ${l.key===selectedVal?'selected':''}>${l.label}</option>`; if(l.exKey) { str += `<option value="${l.exKey}" ${l.exKey===selectedVal?'selected':''}>↳ ${l.label} (Example)</option>`; } return str; }).join(''); el.innerHTML = html; }; const createGrid = (containerId, prefixKey) => { const el = document.getElementById(containerId); if(!el) return; const list = LANG_CONFIG.filter(l => !l.visualOnly); el.innerHTML = list.map(l => { const id = `${prefixKey}-${l.key}`; const pref = `${prefixKey}_${l.key}`; return `<label class="flex flex-col items-center justify-center p-2 bg-slate-50 dark:bg-neutral-800 rounded border border-slate-200 dark:border-neutral-700 cursor-pointer hover:border-indigo-300 transition-colors"><span class="text-[9px] font-black uppercase mb-1">${l.code.toUpperCase()}</span><div class="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="${id}" class="sr-only peer" ${p[pref]!==false ? 'checked' : ''}><div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div></div></label>`; }).join(''); }; createOpts('flash-front', p.flashFront); createOpts('flash-back-1', p.flashBack1); createOpts('flash-back-2', p.flashBack2); createOpts('flash-back-3', p.flashBack3); createOpts('flash-back-4', p.flashBack4); createOpts('flash-audio-src', p.flashAudioSrc, true); createOpts('quiz-q-type', p.quizQ); createOpts('quiz-a-type', p.quizA); createOpts('quiz-audio-src', p.quizAudioSrc, true); createOpts('quiz-ex-main', p.quizExMain, true); createOpts('quiz-ex-sub', p.quizExSub, true); createOpts('tf-front', p.tfFront); createOpts('tf-back', p.tfBack); createOpts('tf-audio-src', p.tfAudioSrc, true); createOpts('tf-ex-main', p.tfExMain, true); createOpts('tf-ex-sub', p.tfExSub, true); createOpts('voice-disp-front', p.voiceDispFront); createOpts('voice-disp-back', p.voiceDispBack); createOpts('voice-audio-target', p.voiceAudioTarget, true); createOpts('voice-ex-main', p.voiceExMain, true); createOpts('sentences-q', p.sentencesQ); createOpts('sentences-a', p.sentencesA); createOpts('sentences-trans', p.sentencesTrans); createOpts('sentences-audio-src', p.sentencesAudioSrc, true); createOpts('sentences-bottom-lang', p.sentencesBottomLang, true); const snDispEl = document.getElementById('sentences-bottom-disp'); if(snDispEl) { snDispEl.innerHTML = `<option value="none">None</option><option value="sentence_masked">Sentence (Masked)</option><option value="sentence_full">Sentence (Full)</option><option value="word_masked">Word (Masked)</option><option value="word_full">Word (Full)</option>`; snDispEl.value = p.sentencesBottomDisp || 'sentence_masked'; } const matchFilterContainer = document.getElementById('container-match-filters'); if(matchFilterContainer) { matchFilterContainer.innerHTML = LANG_CONFIG.map(l => { const id = `match-show-${l.key}`; const prefKey = `matchShow${this.store.cap(l.key)}`; return `<label class="p-2 bg-white dark:bg-neutral-700/30 rounded border border-slate-200 dark:border-neutral-700 flex flex-col items-center cursor-pointer select-none active:scale-95 transition-transform"><span class="text-[9px] font-bold mb-1 truncate w-full text-center">${l.label}</span><input type="checkbox" id="${id}" class="accent-slate-600 w-3 h-3" ${p[prefKey]?'checked':''}></label>`; }).join(''); } createGrid('container-match-audio', 'matchAudio'); createGrid('container-btn-audio', 'btnAudio'); this.renderCelebGrid(); const back2 = document.getElementById('flash-back-2'); if (back2 && !document.getElementById('flash-back-3')) { const parent = back2.parentElement.parentElement; if (parent) { const makeSel = (n) => `<div class="flex flex-col"><span class="text-[9px] uppercase font-bold mb-1">Back ${n}</span><select id="flash-back-${n}" class="text-xs font-bold bg-white dark:bg-neutral-700 border border-slate-200 dark:border-neutral-600 rounded-lg px-1 py-1 outline-none"></select></div>`; parent.insertAdjacentHTML('beforeend', makeSel(3) + makeSel(4)); createOpts('flash-back-3', p.flashBack3); createOpts('flash-back-4', p.flashBack4); } } const sentAudioSrc = document.getElementById('sentences-audio-src'); if(sentAudioSrc && !document.getElementById('sentences-read-whole')) { const parent = sentAudioSrc.parentElement.parentElement; if(parent) { const toggleHtml = `<div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-neutral-800 rounded border border-slate-200 dark:border-neutral-700 col-span-2"><span class="text-[9px] font-bold uppercase text-slate-500">Read Full Sentence</span><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="sentences-read-whole" class="sr-only peer" ${p.sentencesReadWhole ? 'checked' : ''}><div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-neutral-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div></label></div>`; parent.insertAdjacentHTML('beforeend', toggleHtml); } } const devDetails = document.getElementById('details-developer'); if (devDetails && !document.getElementById('debug-log-area')) { const container = devDetails.querySelector('.p-4'); if(container) { const debugHTML = `<div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-2"></div><div class="flex flex-col gap-2 mt-2"><div class="flex justify-between items-center"><span class="text-[9px] uppercase font-bold text-slate-400">System Logs</span><button onclick="app.ui.copyLogs()" class="px-2 py-1 bg-slate-200 dark:bg-neutral-700 rounded text-[10px] font-bold text-slate-600 dark:text-neutral-300 active:scale-95 transition-transform flex items-center gap-1 w-fit"><i class="ph-bold ph-copy"></i> Copy</button></div><textarea id="debug-log-area" readonly class="w-full h-32 bg-black text-green-400 text-[10px] font-mono p-2 rounded-xl border border-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-green-500"></textarea></div>`; container.insertAdjacentHTML('beforeend', debugHTML); } } const logArea = document.getElementById('debug-log-area'); if(logArea && window.logBuffer) logArea.value = window.logBuffer.join('\n'); }
     copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; navigator.clipboard.writeText(el.value); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); }
     renderCelebGrid() { const grid = document.getElementById('celeb-grid'); if(!grid || !window.app || !window.app.celebration) return; grid.innerHTML = ''; const allEffects = Object.keys(window.app.celebration.effects); const userAllowed = this.store.prefs.allowedCelebs || []; const labelMap = { 'Confetti': '🎉', 'Stars': '⭐', 'Discs': '💿', 'Coin': '🪙', 'Money': '💸', 'Red Env': '🧧', 'Sushi': '🍣', 'Kimono': '👘', 'Carp': '🎏', 'Torii': '⛩️', 'Sake': '🍶', 'Bento': '🍱', 'Dragon': '🐲' }; allEffects.forEach(name => { const isEnabled = userAllowed.includes(name); const btn = document.createElement('button'); const baseClass = "text-2xl font-bold py-2 rounded-xl transition-all active:scale-95 border-2 shadow-sm truncate px-1 flex items-center justify-center"; const activeClass = "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700/50"; const inactiveClass = "bg-slate-50 dark:bg-neutral-800 text-slate-400 dark:text-neutral-500 border-transparent hover:border-slate-200 dark:hover:border-neutral-700 grayscale opacity-60"; btn.className = `${baseClass} ${isEnabled ? activeClass : inactiveClass}`; btn.innerText = labelMap[name] || name; btn.onclick = () => this.store.toggleCeleb(name, btn, activeClass, inactiveClass); grid.appendChild(btn); }); }
@@ -558,128 +404,7 @@ class UIManager {
         if (app.game && typeof app.game.update === 'function') { app.game.update(); } 
         const bar = document.getElementById('status-bar'); bar.innerText = "Correction Saved!"; bar.classList.add('text-emerald-500'); setTimeout(() => bar.classList.remove('text-emerald-500'), 2000); } catch(e) { app.ui.showToast("Save failed: " + e.message, "error"); } finally { btn.innerHTML = origText; btn.disabled = false; } }
 
-    showTooltip(e, char, isLongPress = false) { 
-        if (app.store.prefs.hanziEnableTooltip === false) return; 
-        if (this.hideTimer) { clearTimeout(this.hideTimer); this.hideTimer = null; } 
-        if (this.autoCloseTimer) { clearTimeout(this.autoCloseTimer); this.autoCloseTimer = null; } 
-        
-        const tooltip = document.getElementById('hanzi-tooltip'); 
-        if(!tooltip) return; 
-        
-        tooltip.style.left = '-9999px'; 
-        tooltip.style.top = '-9999px'; 
-        tooltip.classList.remove('hidden', 'opacity-0'); 
-
-        if (!char) return; 
-
-        tooltip.innerHTML = `
-            <div class="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-slate-200 dark:border-neutral-700 p-4 min-w-[120px] relative z-[100]">
-                 <div class="flex items-center gap-2 text-slate-400">
-                    <i class="ph-bold ph-spinner animate-spin"></i> <span class="text-xs font-bold">Loading...</span>
-                 </div>
-            </div>`;
-        this.positionTooltip(tooltip, e, isLongPress);
-
-        const failTimer = setTimeout(() => {
-            if(tooltip.innerHTML.includes('ph-spinner')) {
-                tooltip.innerHTML = `<div class="bg-white dark:bg-neutral-800 rounded-xl p-3 shadow-2xl border border-slate-200 dark:border-neutral-700"><p class="text-xs font-bold text-rose-500">Not Found</p></div>`;
-            }
-        }, 3000);
-
-        app.data.getKanji(char).then(data => {
-            clearTimeout(failTimer);
-            if(!data) {
-                this.hideTooltip(true);
-                return;
-            }
-            const { t:trad, s:simp, p:pinyin, k:kr, e:en } = data;
-            const p = app.store.prefs;
-            
-            tooltip.innerHTML = `
-            <div class="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl border border-slate-200 dark:border-neutral-700 p-3 min-w-[150px] max-w-xs pointer-events-auto z-[100] relative" onclick="event.stopPropagation()">
-                <button onclick="app.ui.hideTooltip(true)" class="absolute -top-3 -right-3 w-7 h-7 bg-slate-800 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-transform border border-white dark:border-neutral-600 z-[101]">
-                    <i class="ph-bold ph-x text-xs"></i>
-                </button>
-                <div class="flex items-center gap-3 mb-2 border-b border-slate-100 dark:border-neutral-700 pb-2">
-                    ${p.hanziShowTrad!==false ? `<span class="text-3xl font-serif text-slate-800 dark:text-white font-black leading-none">${escapeHtml(trad)}</span>` : ''}
-                    ${p.hanziShowSimp!==false && simp && simp !== trad ? `<span class="text-lg font-serif text-slate-400 leading-none">${escapeHtml(simp)}</span>` : ''}
-                </div>
-                <div class="space-y-1">
-                    ${p.hanziShowPinyin!==false ? `<p class="text-sm font-bold text-indigo-500 font-serif">${escapeHtml(pinyin)}</p>` : ''}
-                    ${p.hanziShowKr!==false ? `<p class="text-xs text-slate-600 dark:text-neutral-300">🇰🇷 ${escapeHtml(kr)}</p>` : ''}
-                    ${p.hanziShowEn!==false ? `<p class="text-xs text-slate-600 dark:text-neutral-300">🇺🇸 ${escapeHtml(en)}</p>` : ''}
-                </div>
-            </div>`;
-            this.positionTooltip(tooltip, e, isLongPress);
-        }).catch(() => {
-            clearTimeout(failTimer);
-            this.hideTooltip(true);
-        });
-
-        const closeTime = parseInt(app.store.prefs.hanziAutoClose || "0"); 
-        if (closeTime > 0) { 
-            this.autoCloseTimer = setTimeout(() => { this.hideTooltip(true); }, closeTime); 
-        }
-
-        if (!isLongPress) { 
-            if(this.trackTooltip) document.removeEventListener('mousemove', this.trackTooltip); 
-            this.trackTooltip = (ev) => { 
-                const offset = 20;
-                let lx = ev.clientX + offset; 
-                let ly = ev.clientY + offset; 
-                if (lx + 200 > window.innerWidth) lx = window.innerWidth - 220; 
-                if (ly + 150 > window.innerHeight) ly = window.innerHeight - 170; 
-                tooltip.style.left = `${lx}px`; 
-                tooltip.style.top = `${ly}px`; 
-            }; 
-            document.addEventListener('mousemove', this.trackTooltip); 
-        } 
-    }
-
-    positionTooltip(tooltip, e, isLongPress) {
-        requestAnimationFrame(() => { 
-            const rect = tooltip.getBoundingClientRect(); 
-            const w = rect.width; 
-            const h = rect.height; 
-            const offset = 20; 
-            let left, top; 
-            if (isLongPress) { 
-                const touch = e.touches[0]; 
-                left = touch.clientX - (w / 2); 
-                top = touch.clientY - h - 30; 
-            } else { 
-                left = e.clientX + offset; 
-                top = e.clientY + offset; 
-            } 
-            if (left + w > window.innerWidth) left = window.innerWidth - w - 10; 
-            if (left < 10) left = 10; 
-            if (top + h > window.innerHeight) top = window.innerHeight - h - 10; 
-            if (top < 10) top = 10; 
-            tooltip.style.left = `${left}px`; 
-            tooltip.style.top = `${top}px`; 
-        });
-    }
-
-    hideTooltip(force = false) { 
-        if (this.autoCloseTimer) { clearTimeout(this.autoCloseTimer); this.autoCloseTimer = null; } 
-        const delay = force ? 0 : 200; 
-        if (this.hideTimer) clearTimeout(this.hideTimer); 
-        this.hideTimer = setTimeout(() => { 
-            const tooltip = document.getElementById('hanzi-tooltip'); 
-            if(tooltip) { 
-                tooltip.classList.add('opacity-0'); 
-                setTimeout(() => { 
-                    tooltip.classList.add('hidden'); 
-                    tooltip.style.left = '-9999px'; 
-                }, 200); 
-            } 
-        }, delay); 
-        if(this.trackTooltip) { 
-            document.removeEventListener('mousemove', this.trackTooltip); 
-            this.trackTooltip = null; 
-        } 
-    }
-    
+    // R3: showTooltip, positionTooltip, hideTooltip moved to ui_tooltips.js
     openProfileModal() { if (!auth.currentUser) return; const user = auth.currentUser; const modal = document.getElementById('modal-profile'); const container = document.getElementById('profile-content'); const created = new Date(user.metadata.creationTime).toLocaleDateString(); container.innerHTML = `<div class="flex flex-col items-center mb-6"><img src="${escapeHtml(user.photoURL)}" class="w-24 h-24 rounded-full shadow-lg border-4 border-white dark:border-neutral-700 mb-3"><h3 class="text-xl font-black text-slate-800 dark:text-white">${escapeHtml(user.displayName)}</h3><p class="text-xs font-bold text-slate-400">${escapeHtml(user.email)}</p></div><div class="bg-slate-50 dark:bg-neutral-800 rounded-2xl p-4 border border-slate-100 dark:border-neutral-700 mb-6 space-y-2"><div class="flex justify-between text-sm"><span class="text-slate-500 font-bold">Active Since</span><span class="font-bold text-slate-800 dark:text-neutral-300">${escapeHtml(created)}</span></div></div><button onclick="app.auth.logout(); document.getElementById('modal-profile').classList.add('hidden');" class="w-full bg-slate-200 dark:bg-neutral-700 hover:bg-slate-300 text-slate-700 dark:text-neutral-300 font-bold py-3 rounded-xl mb-3">Log Out</button><button onclick="app.data.deleteUserAccount()" class="w-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200 font-bold py-3 rounded-xl">Delete Account</button>`; modal.classList.remove('hidden'); }
     async openStatsModal() {
         const modal = document.getElementById('modal-stats');
@@ -1192,6 +917,31 @@ class UIManager {
             dot.style.background = '#f43f5e';
             text.innerText = 'Not Reachable';
             text.style.color = '#f43f5e';
+        }
+    }
+
+    // F9: Persistent home-screen AI status indicator. Called from
+    // llm_service.js autoDetect() + _ping() + goHome() render. Safe to call
+    // before the home screen exists (returns early if elements missing); when
+    // goHome() renders later it calls this at render time.
+    _updateAIStatus() {
+        const dot = document.getElementById('ai-status-dot');
+        const label = document.getElementById('ai-status-label');
+        if (!dot || !label) return;
+        const llm = app.llm;
+        if (llm && !llm._isStub && llm.available && llm.hasModel) {
+            dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+            label.textContent = llm.useCloud ? 'AI Online (cloud)' : 'AI Online (local)';
+            label.className = 'text-[9px] font-bold text-emerald-500 uppercase';
+        } else if (llm && !llm._isStub && llm.available) {
+            // Connected to /api/tags but no model resolved yet — still detecting.
+            dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+            label.textContent = 'AI detecting...';
+            label.className = 'text-[9px] font-bold text-amber-500 uppercase';
+        } else {
+            dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+            label.textContent = 'AI Offline';
+            label.className = 'text-[9px] font-bold text-rose-400 uppercase';
         }
     }
 

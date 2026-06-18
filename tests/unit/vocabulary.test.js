@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const src = readFileSync(join(__dirname, '..', 'public', 'js', 'vocabulary-collections.js'), 'utf8');
+const src = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'vocabulary-collections.js'), 'utf8');
 
 let SPANISH_A1, SPANISH_A2, SPANISH_B1, SPANISH_B2, FRENCH_A1, FRENCH_A2, FRENCH_B1, FRENCH_B2, GERMAN_A1, GERMAN_A2, GERMAN_B1, GERMAN_B2, ITALIAN_A1, ITALIAN_A2, ITALIAN_B1, ITALIAN_B2, PORTUGUESE_A1, PORTUGUESE_A2, PORTUGUESE_B1, PORTUGUESE_B2, JAPANESE_N5, CHINESE_HSK1, KOREAN_TOPIK1, RUSSIAN_A1, RUSSIAN_A2, JAPANESE_N4, CHINESE_HSK2, KOREAN_TOPIK2;
 beforeAll(() => {

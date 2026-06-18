@@ -1,5 +1,23 @@
 # Implementation Plan
 
+> **Status (2026-06-17)**: Features 5–8 are **DONE in code** (verified by grep). Feature 9 is **NOT STARTED** — the plan below was written but no code was changed. The "Implementation Order" at the top is stale. See `REFACTORING_PLAN.md` for unrelated hygiene work (R1–R8) that should land before Feature 9.
+
+| Feature | Status | Verification |
+|---------|--------|--------------|
+| 1 Typing indicator | Done | `game_chat.js` has typing indicator |
+| 2 Sticky bottom-scroll | Done | `scrollIntoView` calls in `game_chat.js` |
+| 3 Transcript save/load | Done | per `current-status-and-roadmap.md` |
+| 4 Mic crash fix | Done | `webkitSpeechRecognition` guards in `game_chat.js:71-101` |
+| 5 AI Tutor Level in Story Mode | **DONE** | `story-level-badge` + `_getLevelsForLang` in `game_story_ui.js`, `_storyLevel` in `game_story_generator.js` |
+| 6 Language-aware level extraction | **DONE** | `_getLevelsForLang(lang)` at `game_story_generator.js:98` |
+| 7 Cancel audio + clear cache on lang change | **DONE** | `app.audio.cancel()` + cache-clear guards in `game_story_generator.js` |
+| 8 HSK/TOPIK display fixes | **DONE** | `TOPIK6` in `data.js:106`, `ui.js:305`; `whitespace-nowrap` on chips; `exam-level-tooltip` rewrite at `ui.js:313` |
+| 9 AI init sequence + status indicator | **NOT STARTED** | `statusBar.innerText='Connecting...'`, `ai-status-indicator`, `_updateAIStatus()` all absent from code; `_showAIWelcome()` still at `llm_service.js:210,390` |
+
+> **Feature 9 is the only outstanding item.** Before implementing it, run R1+R2 from `REFACTORING_PLAN.md` (soften global error hook, surface constructor init failures) — Feature 9 touches `main.js:init()` and `llm_service.js:autoDetect()`, the exact code those items harden.
+
+---
+
 ## Feature 9: AI Init Sequence — Block with Timeout + Persistent Status Indicator
 
 ### Current Behavior
@@ -148,7 +166,7 @@ This was needed because autoDetect was async and the home screen hadn't rendered
 
 ---
 
-## Feature 5: AI Tutor Level in Story Mode
+## Feature 5: AI Tutor Level in Story Mode  ✅ DONE IN CODE
 
 **Current:** Story Mode extracts level from `this.storyWords.map(w => w.level).find(Boolean)` — but vocab items have `tags` (array like `['N5']`), not a `level` property. So `storyLevel` is **always `null`**. The LLM prompt never gets a level hint — the AI generates at whatever its default is (likely intermediate/advanced).
 
@@ -308,19 +326,23 @@ const storyLevel = this._storyLevel;
 
 ---
 
-## Implementation Order
+## Implementation Order (Stale — kept for historical reference)
 
-1. **Mic crash fix** (Feature 4) — highest priority, blocks usability
-2. **Sticky bottom-scroll** (Feature 2) — improves UX immediately
-3. **Typing indicator in message stream** (Feature 1) — visual polish
-4. **Transcript save/load** (Feature 3) — persistence feature
-5. **AI Tutor Level in Story Mode** (Feature 5) — consistency with Chat Mode
-6. **Language-aware level extraction** (Feature 6) — use `_getLevelsForLang()` instead of hardcoded `difficultyOrder`
-7. **Cancel audio + clear cache on language change** (Feature 7) — prevent stale TTS and wrong-language cached stories
+> Features 1–8 are all done. Only Feature 9 remains.
+
+1. ~~**Mic crash fix** (Feature 4)~~ ✅
+2. ~~**Sticky bottom-scroll** (Feature 2)~~ ✅
+3. ~~**Typing indicator in message stream** (Feature 1)~~ ✅
+4. ~~**Transcript save/load** (Feature 3)~~ ✅
+5. ~~**AI Tutor Level in Story Mode** (Feature 5)~~ ✅
+6. ~~**Language-aware level extraction** (Feature 6)~~ ✅
+7. ~~**Cancel audio + clear cache on language change** (Feature 7)~~ ✅
+8. ~~**Fix HSK/TOPIK display issues** (Feature 8)~~ ✅
+9. **AI init sequence + persistent status indicator** (Feature 9) ← only remaining; do R1+R2 from `REFACTORING_PLAN.md` first
 
 ---
 
-## Feature 6: Language-Aware Level Extraction
+## Feature 6: Language-Aware Level Extraction  ✅ DONE IN CODE
 
 **Bug:** `game_story_generator.js` used a hardcoded `difficultyOrder` array with all frameworks (JLPT, HSK, CEFR, TOPIK). Spanish vocab with `HSK5` tags showed wrong levels.
 
@@ -330,7 +352,7 @@ const storyLevel = this._storyLevel;
 
 ---
 
-## Feature 7: Cancel Audio + Clear Cache on Language Change
+## Feature 7: Cancel Audio + Clear Cache on Language Change  ✅ DONE IN CODE
 
 **Bug 1:** When changing language mid-session, old TTS kept playing because `startStory()` didn't call `app.audio.cancel()`.
 
@@ -392,7 +414,7 @@ lang: cached._lang || this._getTargetLang(),
 
 ---
 
-## Feature 8: Fix HSK/TOPIK Display Issues
+## Feature 8: Fix HSK/TOPIK Display Issues  ✅ DONE IN CODE
 
 ### 8a: Tag Filter — Show Only Relevant Frameworks for Current Language
 
@@ -586,13 +608,16 @@ This is a **separate fix** from Feature 8 — it affects game headers, not the f
 
 ---
 
-## Implementation Order
+## Implementation Order (Stale — kept for historical reference)
 
-1. **Mic crash fix** (Feature 4) — highest priority, blocks usability
-2. **Sticky bottom-scroll** (Feature 2) — improves UX immediately
-3. **Typing indicator in message stream** (Feature 1) — visual polish
-4. **Transcript save/load** (Feature 3) — persistence feature
-5. **AI Tutor Level in Story Mode** (Feature 5) — consistency with Chat Mode
-6. **Language-aware level extraction** (Feature 6) — use `_getLevelsForLang()` instead of hardcoded `difficultyOrder`
-7. **Cancel audio + clear cache on language change** (Feature 7) — prevent stale TTS and wrong-language cached stories
-8. **Fix HSK/TOPIK display issues** (Feature 8) — framework-aware tag filter, TOPIK6, tooltip, wrapping
+> Duplicate of the order list near the top. Features 1–8 are all done; only Feature 9 remains.
+
+1. ~~**Mic crash fix** (Feature 4)~~ ✅
+2. ~~**Sticky bottom-scroll** (Feature 2)~~ ✅
+3. ~~**Typing indicator in message stream** (Feature 1)~~ ✅
+4. ~~**Transcript save/load** (Feature 3)~~ ✅
+5. ~~**AI Tutor Level in Story Mode** (Feature 5)~~ ✅
+6. ~~**Language-aware level extraction** (Feature 6)~~ ✅
+7. ~~**Cancel audio + clear cache on language change** (Feature 7)~~ ✅
+8. ~~**Fix HSK/TOPIK display issues** (Feature 8)~~ ✅
+9. **AI init sequence + persistent status indicator** (Feature 9) ← only remaining

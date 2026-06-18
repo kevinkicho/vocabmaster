@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const src = readFileSync(join(__dirname, '..', 'public', 'js', 'adaptive.js'), 'utf8');
+const src = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'adaptive.js'), 'utf8');
 
 let getWordDifficulty, selectWordsForReview, adjustDifficulty;
 beforeAll(() => {

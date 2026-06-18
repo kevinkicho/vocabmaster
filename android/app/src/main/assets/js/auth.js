@@ -35,13 +35,17 @@ class AuthManager {
 
             var unsubscribe = auth.onAuthStateChanged(function(user) {
                 if (resolved) return;
-                resolved = true;
-                clearTimeout(timeout);
-                unsubscribe();
                 if (user) {
+                    // Real user (anonymous from prior session or Google sign-in)
+                    resolved = true;
+                    clearTimeout(timeout);
+                    unsubscribe();
                     this.currentUser = user;
                     resolve(user);
                 }
+                // If user is null, do NOT set resolved=true — let the 1.5s
+                // timeout fire to call signInAnonymously(). Setting resolved=true
+                // on null would hang the Promise forever (pre-existing bug).
             }.bind(this));
         });
     }

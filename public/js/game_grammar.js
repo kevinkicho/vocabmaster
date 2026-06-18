@@ -344,13 +344,13 @@ class Grammar extends GameMode {
         allChoices.forEach(ch => {
             const letter = ch.dataset.letter;
             ch.onclick = null;
-            ch.classList.remove('hover:border-amber-300', 'dark:hover:border-amber-600', 'active:scale-[0.98]', 'ring-2', 'ring-amber-300', 'dark:ring-amber-600');
+            ch.classList.remove('hover:border-amber-300', 'dark:hover:border-amber-600', 'active:scale-[0.98]', 'ring-2', 'ring-amber-300', 'dark:ring-amber-600', 'border-slate-200', 'dark:border-neutral-700', 'bg-white', 'dark:bg-neutral-900');
             if (letter === ex.answer) {
-                ch.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30');
+                ch.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30', 'dark:text-white');
             } else if (letter === selected && !correct) {
-                ch.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30');
+                ch.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30', 'dark:text-white');
             } else {
-                ch.classList.add('opacity-50');
+                ch.classList.add('border-slate-100', 'dark:border-neutral-800', 'opacity-50', 'dark:text-neutral-400');
             }
         });
         const feedback = this.root.querySelector('#gr-feedback');

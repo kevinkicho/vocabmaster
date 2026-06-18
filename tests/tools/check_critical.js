@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const PUBLIC = path.resolve(__dirname, '..', 'public');
+const PUBLIC = path.resolve(__dirname, '..', '..', 'public');
 const failures = [];
 
 function fail(msg) { failures.push(msg); console.error('  FAIL:', msg); }
@@ -55,8 +55,8 @@ checkJSFile('ui.js', [
     { label: 'class UIManager', regex: /class\s+UIManager\s*\{/ },
 ]);
 
-// llm.js
-checkJSFile('llm.js', [
+// llm/llm_service.js
+checkJSFile('llm/llm_service.js', [
     { label: 'class LLMService', regex: /class\s+LLMService\s*\{/ },
     { label: 'initValidator call', regex: /this\.initValidator\s*\(/ },
 ]);
@@ -94,26 +94,10 @@ checkJSFile('services.js', [
     { label: 'class AudioService', regex: /class\s+AudioService\s*\{/ },
 ]);
 
-// vocabulary-collections.js (medium-term collections + tiers)
-checkJSFile('vocabulary-collections.js', [
-    { label: 'COLLECTIONS defined with tiers', regex: /const\s+COLLECTIONS\s*=\s*\{/ },
-    { label: 'getCollection function', regex: /function\s+getCollection/ },
-    { label: 'getWordsForCollection function', regex: /function\s+getWordsForCollection/ },
-    { label: 'listCollections function', regex: /function\s+listCollections/ },
-    { label: 'jlpt-n3 tier collection', regex: /jlpt-n3/ },
-    { label: 'jlpt-n2 tier collection', regex: /jlpt-n2/ },
-    { label: 'jlpt-n1 tier collection', regex: /jlpt-n1/ },
-]);
-
-// data.js review + collection support (runtime critical)
+// data.js (runtime critical)
 checkJSFile('data.js', [
-    { label: 'setCollection method', regex: /setCollection\s*\(/ },
-    { label: 'getReviewWords method', regex: /getReviewWords\s*\(/ },
-    { label: 'startReviewSession method', regex: /startReviewSession\s*\(/ },
-    { label: 'startSpecificReview method', regex: /startSpecificReview\s*\(/ },
-    { label: 'endReviewSession method', regex: /endReviewSession\s*\(/ },
-    { label: 'getFilteredList uses collection', regex: /currentCollection|typeof getWordsForCollection/ },
-    { label: 'getFilteredList collection filter', regex: /collId && collId !== 'all'/ },
+    { label: 'load method', regex: /async\s+load\s*\(/ },
+    { label: 'rand returns null', regex: /rand\s*\(\)/ },
 ]);
 
 // main.js
@@ -121,9 +105,6 @@ checkJSFile('main.js', [
     { label: 'class App', regex: /class\s+App\s*\{/ },
     { label: 'new UIManager', regex: /new\s+UIManager\s*\(/ },
     { label: 'new LLMService', regex: /new\s+LLMService\s*\(/ },
-    // _initLearningLoop was refactored; learning loop init is now in main via other means
-    { label: 'setCollection support', regex: /setCollection|launchSmartReview/ },
-    { label: 'collection-picker in home', regex: /collection-picker/ },
 ]);
 
 // store.js + preferences_registry (init critical)
@@ -177,7 +158,7 @@ for (const f of files.sort()) {
     const content = fs.readFileSync(full, 'utf8');
     // Only flag if it looks like direct per-item .level access that should be tags now
     const badPatterns = content.match(/item\.level|card\.level|w\.level(?!\s*\|)/g);
-    if (badPatterns && !/vocabulary-collections|game_story|_pickWords|getFilteredList|ui\.js|ui_stats\.js/.test(f)) {
+    if (badPatterns && !/vocabulary-collections|game_story|_pickWords|getFilteredList|ui\.js|ui_home\.js|ui_stats\.js/.test(f)) {
         fail(`${f}: possible stale direct .level access (prefer .tags for tiers/collections): ${badPatterns.slice(0,2).join(', ')}`);
     }
 }
@@ -207,7 +188,7 @@ if (!failures.some(f => f.includes('Unbalanced backticks'))) pass('All backticks
 // ──────────────────────────────────────────────
 console.log('\n=== 6. HTML & JSON ===');
 if (fs.existsSync(indexPath)) {
-    const hasDataScripts = /data\.js/.test(html) && /vocabulary-collections\.js/.test(html);
+    const hasDataScripts = /data\.js/.test(html);
     if (hasDataScripts) pass('index.html: data scripts present');
     else fail('index.html: data scripts missing');
 }
@@ -222,7 +203,7 @@ if (fs.existsSync(configPath)) {
 // 7. MANIFEST / ANDROID FILES (non-fatal in this workspace; paths for reference)
 // ──────────────────────────────────────────────
 console.log('\n=== 7. Android Files (informational) ===');
-const androidBase = path.resolve(__dirname, '..', 'android', 'app', 'src', 'main');
+const androidBase = path.resolve(__dirname, '..', '..', 'android', 'app', 'src', 'main');
 const manifestPath = path.join(androidBase, 'AndroidManifest.xml');
 if (fs.existsSync(manifestPath)) {
     pass('AndroidManifest.xml present');

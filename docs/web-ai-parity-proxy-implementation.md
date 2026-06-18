@@ -23,7 +23,7 @@ Android Chrome / WebView does not expose the good system TTS engines in a usable
 
 ## Solution Implemented
 
-### 1. Transport Layer Abstraction (`public/js/llm.js`)
+### 1. Transport Layer Abstraction (`public/js/llm/llm_service.js`)
 
 Added detection and unified request helper:
 
@@ -131,7 +131,7 @@ The source upload succeeded; only the function creation step hit the preconditio
 
 ## Related Code Locations
 
-- Client transport: `public/js/llm.js` (`_isBrowserWeb`, `_ollamaRequest`, `generate`, `streamGenerate`, `checkConnection`, constructor)
+- Client transport: `public/js/llm/llm_service.js` (`_isBrowserWeb`, `_ollamaRequest`, `generate`, `streamGenerate`, `checkConnection`, constructor)
 - Proxy implementation: `functions/src/index.ts` (and compiled `lib/index.js`)
 - Android capability signal: `public/js/main.js` (handleAuthClick + init), `native_tts.js`, `MainActivity.kt`
 - Existing (unused until now) proxy skeleton: was already in the functions codebase

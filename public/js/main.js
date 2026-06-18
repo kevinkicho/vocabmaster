@@ -1,14 +1,25 @@
 /* js/main.js */
 
-// Global error hooks that navigate home on critical errors
-window.onerror = (msg, url, line) => {
-  console.error(`Global: ${msg} (${url}:${line})`);
-  if(app && app.goHome) app.goHome(false);
-};
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('Unhandled Promise:', e.reason);
-  if(app && app.goHome) app.goHome(false);
-});
+// Global error hooks — recover gracefully instead of blanket-resetting.
+// R1: Only auto-return home when a game is mid-flight (so users don't lose
+// settings/home state on unrelated promise rejections). Surface fatal inits
+// via toast; never wipe the view during early boot or on the home screen.
+function _handleUncaught(label, detail) {
+  console.error(`[${label}]`, detail);
+  try { L('UNCAUGHT', label, detail); } catch (_) {}
+  if (app && app._fatalError) {
+    // Already in a broken-init state — surface it, don't loop-reset.
+    try { if (app.ui) app.ui.showToast('Fatal: ' + ((detail && (detail.message || detail)) || 'unknown error'), 'error'); } catch (_) {}
+    return;
+  }
+  // Only auto-recover when a game is active; home/settings can stay put.
+  if (app && app.game && app.goHome) {
+    try { if (app.ui) app.ui.showToast('Recovered from an error — returned home', 'error'); } catch (_) {}
+    app.goHome(false);
+  }
+}
+window.onerror = (msg, url, line) => _handleUncaught('window.onerror', `${msg} (${url}:${line})`);
+window.addEventListener('unhandledrejection', (e) => _handleUncaught('unhandledrejection', e.reason));
 
 class App {
     constructor() {
@@ -19,25 +30,44 @@ class App {
         this.dailyScore = Math.max(0, Number(this.dailyScore) || 0);
         this.game = null;
         this._returnTo = null;
+        this._failedServices = {};
 
-        try { this.store = new Store(); } catch (e) {
-            L("FATAL: Store constructor failed:", e);
-            try { this.ui.showToast("Fatal Error: Cannot load settings. " + e.message, 'error'); } catch(_) { console.error("Fatal:", e); }
-            this._fatalError = true;
-            return;
-        }
-        try { this.ui = new UIManager(this.store); } catch(e) { L("UI constructor failed:", e); }
-        try { this.auth = new AuthManager(); } catch(e) { L("Auth constructor failed:", e); }
-        try { this.audio = new AudioService(); } catch(e) { L("Audio constructor failed:", e); }
-        try { this.data = new DataService(); } catch(e) { L("Data constructor failed:", e); }
-        try { this.notes = new NoteService(); } catch(e) { L("Notes constructor failed:", e); }
-        try { this.fitter = new TextFitter(); } catch(e) { L("Fitter constructor failed:", e); }
-        try { this.celebration = new CelebrationService(); } catch(e) { L("Celebration constructor failed:", e); }
-        try { this.analytics = new AnalyticsService(); } catch(e) { L("Analytics constructor failed:", e); }
-        try { this.llm = new LLMService(); } catch(e) { L("LLM constructor failed:", e); }
-        try { this.presets = new PresetManager(); } catch(e) { L("Presets constructor failed:", e); }
+        // R2: Service init via single helper. Critical services set _fatalError
+        // and surface a toast; non-critical services get a no-op stub so callers
+        // don't crash on undefined access (graceful degradation instead of
+        // cascading silent failures).
+        const initService = (name, factory, critical) => {
+            try {
+                this[name] = factory();
+            } catch (e) {
+                L(`${name} constructor failed:`, e);
+                this._failedServices[name] = e;
+                if (critical) {
+                    this._fatalError = true;
+                    try {
+                        if (this.ui) this.ui.showToast(`Fatal: ${name} failed to start — ${(e && e.message) || e}`, 'error');
+                    } catch (_) { console.error(`Fatal: ${name} failed:`, e); }
+                }
+                // No-op stub so downstream `app.<name>.<method>()` calls are safe.
+                this[name] = App._noopService(name);
+            }
+        };
 
-        if (typeof window._initLearningLoop === 'function') window._initLearningLoop();
+        // store is critical and constructed first (UI depends on it).
+        initService('store', () => new Store(), true);
+        // ui must come after store; mark critical so a UI failure surfaces clearly.
+        initService('ui', () => new UIManager(this.store), true);
+        initService('auth', () => new AuthManager(), true);
+        initService('audio', () => new AudioService(), false);
+        initService('data', () => new DataService(), true);
+        initService('notes', () => new NoteService(), false);
+        initService('fitter', () => new TextFitter(), false);
+        initService('celebration', () => new CelebrationService(), false);
+        initService('analytics', () => new AnalyticsService(), false);
+        initService('llm', () => new LLMService(), true);
+        initService('presets', () => new PresetManager(), false);
+
+        if (typeof window._initLearningLoop === 'function' && !this._fatalError) window._initLearningLoop();
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
         else { this.init(); }
 
@@ -49,6 +79,92 @@ class App {
                 if (app && app.goHome) app.goHome(false);
             }
         });
+    }
+
+    // R2: No-op service stub. Returns a plain object with explicit no-op
+    // methods for the known method surface and leaves value properties
+    // undefined (falsy) so `if (app.llm.available)` short-circuits correctly.
+    // Used when a service constructor throws so callers degrade gracefully
+    // instead of crashing on undefined access. Verbose but predictable —
+    // a Proxy that returns functions for any prop would break callers that
+    // read value properties like `app.store.prefs` or `app.llm.available`.
+    //
+    // For `store` and `data` specifically we add minimum-shape value props
+    // (empty prefs object, empty list array, etc.) because those are read
+    // directly by too many call sites to guard individually.
+    static _noopService(name) {
+        const noop = function() {};
+        const stub = { _isStub: true, _failedService: name };
+        // Methods observed via `grep -rhE 'app\.(audio|llm|...)\\.\\w+' public/js/`
+        const methods = [
+            // audio
+            'cancel', 'play', 'previewVoice', 'forceDetect', 'unlock',
+            // llm
+            'autoDetect', 'checkConnection', 'loadPrefs', 'generate', 'generateStory',
+            'generateClozeSentence', 'getGrammarExercise', 'getGrammarExplanation',
+            'getListeningPassage', 'loadCachedGrammarExercise', 'clearCache',
+            'getCacheCount', 'analyzeLearningPatterns', 'applyPromptAdjustments',
+            // data
+            'load', 'getFilteredList', 'getAllTags', 'getKanji', 'getStats',
+            'recordScore', 'saveCorrection', 'saveDictionaryEntry', 'deleteUserAccount',
+            'startReviewSession', 'startSpecificReview', 'endReviewSession',
+            // auth
+            'waitForAuth', 'logout',
+            // notes
+            'attachTooltipListeners', 'check', 'format', 'setUser',
+            // fitter
+            'fit', 'fitAll', 'fitSmart',
+            // celebration
+            'play', 'preloadShapes',
+            // analytics
+            'startSession', 'endSession', 'recordAttempt', 'getAnalytics',
+            'getMostMissedWords', 'getAccuracyByMode', 'getDailyAccuracy',
+            // presets
+            'apply',
+            // store
+            'saveSettings', 'applyPresetSettings', 'clearMatch', 'saveMatch',
+            'setAllCelebs', 'setTheme', 'getLoc', 'setLoc',
+            // ui
+            'showToast', 'header', 'audioBar', 'nav', 'loadSettings',
+            'applyFontSettings', 'openProfileModal', 'openStatsModal',
+            'openEditModal', 'closeEditModal', 'saveEdit', 'saveDictEntry',
+            'switchEditTab', 'renderAISettings', 'renderCelebGrid',
+            'renderLevelFilter', 'renderTagFilter', 'renderVoiceSelector',
+            'updateLLMStatus', 'updateLLMCacheCount', '_updateAIStatus', 'runAIAnalysis',
+            'approveAIAdjustment', 'dismissAIAdjustment', 'resetAITemplates',
+            'showTooltip', 'hideTooltip', 'copyLogs', 'dumpVoices',
+            'validateSettingsBindings', '_syncRadioVisual', 'modal',
+        ];
+        for (const m of methods) stub[m] = noop;
+
+        // Minimum-shape value properties for heavily-read services.
+        // store.prefs is read by ~50+ call sites; data.list by ~20+. These
+        // MUST be objects/arrays so chained access (app.store.prefs.chatLevel)
+        // doesn't throw. Empty values make guards like `if (list.length)` work.
+        if (name === 'store') {
+            stub.prefs = {};
+            stub.matchState = null;
+            stub.cap = {};
+            stub.STORAGE_KEY = 'vocabmaster_prefs';
+        } else if (name === 'data') {
+            stub.list = [];
+            stub.activeList = [];
+            stub.currentCollection = null;
+        } else if (name === 'celebration') {
+            stub.effects = {};
+        } else if (name === 'presets') {
+            stub.languages = [];
+        } else if (name === 'auth') {
+            stub.currentUser = null;
+            stub.userRole = 'anonymous';
+        } else if (name === 'notes') {
+            stub.isAdmin = false;
+            stub.currentWordId = null;
+        }
+        // llm: available/hasModel/model/resolvedModel/useCloud/endpoint/availableModels
+        // all stay undefined (falsy) — callers already guard with `if (app.llm && ...)`.
+        // audio: synth/voices/useNative stay undefined — callers guard or no-op.
+        return stub;
     }
 
     applyUrlParameters() {
@@ -180,10 +296,25 @@ class App {
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
 
-            // 2b. Init LLM — auto-detect Ollama (non-blocking)
-            if (this.llm) {
+            // 2b. Init LLM — F9: block up to 3s on autoDetect so the home screen
+            // can show an accurate AI status immediately. If the probe is slow
+            // (cold proxy, idle model), autoDetect continues in the background
+            // and the persistent home-screen indicator updates when it resolves.
+            // The status bar shows "Connecting to AI..." during the probe, then
+            // falls through to the word-count status below (primary info). AI
+            // online/offline state lives in the persistent indicator, not the
+            // status bar — avoids a flash of overwritten text.
+            if (this.llm && !this.llm._isStub) {
                 this.llm.loadPrefs();
-                this.llm.autoDetect().catch(e => L('[Main] autoDetect error:', e));
+                statusBar.innerText = 'Connecting to AI...';
+                statusBar.classList.add('text-amber-400');
+                await Promise.race([
+                    this.llm.autoDetect().catch(() => {}),
+                    new Promise(function(r) { setTimeout(function() { r('timeout'); }, 3000); })
+                ]);
+                statusBar.classList.remove('text-amber-400');
+                // autoDetect may still be running in background if 'timeout' won
+                // the race — the home-screen indicator updates when it resolves.
             }
 
             statusBar.innerText = count > 0 ? `${count} Words Ready` : 'No vocabulary loaded — check RTDB connection';
@@ -288,10 +419,18 @@ class App {
             } else if (isFileOrigin) {
                 window.location.href = 'https://vocabmaster112225.web.app/';
             } else {
+                // Web browser: use popup. If COOP headers block window.close
+                // (Cross-Origin-Opener-Policy), Firebase throws
+                // auth/popup-blocked or auth/cancelled-popup-request. We
+                // catch those silently and fall back to redirect.
                 auth.signInWithPopup(provider).catch(e => {
                     L("Login Error:", e);
                     resetBtn();
-                    if (e.code !== 'auth/popup-closed-by-user') {
+                    if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request' || (e.message && e.message.includes('Cross-Origin-Opener-Policy'))) {
+                        // COOP blocked the popup — fall back to redirect
+                        L("Popup blocked, falling back to signInWithRedirect");
+                        auth.signInWithRedirect(provider);
+                    } else if (e.code !== 'auth/popup-closed-by-user') {
                         app.ui.showToast("Login Failed: " + e.message, 'error');
                     }
                 });
@@ -336,6 +475,14 @@ class App {
                         <div class="text-9xl opacity-10 grayscale absolute -right-6 -bottom-6 rotate-12 select-none group-hover:scale-110 transition-transform duration-500">🏆</div>
                     </div>
 
+                    <!-- F9: Persistent AI status indicator. Updated by ui._updateAIStatus()
+                         whenever autoDetect/_ping resolves. Shows green (online), gray (detecting),
+                         or rose (offline) so users always know if AI features will work. -->
+                    <div id="ai-status-indicator" class="flex items-center gap-1.5 px-2 -mt-2">
+                        <span id="ai-status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                        <span id="ai-status-label" class="text-[9px] font-bold text-slate-400 uppercase">AI detecting...</span>
+                    </div>
+
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Reading</h3>
                     <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
                         ${this.btn('Flashcards', 'ph-cards', 'indigo', ()=>new Flashcard('flash'))}
@@ -352,9 +499,12 @@ class App {
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
                     <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
-                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'amber', ()=>new Chat('chat'))}
                     </div>
 
+                    <!-- AI section: 2x2 grid with Chat Practice, Story Mode, Grammar Gym.
+                         Chat Practice moved here from "Speaking" — it's AI-powered.
+                         Sentences (AI Cloze) stays under "Context" since it works
+                         without AI too (regex cloze fallback). -->
                     <!-- AI section is *always* rendered (no app.llm guard) so that Story Mode and AI Cloze
                          (the mandatory-AI no-fallback versions) are available identically whether the
                          webapp is loaded from public/ in a browser or from the Android WebView assets.
@@ -362,9 +512,10 @@ class App {
                          and game_sentences.js). Web users configure their backend (local ollama or proxy+cloud)
                          in Settings > AI. Keep this unconditional for web/Android parity. -->
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
-                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
                         ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
                         ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
+                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'cyan', ()=>new Chat('chat'))}
                     </div>
 
                     <!-- Medium-term: Smart Review (Phase 2) -->
@@ -376,8 +527,8 @@ class App {
                     <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }).catch(()=>{ view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); });
-            else { view.classList.add('visible'); if(this.ui) this.ui.renderTagFilter(); }
+            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } }).catch(()=>{ view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } });
+            else { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } }
         });
     }
 

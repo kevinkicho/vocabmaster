@@ -4,8 +4,8 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const src = readFileSync(join(__dirname, '..', 'public', 'js', 'escape.js'), 'utf8')
-    + '\n' + readFileSync(join(__dirname, '..', 'public', 'js', 'config.js'), 'utf8');
+const src = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'escape.js'), 'utf8')
+    + '\n' + readFileSync(join(__dirname, '..', '..', 'public', 'js', 'config.js'), 'utf8');
 
 let LEVEL_CONFIG, CEFR_LEVELS, mapLevelToCEFR;
 beforeAll(() => {

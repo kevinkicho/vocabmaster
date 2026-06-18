@@ -50,11 +50,9 @@ class LLMService {
         L('[LLM] Endpoint configured:', this.endpoint);
 
         // Re-check connection when app returns to foreground
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                this._ping();
-            }
-        }.bind(this));
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') this._ping();
+        });
     }
 
     async _ping() {
@@ -62,13 +60,15 @@ class LLMService {
             await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 3000 });
             L('[LLM] Resume ping OK');
             this.available = true;
+            if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
             return true;
         } catch (e) {
             L('[LLM] Resume ping failed — connection lost');
             this.available = false;
-            setTimeout(function() {
-                if (!this.available) this.autoDetect().catch(function() {});
-            }.bind(this), 5000);
+            if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
+            setTimeout(() => {
+                if (!this.available) this.autoDetect().catch(() => {});
+            }, 5000);
             return false;
         }
     }
@@ -92,8 +92,8 @@ class LLMService {
                 return {
                     ok: result.ok,
                     status: result.status,
-                    json: async function() { return JSON.parse(result.data); },
-                    text: async function() { return result.data; }
+                    json: async () => JSON.parse(result.data),
+                    text: async () => result.data
                 };
             } catch (e) {
                 L('[LLM] Capacitor proxy failed, falling back to fetch:', e.message);
@@ -108,8 +108,8 @@ class LLMService {
             return {
                 ok: false,
                 status: 0,
-                json: async function() { throw e; },
-                text: async function() { throw e; }
+                json: async () => { throw e; },
+                text: async () => { throw e; }
             };
         }
     }
@@ -153,10 +153,10 @@ class LLMService {
             };
         }
 
-        var controller = new AbortController();
-        var timeoutId = setTimeout(function() { controller.abort(); }, timeout);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
         if (signal) {
-            signal.addEventListener('abort', function() { clearTimeout(timeoutId); controller.abort(); });
+            signal.addEventListener('abort', () => { clearTimeout(timeoutId); controller.abort(); });
         }
         var resp;
 
@@ -167,7 +167,7 @@ class LLMService {
         }
 
         if (!resp.ok) {
-            var errText = await resp.text().catch(function() { return ''; });
+            const errText = await resp.text().catch(() => '');
             L('[LLM] HTTP error', resp.status, 'for', url, 'body:', errText.slice(0, 300));
             throw new Error('Ollama HTTP ' + resp.status + ' ' + errText.slice(0, 200));
         }
@@ -207,9 +207,11 @@ class LLMService {
             this.resolvedModel = 'gemma4:31b-cloud';
             this.hasModel = true;
             L('[LLM] Ready with model:', this.resolvedModel);
-            this._showAIWelcome();
             if (app && app.ui) app.ui.renderAISettings();
-            if (app && !app.game) app.goHome(false);
+            // F9: persistent home-screen indicator replaces the surprise toast.
+            if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
+            // F9: home screen renders after autoDetect completes in init(), so
+            // the redundant app.goHome(false) here is no longer needed.
         } else {
             L('[LLM] No models available');
         }
@@ -219,7 +221,7 @@ class LLMService {
         try {
             var data = await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 10000 });
             this.available = true;
-            this.availableModels = (data.models || []).map(function(m) { return m.name || m.model || m; });
+            this.availableModels = (data.models || []).map(m => m.name || m.model || m);
             L('[LLM] Connected —', this.availableModels.length, 'models');
             return true;
         } catch (e) {
@@ -233,46 +235,46 @@ class LLMService {
         if (this._queue.length >= 50) {
             return Promise.reject(new Error('LLM queue full (50 queued), try again later'));
         }
-        return new Promise(function(resolve, reject) {
+        return new Promise((resolve, reject) => {
             this._queue.push({ fn: fn, resolve: resolve, reject: reject, timeout: timeout });
             this._processQueue();
-        }.bind(this));
+        });
     }
 
     _processQueue() {
         while (this._activeRequests < this._maxConcurrent && this._queue.length > 0) {
-            var item = this._queue.shift();
+            const item = this._queue.shift();
             this._activeRequests++;
-            var timeoutId = null;
-            var timedOut = false;
+            let timeoutId = null;
+            let timedOut = false;
             if (item.timeout) {
-                timeoutId = setTimeout(function() {
+                timeoutId = setTimeout(() => {
                     timedOut = true;
                     item.reject(new Error('LLM request timed out after ' + item.timeout + 'ms'));
                     this._activeRequests--;
                     this._processQueue();
-                }.bind(this), item.timeout + 5000);
+                }, item.timeout + 5000);
             }
-            item.fn().then(function(result) {
+            item.fn().then(result => {
                 if (timedOut) return;
                 if (timeoutId) clearTimeout(timeoutId);
                 item.resolve(result);
                 this._activeRequests--;
                 this._processQueue();
-            }.bind(this), function(err) {
+            }, err => {
                 if (timedOut) return;
                 if (timeoutId) clearTimeout(timeoutId);
                 item.reject(err);
                 this._activeRequests--;
                 this._processQueue();
-            }.bind(this));
+            });
         }
     }
 
     async generate(opts) {
-        var model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
+        const model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
 
-        var body = {
+        const body = {
             model: model,
             prompt: opts.prompt,
             stream: false
@@ -282,9 +284,9 @@ class LLMService {
 
         L('[LLM] generate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
 
-        return this._enqueue(async function() {
+        return this._enqueue(async () => {
             try {
-                var data = await this._ollamaRequest('/api/generate', body, {
+                const data = await this._ollamaRequest('/api/generate', body, {
                     stream: false,
                     timeout: opts.timeout || 45000,
                     signal: opts.signal
@@ -294,20 +296,20 @@ class LLMService {
                 L('[LLM] Ollama generate failed:', err.message);
                 throw err;
             }
-        }.bind(this), opts.timeout || 45000);
+        }, opts.timeout || 45000);
     }
 
     async streamGenerate(opts, onToken) {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.HttpProxy) {
             L('[LLM] Capacitor HttpProxy detected, falling back to non-streaming generate to avoid crashes.');
-            var fullText = await this.generate(opts);
+            const fullText = await this.generate(opts);
             if (onToken) onToken(fullText);
             return;
         }
 
-        var model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
+        const model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
 
-        var body = {
+        const body = {
             model: model,
             prompt: opts.prompt,
             stream: true
@@ -317,8 +319,8 @@ class LLMService {
 
         L('[LLM] streamGenerate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
 
-        return this._enqueue(async function() {
-            var resp;
+        return this._enqueue(async () => {
+            let resp;
             try {
                 resp = await this._ollamaRequest('/api/generate', body, {
                     stream: true,
@@ -333,27 +335,26 @@ class LLMService {
 
             if (!resp.body) {
                 L('[LLM] streamGenerate: resp.body is null, falling back to non-streaming');
-                var fullText = await this.generate(opts);
+                const fullText = await this.generate(opts);
                 if (onToken) onToken(fullText);
                 return fullText;
             }
 
-            var reader = resp.body.getReader();
-            var decoder = new TextDecoder();
-            var fullText = '';
-            var buffer = '';
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let buffer = '';
 
             while (true) {
-                var result = await reader.read();
+                const result = await reader.read();
                 if (result.done) break;
                 buffer += decoder.decode(result.value, { stream: true });
-                var lines = buffer.split('\n');
+                const lines = buffer.split('\n');
                 buffer = lines.pop();
-                for (var j = 0; j < lines.length; j++) {
-                    var line = lines[j];
+                for (const line of lines) {
                     if (!line.trim()) continue;
                     try {
-                        var obj = JSON.parse(line);
+                        const obj = JSON.parse(line);
                         if (obj.error) {
                             L('[LLM] stream error from backend for model', this.resolvedModel || model, ':', obj.error);
                             if (fullText.length < 10) throw new Error(obj.error);
@@ -367,7 +368,7 @@ class LLMService {
             }
             if (buffer.trim()) {
                 try {
-                    var obj = JSON.parse(buffer);
+                    const obj = JSON.parse(buffer);
                     if (obj.response) {
                         fullText += obj.response;
                         if (onToken) onToken(obj.response);
@@ -375,21 +376,7 @@ class LLMService {
                 } catch (e) { L('[LLM] stream parse error:', e); }
             }
             return fullText;
-        }.bind(this), opts.timeout || 180000);
-    }
-
-    _showToast(msg, icon, iconColor) {
-        var toast = document.createElement('div');
-        toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 z-[96] bg-slate-800 dark:bg-slate-700 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold opacity-0 transition-opacity duration-300';
-        toast.innerHTML = '<i class="ph-bold ' + (icon || 'ph-info') + ' ' + (iconColor || 'text-white') + '"></i> ' + escapeHtml(msg);
-        document.body.appendChild(toast);
-        requestAnimationFrame(function() { toast.style.opacity = '1'; });
-        setTimeout(function() { toast.style.opacity = '0'; setTimeout(function() { toast.remove(); }, 300); }, 3000);
-    }
-
-    _showAIWelcome() {
-        var label = this.useCloud ? this.resolvedModel : 'local (ollama4android)';
-        this._showToast('AI enabled — ' + label, 'ph-check-circle', 'text-emerald-500');
+        }, opts.timeout || 180000);
     }
 
     _getLangName(code) {

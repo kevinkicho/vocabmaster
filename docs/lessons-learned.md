@@ -24,3 +24,13 @@
 ## Original Data Quality
 
 The original 6,038 entries + carefully-generated N5/N4 tiers (7,445 total) had zero issues. Quality comes from verified sources and manual validation, not bulk AI generation.
+
+## June 2026: `onAuthStateChanged(null)` Hang
+
+**What happened**: `waitForAuth()` in `auth.js` registered both a 1.5s timeout (to call `signInAnonymously()`) and an `onAuthStateChanged` listener. When Firebase fired `onAuthStateChanged(null)` (the default state in a fresh browser context — no cached session), the listener set `resolved = true`, cleared the timeout, then did nothing because `user` was `null`. The Promise hung forever. `init()` never proceeded. The Start button stayed disabled.
+
+**Why it was invisible in production**: Android WebView and browsers with prior sessions have a cached anonymous session — `onAuthStateChanged` fires with the real user, not `null`. Only a fresh browser context (Playwright headless, incognito) triggers `onAuthStateChanged(null)` first, exposing the hang.
+
+**Root cause**: Treating `onAuthStateChanged(null)` as a terminal event. `null` means "no user signed in yet," not "auth is done and there's no user." The timeout should still fire to trigger `signInAnonymously()`.
+
+**Rule going forward**: `onAuthStateChanged(null)` is NOT a terminal state. Only resolve the auth Promise when a real `user` arrives. Let the timeout fire to create an anonymous session. See `docs/architecture.md` §10.2 for the fix.

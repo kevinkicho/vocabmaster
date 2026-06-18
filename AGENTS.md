@@ -57,3 +57,40 @@ this.useNative = (typeof window.NativeTTSBridge !== 'undefined') && window.Nativ
 ```
 
 This applies to all files loaded via separate `<script>` tags in `index.html` — which is all of them (no bundler).
+
+## Critical: `onAuthStateChanged(null)` Is Not a Terminal State
+
+Firebase `auth.onAuthStateChanged(user)` fires with `null` when no user is signed in. This is **not** "auth is done and there's no user" — it means "no user signed in yet." Treating it as terminal (setting `resolved = true` and clearing the anonymous-sign-in timeout) hangs the auth Promise forever in fresh browser contexts.
+
+**The bug (auth.js, June 2026):**
+```js
+// waitForAuth() — old code
+var unsubscribe = auth.onAuthStateChanged(function(user) {
+    if (resolved) return;
+    resolved = true;       // ← BUG: sets resolved on null too
+    clearTimeout(timeout);  // ← cancels the signInAnonymously() timeout
+    unsubscribe();
+    if (user) { ... }       // ← user is null, does nothing, Promise hangs
+});
+```
+
+**Fix:** Only set `resolved = true` when a real `user` arrives. Let the timeout fire to call `signInAnonymously()` when `user` is `null`:
+```js
+auth.onAuthStateChanged(function(user) {
+    if (resolved) return;
+    if (user) {             // ← only act on a real user
+        resolved = true;
+        clearTimeout(timeout);
+        unsubscribe();
+        this.currentUser = user;
+        resolve(user);
+    }
+    // null → do nothing, let timeout fire
+});
+```
+
+This is invisible in production (cached anon session fires with a real user) but blocks fresh contexts (Playwright, incognito). See `docs/architecture.md` §10.2.
+
+## Read Docs Before Editing
+
+Before making code changes, read the relevant docs (`docs/architecture.md`, `docs/development.md`, `AGENTS.md`) to understand the existing patterns and constraints. Blaming external factors (Firebase, proxy, network) for issues caused by your own edits is a process failure — verify your changes didn't break things first by testing against the baseline.

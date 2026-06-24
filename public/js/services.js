@@ -129,7 +129,8 @@ class AudioService {
                     default: false,
                     provider: v.provider || 'Local',
                     quality: v.quality,
-                    isNetwork: v.isNetwork
+                    isNetwork: v.isNetwork,
+                    displayName: v.displayName || v.name
                 }));
                 this._voicePollAttempts = 100;
                 L('[Audio] Native loadVoices: found', this.voices.length, 'voices');

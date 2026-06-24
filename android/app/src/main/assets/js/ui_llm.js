@@ -169,13 +169,13 @@ Object.assign(UIManager.prototype, {
                     providerGroups.forEach((providerVoices, provider) => {
                         html += `<optgroup label="${provider}">`;
                         providerVoices.forEach(v => {
-                            html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.name)} (${v.lang})</option>`;
+                            html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.displayName || v.name)} (${v.lang})</option>`;
                         });
                         html += `</optgroup>`;
                     });
                 } else {
                     langVoices.forEach(v => {
-                        html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.name)} (${v.lang})</option>`;
+                        html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.displayName || v.name)} (${v.lang})</option>`;
                     });
                 }
             }
@@ -209,10 +209,7 @@ Object.assign(UIManager.prototype, {
         // Populate model dropdown from available models
         const modelSelect = document.getElementById('llm-model');
         const modelContainer = modelSelect ? modelSelect.parentElement : null;
-        if (app.llm && !app.llm.useCloud) {
-            // For local ollama4android, no model choice in app — user selects in ollama4android
-            if (modelContainer) modelContainer.style.display = 'none';
-        } else if (modelSelect && app.llm && app.llm.availableModels && app.llm.availableModels.length > 0) {
+        if (modelSelect && app.llm && app.llm.availableModels && app.llm.availableModels.length > 0) {
             const current = app.llm.resolvedModel || app.store.prefs.llmModel || '';
             const models = [...new Set(app.llm.availableModels)].sort();
             modelSelect.innerHTML = models.map(m =>

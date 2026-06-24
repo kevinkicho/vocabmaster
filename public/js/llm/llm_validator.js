@@ -237,18 +237,19 @@ Rules: score<50 on any criterion=no approve. overallScore=average. approve only 
         return result.data;
     }
 
-    async generateWithCritic({ schemaName, promptBuilder, level, langCode, promptArgs = [], onProgress = null }) {
+    async generateWithCritic({ schemaName, promptBuilder, level, langCode, promptArgs = [], onProgress = null, knownLangCode }) {
         const noCriticSchemas = ['clozeMatch', 'generatedCloze', 'grammarExplanation'];
+        const argsWithKnown = [...promptArgs, knownLangCode];
         if (noCriticSchemas.includes(schemaName)) {
             if (typeof onProgress === 'function') onProgress('Generating...');
-            const data = await this.generateValidated(schemaName, promptBuilder, ...promptArgs);
+            const data = await this.generateValidated(schemaName, promptBuilder, ...argsWithKnown);
             return { data, critiqueScore: 75, attempts: 1 };
         }
 
         let bestData = null;
         let bestScore = 0;
-        const baseArgs = [...promptArgs];
-        let actualArgs = [...promptArgs];
+        const baseArgs = [...argsWithKnown];
+        let actualArgs = [...argsWithKnown];
 
         for (let criticAttempt = 0; criticAttempt <= this.maxCriticRetries; criticAttempt++) {
             if (typeof onProgress === 'function') {

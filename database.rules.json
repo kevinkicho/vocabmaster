@@ -33,9 +33,11 @@
       ".read": true,
       "$vocabId": {
         "$lang": {
-          "$token": {
-            ".write": "auth != null",
-            ".validate": "newData.hasChildren(['grammar', 'usage', 'example', 'exercises', 'model', 'ts'])"
+          "$explainLang": {
+            "$token": {
+              ".write": "auth != null",
+              ".validate": "newData.hasChildren(['grammar', 'usage', 'example', 'exercises', 'model', 'ts'])"
+            }
           }
         }
       }

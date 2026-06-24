@@ -628,6 +628,33 @@ class Chat extends GameMode {
         }
     }
 
+    _pruneMessages() {
+        var maxPairs = this.maxHistory || 6;
+        var maxMessages = maxPairs * 2;
+        if (this.messages.length <= maxMessages) return;
+        // Keep the most recent maxMessages, summarize the rest into memories
+        var overflow = this.messages.slice(0, this.messages.length - maxMessages);
+        var summaries = [];
+        for (var i = 0; i < overflow.length; i += 2) {
+            var userMsg = overflow[i];
+            var aiMsg = overflow[i + 1];
+            if (userMsg && aiMsg) {
+                var userSnippet = (userMsg.text || '').substring(0, 80);
+                var aiSnippet = (aiMsg.text || '').substring(0, 80);
+                summaries.push('User: "' + userSnippet + '" → ' + aiSnippet);
+            }
+        }
+        if (summaries.length > 0) {
+            this.memories.push({
+                summary: 'Previous: ' + summaries.join(' | '),
+                ts: Date.now()
+            });
+            // Keep max 3 memories
+            this.memories = this.memories.slice(-3);
+        }
+        this.messages = this.messages.slice(-maxMessages);
+    }
+
     async _generateOpening() {
         if (!app.llm || !app.llm.available || !app.llm.hasModel) {
             var lang = this._getTargetLang();
@@ -718,6 +745,7 @@ class Chat extends GameMode {
             var units = await this._formatPresentation(cleaned, this._getTargetLang());
             this._setBusyUI(false);
             this.messages.push({ role: 'assistant', text: cleaned, units: units });
+            this._pruneMessages();
 
             this._updateMessages();
             this._scrollToBottom();
@@ -765,10 +793,10 @@ class Chat extends GameMode {
             html += '<div class="flex justify-start mb-1">'
                 + '<div class="max-w-[80%] bg-slate-100 dark:bg-neutral-800 rounded-2xl rounded-bl-md px-4 py-3 inline-block">'
                 + '<span class="inline-flex gap-1 items-center">'
-                + '<span class="typing-label text-[10px] text-slate-400 dark:text-neutral-500 mr-1">Thinking...</span>'
-                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:0ms"></span>'
-                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:150ms"></span>'
-                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-500 rounded-full animate-bounce" style="animation-delay:300ms"></span>'
+                + '<span class="typing-label text-[10px] font-bold text-slate-400 dark:text-neutral-400 animate-pulse mr-1">Thinking</span>'
+                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>'
+                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-400 rounded-full animate-bounce" style="animation-delay:200ms"></span>'
+                + '<span class="w-2 h-2 bg-slate-400 dark:bg-neutral-400 rounded-full animate-bounce" style="animation-delay:400ms"></span>'
                 + '</span></div></div>';
         }
         container.innerHTML = html;

@@ -32,7 +32,7 @@ class LLMService {
             this.useProxy = false;
             this.proxyUrl = '';
             this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
-            this.useCloud = window.OLLAMA_USE_CLOUD === true;
+            this.useCloud = false; // APK / non-browser always uses local Ollama
             this.apiKey = window.OLLAMA_API_KEY || null;
         }
         this.model = '';
@@ -59,6 +59,12 @@ class LLMService {
         try {
             await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 3000 });
             L('[LLM] Resume ping OK');
+            // If connection was previously lost, re-run autoDetect to pick up the model
+            if (!this.available || !this.hasModel) {
+                L('[LLM] Ping recovered — re-running autoDetect');
+                this.autoDetect().catch(function(e) { L('[LLM] autoDetect after ping failed:', e); });
+                return true;
+            }
             this.available = true;
             if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
             return true;
@@ -190,7 +196,7 @@ class LLMService {
             this.useProxy = false;
             this.proxyUrl = '';
             this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
-            this.useCloud = window.OLLAMA_USE_CLOUD === true;
+            this.useCloud = false; // APK / non-browser always uses local Ollama
             this.apiKey = window.OLLAMA_API_KEY || null;
         }
         var p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
@@ -204,7 +210,20 @@ class LLMService {
         L('[LLM] checkConnection result:', ok);
 
         if (ok) {
-            this.resolvedModel = 'gemma4:31b-cloud';
+            // Prefer user's configured model (from Settings > AI > Model dropdown)
+            if (this.model && this.availableModels.indexOf(this.model) !== -1) {
+                this.resolvedModel = this.model;
+                L('[LLM] Using user-configured model:', this.resolvedModel);
+            } else if (this.useCloud) {
+                this.resolvedModel = 'gemma4:31b-cloud';
+            } else if (this.availableModels && this.availableModels.length > 0) {
+                // Pick first non-cloud local model (filter out any *-cloud names)
+                var localModels = this.availableModels.filter(function(m) { return m.indexOf('-cloud') === -1; });
+                this.resolvedModel = localModels[0] || this.availableModels[0];
+                L('[LLM] Local model selected:', this.resolvedModel);
+            } else {
+                this.resolvedModel = 'gemma4:31b-cloud';
+            }
             this.hasModel = true;
             L('[LLM] Ready with model:', this.resolvedModel);
             if (app && app.ui) app.ui.renderAISettings();

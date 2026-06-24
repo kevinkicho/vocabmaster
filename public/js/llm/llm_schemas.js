@@ -48,7 +48,7 @@ LLMResponseValidator.SCHEMAS = {
                         choices: {
                             type: 'array',
                             minItems: 2,
-maxItems: 2,
+maxItems: 4,
                             items: {
                                 type: 'object',
                                 properties: {
@@ -58,7 +58,7 @@ maxItems: 2,
                                 required: ['letter', 'text']
                             }
                         },
-                        answer: { type: 'string', enum: ['A', 'B'] },
+                        answer: { type: 'string', enum: ['A', 'B', 'C', 'D'] },
                         explanation: { type: 'string', minLength: 5 }
                     },
                     required: ['type', 'question', 'choices', 'answer', 'explanation']

@@ -1,6 +1,7 @@
 package com.vocabmaster.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -9,6 +10,9 @@ import android.util.Log
 import android.webkit.JavascriptInterface
 import kotlinx.coroutines.*
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class TTSBridge(private val context: Context) {
     companion object {
@@ -28,6 +32,11 @@ class TTSBridge(private val context: Context) {
 
     var callbackHandler: ((String, String) -> Unit)? = null
 
+    // TTS engine-to-voice mapping for accurate provider detection
+    // Maps voice name → engine label (e.g. "Google TTS", "Samsung TTS")
+    private val engineVoiceMap = ConcurrentHashMap<String, String>()
+    @Volatile private var engineMapReady = false
+
     init {
         initTTS()
     }
@@ -39,6 +48,9 @@ class TTSBridge(private val context: Context) {
             Log.d(TAG, "TTS init: $status")
             initListeners.forEach { it(isInitialized) }
             initListeners.clear()
+            if (isInitialized) {
+                buildEngineVoiceMap()
+            }
         }
     }
 
@@ -47,6 +59,83 @@ class TTSBridge(private val context: Context) {
             callback(true)
         } else {
             initListeners.add(callback)
+        }
+    }
+
+    private fun heuristicProvider(v: Voice, features: String): String {
+        return when {
+            v.name.contains("google", ignoreCase = true) ||
+                v.locale.toString().contains("google", ignoreCase = true) -> "Google"
+            v.name.contains("samsung", ignoreCase = true) ||
+                features.contains("samsung", ignoreCase = true) -> "Samsung"
+            v.isNetworkConnectionRequired -> "Network"
+            else -> "Local"
+        }
+    }
+
+    private fun simplifyProviderLabel(label: String): String {
+        return when {
+            label.contains("Google", ignoreCase = true) -> "Google"
+            label.contains("Samsung", ignoreCase = true) -> "Samsung"
+            label.contains("Microsoft", ignoreCase = true) -> "Microsoft"
+            label.contains("Apple", ignoreCase = true) -> "Apple"
+            else -> "Local"
+        }
+    }
+
+    /**
+     * Enumerates ALL installed TTS engines by querying PackageManager for
+     * services that handle TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE,
+     * then creating a temporary TextToSpeech instance per engine and collecting
+     * its voice set. This is the only reliable way to determine which engine a
+     * Voice belongs to — Android's Voice class does not expose engine attribution
+     * via public API.
+     *
+     * Runs on IO dispatcher so it doesn't block the main thread. Results stored
+     * in engineVoiceMap (voice name → engine label). On first getVoices() call
+     * before the map is ready, the heuristic fallback is used instead.
+     */
+    private fun buildEngineVoiceMap() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val intent = Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)
+                val enginePackages = context.packageManager.queryIntentServices(intent, 0)
+                Log.d(TAG, "Building engine voice map: ${enginePackages.size} engines found")
+                for (info in enginePackages) {
+                    val packageName = info.serviceInfo.packageName
+                    val label = info.loadLabel(context.packageManager).toString()
+                    val latch = CountDownLatch(1)
+                    var tempVoices: Set<Voice>? = null
+                    lateinit var tempTts: TextToSpeech
+
+                    try {
+                        tempTts = TextToSpeech(context, { status ->
+                            if (status == TextToSpeech.SUCCESS) {
+                                tempVoices = tempTts.voices
+                            }
+                            latch.countDown()
+                        }, packageName)
+
+                        val ready = latch.await(2, TimeUnit.SECONDS)
+                        if (ready && tempVoices != null) {
+                            var count = 0
+                            for (v in tempVoices!!) {
+                                if (v.features.contains("legacySetLanguageVoice")) continue
+                                engineVoiceMap[v.name] = label
+                                count++
+                            }
+                            Log.d(TAG, "  Engine '$label' ($packageName): $count voices")
+                        }
+                        tempTts.shutdown()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "  Engine '$packageName' enumeration failed: ${e.message}")
+                    }
+                }
+                engineMapReady = true
+                Log.d(TAG, "Engine voice map built: ${engineVoiceMap.size} voices mapped to ${enginePackages.size} engines")
+            } catch (e: Exception) {
+                Log.e(TAG, "buildEngineVoiceMap failed", e)
+            }
         }
     }
 
@@ -62,26 +151,37 @@ class TTSBridge(private val context: Context) {
             for (v in voices) {
                 if (v.features.contains("legacySetLanguageVoice")) continue
                 val obj = org.json.JSONObject()
+                val features = v.features.joinToString(",")
+
                 obj.put("name", v.name)
                 obj.put("locale", v.locale.toLanguageTag())
                 obj.put("voiceName", v.name)
                 obj.put("quality", v.quality)
                 obj.put("isNetwork", v.isNetworkConnectionRequired)
-                val features = v.features.joinToString(",")
                 obj.put("features", features)
-                val provider = when {
-                    v.name.contains("google", ignoreCase = true) ||
-                        v.locale.toString().contains("google") -> "Google"
-                    v.name.contains("samsung", ignoreCase = true) ||
-                        features.contains("samsung") -> "Samsung"
-                    v.isNetworkConnectionRequired -> "Network"
-                    else -> "Local"
+
+                // Prefer engine voice map for accurate provider, fall back to heuristic
+                val provider = if (engineMapReady) {
+                    val label = engineVoiceMap[v.name]
+                    if (label != null) simplifyProviderLabel(label)
+                    else heuristicProvider(v, features)
+                } else {
+                    heuristicProvider(v, features)
                 }
                 obj.put("provider", provider)
+
+                // User-friendly display name using locale + quality badge
+                val qualityBadge = when (v.quality) {
+                    Voice.QUALITY_VERY_HIGH, Voice.QUALITY_HIGH -> "★"
+                    else -> ""
+                }
+                val displayName = "${v.locale.getDisplayName()}$qualityBadge"
+                obj.put("displayName", displayName)
+
                 arr.put(obj)
             }
             val result = arr.toString()
-            Log.d(TAG, "getVoices: found ${arr.length()} voices")
+            Log.d(TAG, "getVoices: found ${arr.length()} voices (engineMapReady=$engineMapReady)")
             return result
         } catch (e: Exception) {
             Log.e(TAG, "getVoices error", e)

@@ -119,6 +119,255 @@ The `NativeTTSJSInterface` inner class in `MainActivity.kt` is obfuscated by R8 
 
 The native `loadVoices()` path retries every 500ms if `getVoices()` returns an empty array (e.g., TTS engine not yet initialized). This handles the async `TextToSpeech` initialization delay.
 
+---
+
+## TTS Provider Detection (How Samsung & Google TTS Are Found)
+
+When Android has **multiple TTS engines** installed (Google TTS, Samsung TTS, etc.), the app discovers all their voices through Android's unified `TextToSpeech.getVoices()` API and labels each voice with its provider using **per-engine TTS enumeration** (primary) with a name-heuristic fallback.
+
+### Detection Chain
+
+```
+Android TextToSpeech API
+        |
+        v
+TTSBridge.kt:buildEngineVoiceMap()   ← per-engine enumeration (primary)
+  + TTSBridge.kt:heuristicProvider()  ← name heuristic fallback
+        |
+        v
+JSON string with provider labels
+        |
+        v
+window.NativeTTS.getVoices()         ← @JavascriptInterface
+        |
+        v
+NativeTTSBridge.getVoices()          ← native_tts.js (sync call, JSON.parse)
+        |
+        v
+AudioService.loadVoices()            ← services.js (provider + displayName preserved)
+        |
+        v
+ui_llm.js (active) / ui.js (fallback) renderVoiceSelector()
+        |                                   +-----------+
+        +--> getProviderName()              |  Google   |
+        |       has voice.provider?         |   voices  |
+        |         YES → return it           |           |
+        |         NO  → heuristic fallback   +-----------+
+        |                                   +-----------+
+        +--> group by provider              |  Samsung  |
+        |       >1 provider?                |   voices  |
+        |         YES → <optgroup>          |           |
+        |         NO  → flat list           +-----------+
+        |
+        v
+Settings UI voice dropdown per language
+```
+
+### Step 1: Android API — All Voices, All Engines (TTSBridge.kt:60)
+
+```kotlin
+val voices: MutableSet<Voice> = tts!!.voices
+```
+
+Android's `TextToSpeech.getVoices()` (API 21+) returns **every voice from every installed TTS engine** as a single flat set. It does not distinguish which engine owns which voice — that must be determined separately.
+
+### Step 2: Per-Engine Enumeration (Primary — TTSBridge.kt:98-133)
+
+Because Android's `Voice` class has no `getEngine()` API, the app uses `PackageManager.queryIntentServices()` with the TTS intent action to discover installed engines, then creates a **temporary `TextToSpeech` instance per engine** with a 2-second `CountDownLatch` timeout:
+
+```kotlin
+private fun buildEngineVoiceMap() {
+    scope.launch(Dispatchers.IO) {
+        val intent = Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE)
+        val enginePackages = context.packageManager.queryIntentServices(intent, 0)
+        for (info in enginePackages) {
+            val latch = CountDownLatch(1)
+            val tempTts = TextToSpeech(context, { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    tempVoices = tempTts.voices
+                }
+                latch.countDown()
+            }, packageName)
+            latch.await(2, TimeUnit.SECONDS)
+            // Map each voice name → engine label
+            engineVoiceMap[v.name] = info.loadLabel(packageManager).toString()
+            tempTts.shutdown()
+        }
+        engineMapReady = true
+    }
+}
+```
+
+Each temp TTS instance is scoped to a specific engine, so calling `getVoices()` on it returns only voices from that engine. This yields **perfect provider attribution** — every voice is mapped to its actual engine label (e.g., "Google TTS", "Samsung TTS").
+
+### Step 3: Fallback Heuristic (TTSBridge.kt:65-73)
+
+If the engine map isn't ready yet (e.g., on first `getVoices()` call before background enumeration completes), the app falls back to name-based heuristic:
+
+```kotlin
+private fun heuristicProvider(v: Voice, features: String): String {
+    return when {
+        v.name.contains("google", ignoreCase = true) ||
+            v.locale.toString().contains("google", ignoreCase = true) -> "Google"
+        v.name.contains("samsung", ignoreCase = true) ||
+            features.contains("samsung", ignoreCase = true) -> "Samsung"
+        v.isNetworkConnectionRequired -> "Network"
+        else -> "Local"
+    }
+}
+```
+
+### Step 4: Provider String Flows Through JS Unchanged
+
+In `services.js:loadVoices()` (line 130), the `provider` field from the Java JSON is preserved:
+
+```javascript
+this.voices = raw.map(v => ({
+    ...
+    provider: v.provider || 'Local',   // ← straight from TTSBridge.kt
+    displayName: v.displayName || v.name  // ← locale name + ★ badge
+    ...
+}));
+```
+
+### Step 5: UI Renders Provider Groups (ui_llm.js:150-179)
+
+**Note:** The active `renderVoiceSelector()` is in `ui_llm.js` (lines 69-206), which overrides the one in `ui.js` since `ui_llm.js` is loaded after `ui.js` in `index.html`. Both copies exist but the `ui_llm.js` version is the one that runs.
+
+```javascript
+const providerGroups = new Map();
+langVoices.forEach(v => {
+    const provider = getProviderName(v);
+    if (!providerGroups.has(provider)) providerGroups.set(provider, []);
+    providerGroups.get(provider).push(v);
+});
+const useGroups = providerGroups.size > 1;
+
+if (useGroups) {
+    providerGroups.forEach((providerVoices, provider) => {
+        html += `<optgroup label="${provider}">`;
+        // ... each voice as <option>
+        html += `</optgroup>`;
+    });
+}
+```
+
+When voices from **multiple providers** exist for a language, they are grouped under `<optgroup>` headers labeled "Google", "Samsung", etc. When only one provider is present, the list is flat.
+
+### Step 6: Browser Fallback Heuristic (ui_llm.js:100-111)
+
+When the app is running in a browser (no native bridge), voice objects from `window.speechSynthesis.getVoices()` do NOT have a `provider` field. The `getProviderName()` function infers it from the name/URI:
+
+```javascript
+const getProviderName = (voice) => {
+    if (voice.provider) return voice.provider;           // native path
+    const combined = (voice.voiceURI + ' ' + voice.name).toLowerCase();
+    if (/google|com\.google\.android\.tts/i.test(combined)) return 'Google';
+    if (/samsung|com\.samsung/i.test(combined)) return 'Samsung';
+    if (/microsoft|edge.*tts/i.test(combined)) return 'Microsoft';
+    if (/apple|com\.apple/i.test(combined)) return 'Apple';
+    if (voice.localService) return 'Local';
+    return 'Network';
+};
+```
+
+---
+
+## Voice Selection & TTS Engine Routing
+
+The user can select a specific voice per language in Settings. How this selection affects actual TTS playback depends on the platform.
+
+### The Selection Flow
+
+1. User picks a voice from the per-language `<select>` dropdown (e.g., `samsung-ko-kr-narra`)
+2. The `onchange` handler saves `selectedVoices[langKey] = voiceURI` via `previewVoice()` then `store.js:savePrefs()`
+3. On playback, `speakNow()` reads `selectedVoices[langKey]`, looks up the voice by `voiceURI`, and passes the voice name to the TTS layer
+
+### Native TTS Path (Android WebView / APK)
+
+```
+speakNow(txt, langKey)
+    |
+    +--> prefs.selectedVoices[langKey]  →  voiceURI
+    |        |
+    |        v
+    |    this.voices.find(voiceURI)     →  voice.name
+    |        |
+    |        v
+    |    NativeTTSBridge.speak(txt, voiceName, langTag, rate)
+    |        |
+    |        v
+    |    TTSBridge.speak(voiceName)     →  tts.voices.find(name) → tts.voice = targetVoice
+    |        |
+    |        v
+    |    Android TextToSpeech.speak()
+    |
+    +--> voiceName is empty?  →  Android uses current tts.voice (system default)
+```
+
+**Key mechanism in `TTSBridge.kt:132-138`:**
+
+```kotlin
+if (voiceName.isNotEmpty()) {
+    val voices: Set<Voice> = tts!!.voices   // ← ALL voices, ALL engines
+    val targetVoice = voices.find { it.name == voiceName }
+    if (targetVoice != null) {
+        tts!!.voice = targetVoice            // ← Android switches engine if needed
+    }
+}
+```
+
+### Cross-Engine Voice Selection (Critical Detail)
+
+`TextToSpeech` is initialized **without specifying an engine** on line 37:
+```kotlin
+tts = TextToSpeech(context) { status -> ... }
+```
+This means it uses the **system default TTS engine** (set in Android Settings → General Management → Text-to-speech → Preferred engine).
+
+However, `tts.voices` returns voices from **all installed engines**, and `tts.voice = targetVoice` in modern Android (API 21+) can **transparently switch to the engine that owns the voice**. When `setVoice()` is called with a voice from a non-default engine (e.g., Samsung voice while default engine is Google TTS), Android's TTS framework:
+1. Extracts the engine identifier from the `Voice` object
+2. Routes the speech request to the appropriate engine
+3. Does NOT require the app to re-initialize `TextToSpeech` with a different engine
+
+**Caveat:** This behavior depends on the Android version and OEM implementation. On some devices/skins, `setVoice()` with a cross-engine voice may silently fall back to the default engine's closest matching voice rather than switching engines.
+
+### Browser Path (speechSynthesis)
+
+When `useNative` is false (desktop, Chrome on Android, iOS):
+
+```javascript
+// services.js:239-253
+const u = new SpeechSynthesisUtterance(txt);
+u.voice = freshVoices.find(x => x.voiceURI === voiceURI);
+```
+
+The browser's `SpeechSynthesisUtterance.voice` only works with voices from the browser's own speech engine. On Chrome, this typically only exposes Google TTS voices. Samsung voices are generally NOT available through `speechSynthesis` on Chrome, even on Samsung devices.
+
+### APK Override: Voice Dropout
+
+**Important:** When the app detects it is running in the native WebView (`useNative = true`), `renderVoiceSelector()` (ui_llm.js:193-197) **replaces the entire voice dropdown UI** with an info box:
+
+```javascript
+if (isNative) {
+    html = `<div class="p-3 bg-emerald-50 ...">
+        Using Android default TTS engine
+        ...
+    </div>`;
+}
+```
+
+Note: `ui_llm.js` overrides `UIManager.prototype.renderVoiceSelector` via `Object.assign` — it is the active implementation. The deprecated copy in `ui.js` is never called.
+
+### Summary Table
+
+| Platform | `useNative` | Voices Source | Provider Labels | Per-Lang Voice Selection | Engine Switching |
+|----------|-------------|---------------|-----------------|--------------------------|------------------|
+| APK (WebView) | `true` | `TTSBridge.getVoices()` | Heuristic in TTSBridge.kt | Hidden (info box instead) | `setVoice()` cross-engine (API 21+) |
+| Android Chrome | `false` | `speechSynthesis.getVoices()` | JS heuristic in `getProviderName()` | Works via dropdown but limited to Chrome voices | Not applicable (Chrome only has Google TTS) |
+| Desktop Chrome | `false` | `speechSynthesis.getVoices()` | JS heuristic in `getProviderName()` | Works via dropdown | Not applicable (OS-level voices) |
+| iOS Safari | `false` | `speechSynthesis.getVoices()` | JS heuristic in `getProviderName()` | Works via dropdown | Not applicable (Apple voices only) |
+
 ## TTS Fix History (June 2026)
 
 ### Root Cause Analysis (Final)

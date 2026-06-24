@@ -920,10 +920,6 @@ class UIManager {
         }
     }
 
-    // F9: Persistent home-screen AI status indicator. Called from
-    // llm_service.js autoDetect() + _ping() + goHome() render. Safe to call
-    // before the home screen exists (returns early if elements missing); when
-    // goHome() renders later it calls this at render time.
     _updateAIStatus() {
         const dot = document.getElementById('ai-status-dot');
         const label = document.getElementById('ai-status-label');
@@ -931,10 +927,18 @@ class UIManager {
         const llm = app.llm;
         if (llm && !llm._isStub && llm.available && llm.hasModel) {
             dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-            label.textContent = llm.useCloud ? 'AI Online (cloud)' : 'AI Online (local)';
+            var mode = '';
+            if (llm.useCloud || (llm.endpoint && llm.endpoint.indexOf('ollama-proxy') !== -1)) {
+                mode = 'cloud';
+            } else if (llm.endpoint && (llm.endpoint.indexOf('127.0.0.1') !== -1 || llm.endpoint.indexOf('localhost') !== -1)) {
+                mode = 'local';
+            } else {
+                mode = llm.endpoint ? 'remote' : 'local';
+            }
+            var modelName = llm.resolvedModel || '';
+            label.textContent = 'AI Online (' + mode + ')' + (modelName ? ' \u00b7 ' + modelName : '');
             label.className = 'text-[9px] font-bold text-emerald-500 uppercase';
         } else if (llm && !llm._isStub && llm.available) {
-            // Connected to /api/tags but no model resolved yet — still detecting.
             dot.className = 'w-2 h-2 rounded-full bg-amber-400';
             label.textContent = 'AI detecting...';
             label.className = 'text-[9px] font-bold text-amber-500 uppercase';
@@ -1104,13 +1108,13 @@ class UIManager {
                     providerGroups.forEach((providerVoices, provider) => {
                         html += `<optgroup label="${provider}">`;
                         providerVoices.forEach(v => {
-                            html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.name)} (${v.lang})</option>`;
+                            html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.displayName || v.name)} (${v.lang})</option>`;
                         });
                         html += `</optgroup>`;
                     });
                 } else {
                     langVoices.forEach(v => {
-                        html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.name)} (${v.lang})</option>`;
+                        html += `<option value="${escapeHtml(v.voiceURI)}" ${v.voiceURI === currentSelected ? 'selected' : ''}>${escapeHtml(v.displayName || v.name)} (${v.lang})</option>`;
                     });
                 }
             }

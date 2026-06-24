@@ -151,16 +151,51 @@ firebase deploy --only functions
 
 ### Grammar Gym (`scripts/pregenerate-grammar.js`)
 
-Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}`. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm/llm_roles.js`) to avoid ~30-100s waits on first visit.
+Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}`. Each entry includes `explainLang` for cache filtering. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm/llm_roles.js`), scanning up to 5 recent entries and picking one matching the user's `presetSource`, to avoid ~30-100s waits on first visit.
 
 ```bash
 cd scripts
-node pregenerate-grammar.js --service-account ../vocabmaster112225-1e8a10d5f0a9.json --skip-existing
-node pregenerate-grammar.js --service-account ../serviceAccountKey.json --dry-run --limit 5
-node pregenerate-grammar.js --service-account ../serviceAccountKey.json --lang ja --vocab-id 1759
+# Cloud proxy (no local Ollama needed):
+node pregenerate-grammar.js --cloud --lang ja --vocab-range 0-100 --explain-lang ko --skip-existing
+
+# Local Ollama:
+node pregenerate-grammar.js --ollama http://127.0.0.1:11434 --model gemma4:31b --lang zh --explain-lang en
+
+# Dry-run with service account:
+node pregenerate-grammar.js --cloud --dry-run --limit 5
+
+# Single vocab:
+node pregenerate-grammar.js --cloud --lang ja --vocab-id 1759 --explain-lang ko
 ```
 
-Flags: `--dry-run`, `--limit N`, `--lang ja`, `--vocab-id N`, `--skip-existing`, `--ollama URL`, `--model NAME`, `--service-account PATH`. Validates 12 exercises, all type variants, and 6A/6B answer balance. 500ms delay between calls.
+Flags:
+- `--dry-run` — Preview only, no writes
+- `--limit N` — Max items to process (per language, per vocab)
+- `--lang ja` — Only process one language (ja, ko, en, zh, es, ru, etc.)
+- `--vocab-id N` — Only process a single vocab ID
+- `--vocab-range 0-100` — Only process vocab IDs in range (inclusive)
+- `--skip-existing` — Skip items that already have entries for this (lang, explainLang) combo
+- `--ollama URL` — Local Ollama endpoint (default: `http://127.0.0.1:11434`)
+- `--model NAME` — Model name (default: `gemma4:31b-cloud`)
+- `--cloud` — Use cloud proxy (sets `--ollama` to proxy URL + `--model` to gemma4:31b-cloud)
+- `--explain-lang ko` — Language for questions/explanations (default: `en`)
+- `--service-account PATH` — Firebase Admin SDK credentials
+
+Validation:
+- Validates 6-12 exercises per generation
+- Accepts all 12 type variants (normalizes `youdecide` → `you_decide`)
+- Progressive choice limit: tries 2 choices first, relaxes to 3, then 4 (A/B/C/D)
+- 500ms delay between calls to avoid rate limiting
+- Auto-refreshes Firebase auth token on 401
+
+Auth priority:
+1. Firebase Admin SDK with `--service-account`
+2. Firebase Admin SDK with `applicationDefault()` (Google default credentials)
+3. Firebase REST API with anonymous auth (requires `database.rules.json` to allow auth writes at the `$explainLang` path level)
+
+RTDB path: `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{randomToken}`
+- Example: `grammar_exercises/0/zh/ko/fh56hz`
+- explainLang in the path enables direct indexed query: `grammar_exercises/{vid}/{lang}/{prefLang}` with `limitToLast(1)`
 
 ## CI/CD
 

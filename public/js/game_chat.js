@@ -688,7 +688,10 @@ class Chat extends GameMode {
                 app.audio.play(units[0].text, units[0].lang || this._getTargetLang(), 'chat', 300);
             }
         } catch(e) {
-            if (e.name === 'AbortError') return;
+            if (e.name === 'AbortError') {
+                L('[Chat] Opening aborted');
+                return;
+            }
             this._setBusyUI(false);
             var lang = this._getTargetLang();
             var greetings = { ja: 'こんにちは！今日は何を勉強したいですか？', ko: '안녕하세요! 오늘 무엇을 공부하고 싶으세요?', zh: '你好！今天想学什么？', es: '¡Hola! ¿Qué te gustaría practicar hoy?', fr: 'Bonjour ! Qu\'aimeriez-vous pratiquer aujourd\'hui ?', de: 'Hallo! Was möchtest du heute üben?', it: 'Ciao! Cosa vorresti praticare oggi?', pt: 'Olá! O que você gostaria de praticar hoje?', ru: 'Здравствуйте! Что вы хотели бы практиковать сегодня?' };
@@ -755,7 +758,11 @@ class Chat extends GameMode {
             }
 
         } catch (err) {
-            if (err.name === 'AbortError') return;
+            if (err.name === 'AbortError') {
+                L('[Chat] Response aborted by user');
+                this._setBusyUI(false);
+                return;
+            }
             if (!this.root || !this.root.isConnected) return;
             this._setBusyUI(false);
             this.messages.push({ role: 'assistant', text: '[Error: ' + (err.message || 'Failed to get response') + ']' });

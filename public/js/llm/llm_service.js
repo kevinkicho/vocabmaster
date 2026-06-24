@@ -160,7 +160,11 @@ class LLMService {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        var timeoutTriggered = false;
+        const timeoutId = setTimeout(() => {
+            timeoutTriggered = true;
+            controller.abort();
+        }, timeout);
         if (signal) {
             signal.addEventListener('abort', () => { clearTimeout(timeoutId); controller.abort(); });
         }
@@ -168,6 +172,11 @@ class LLMService {
 
         try {
             resp = await this._fetch(url, Object.assign({}, fetchOptions, { signal: controller.signal }));
+        } catch (e) {
+            if (timeoutTriggered) {
+                throw new Error('Request timed out after ' + timeout + 'ms');
+            }
+            throw e;
         } finally {
             clearTimeout(timeoutId);
         }

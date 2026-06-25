@@ -279,5 +279,6 @@ class Context extends GameMode {
 
     afterRender() {
         if (this.dom.wordCard) app.fitter.fitSmart(this.dom.wordCard);
+        requestAnimationFrame(() => { if (this.root) this.root.classList.add('visible'); });
     }
 }

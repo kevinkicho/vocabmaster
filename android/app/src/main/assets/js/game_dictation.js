@@ -52,6 +52,7 @@ class Dictation extends GameMode {
         this.dom.result = this.root.querySelector('#dict-result');
 
         this.root.querySelector('#dict-nav').innerHTML = app.ui.nav();
+        this.setupHeader();
 
         var self = this;
         this.dom.playBtn.onclick = function() { self.playSentence(); };
@@ -59,11 +60,21 @@ class Dictation extends GameMode {
         this.dom.input.onkeydown = function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); self.checkAnswer(); } };
     }
 
+    setupHeader() {
+        if (this.dom.header) {
+            app.score = Math.max(0, Number(app.score) || 0);
+            this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, { showDice: true });
+            this.dom.headerInput = this.dom.header.querySelector('input[type="number"]');
+            this.dom.headerScore = this.dom.header.querySelector('.score-display');
+        }
+    }
+
     update() {
         this.attempts = 0;
         this.answered = false;
         this.busy = false;
         this._clearResult();
+        this.updateHeader();
 
         var c = this.list[this.i];
         var p = app.store.prefs;

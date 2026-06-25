@@ -81,10 +81,39 @@ class Context extends GameMode {
         this.dom.noAi = this.root.querySelector('#ctx-no-ai');
 
         this.root.querySelector('#ctx-nav').innerHTML = app.ui.nav();
+        this.setupHeader();
 
         var self = this;
         if (this.dom.playBtn) this.dom.playBtn.onclick = function() { self.playSentence(); };
         if (this.dom.nextBtn) this.dom.nextBtn.onclick = function() { self.showNextLevel(); };
+    }
+
+    setupHeader() {
+        if (this.dom.header) {
+            app.score = Math.max(0, Number(app.score) || 0);
+            this.dom.header.innerHTML = app.ui.header(this.i, this.list.length, app.score, { showSparkle: true, showDice: true });
+            this.dom.headerInput = this.dom.header.querySelector('input[type="number"]');
+            this.dom.headerScore = this.dom.header.querySelector('.score-display');
+        }
+    }
+
+    _generateAnew() {
+        this.currentLevel = 0;
+        this.sentences = [];
+        this._hideAll();
+        if (this.dom.loading) this.dom.loading.classList.remove('hidden');
+        var c = this.list[this.i];
+        var p = app.store.prefs;
+        var qKey = p.sentencesQ || p.presetTarget || 'ja';
+        var aKey = p.sentencesA || p.presetSource || 'en';
+        var exKey = '';
+        if (typeof LANG_MAP !== 'undefined') {
+            var conf = LANG_MAP.get(qKey);
+            if (conf && conf.exKey) exKey = conf.exKey;
+        }
+        var word = c[qKey] || '';
+        var existingExample = c[exKey] || '';
+        this._generateSentences(word, qKey, aKey, existingExample);
     }
 
     update() {
@@ -92,6 +121,7 @@ class Context extends GameMode {
         this.sentences = [];
         this.answered = false;
         this.busy = false;
+        this.updateHeader();
 
         var c = this.list[this.i];
         var p = app.store.prefs;

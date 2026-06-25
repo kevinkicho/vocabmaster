@@ -128,12 +128,12 @@ function buildPrompt(word, context, langCode, level, knownLang) {
 
 function extractJson(text) {
     if (!text) return null;
-    // Strategy 1: strip markdown code fences first (```json ... ``` or ``` ... ```)
+    // Strategy 1: strip markdown code fences (```json ... ``` or ``` ... ```)
     var fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (fenceMatch) {
         try {
             return JSON.parse(fenceMatch[1]);
-        } catch (e) { /* fall through to brace matching */ }
+        } catch (e) { /* fall through */ }
     }
     // Strategy 2: direct parse
     try {
@@ -173,7 +173,7 @@ function normalizeType(raw) {
 }
 
 function validate(data, choiceLimit) {
-    if (choiceLimit === undefined) choiceLimit = 4;
+    if (choiceLimit === undefined) choiceLimit = 5;
     var validLetters = ['A', 'B', 'C', 'D'].slice(0, choiceLimit);
     if (!data || typeof data !== 'object') return 'Not an object';
     if (!data.grammar || typeof data.grammar !== 'string' || data.grammar.length < 1) return 'Missing/invalid grammar';
@@ -189,10 +189,22 @@ function validate(data, choiceLimit) {
         if (!ex.type || ALL_TYPES.indexOf(ex.type) === -1) return 'Exercise ' + i + ': invalid type "' + ex.type + '"';
         if (!ex.question || typeof ex.question !== 'string' || ex.question.length < 5) return 'Exercise ' + i + ': question too short';
         if (!Array.isArray(ex.choices) || ex.choices.length < 2) return 'Exercise ' + i + ': need 2 choices';
-        for (var j = 0; j < ex.choices.length; j++) {
-            var ch = ex.choices[j];
-            if (!ch.letter || !ch.text) return 'Exercise ' + i + ', choice ' + j + ': missing letter/text';
+        // Filter out malformed choices (missing letter or text)
+        var validChoices = ex.choices.filter(function(ch) { return ch && ch.letter && ch.text; });
+        if (validChoices.length < 2) return 'Exercise ' + i + ': need 2 valid choices';
+        // Remap answer: find the original letter's position among valid choices
+        var origAnswer = ex.answer;
+        var answerIdx = -1;
+        for (var vc = 0; vc < validChoices.length; vc++) {
+            if (validChoices[vc].letter === origAnswer) { answerIdx = vc; break; }
         }
+        if (answerIdx === -1) return 'Exercise ' + i + ': answer "' + origAnswer + '" not in valid choices';
+        // Re-letter choices sequentially
+        for (var j = 0; j < validChoices.length; j++) {
+            validChoices[j].letter = String.fromCharCode(65 + j);
+        }
+        ex.choices = validChoices;
+        ex.answer = String.fromCharCode(65 + answerIdx);
         if (!ex.answer || validLetters.indexOf(ex.answer) === -1) return 'Exercise ' + i + ': invalid answer "' + ex.answer + '" (limit ' + choiceLimit + ')';
         if (!ex.explanation || typeof ex.explanation !== 'string' || ex.explanation.length < 5) return 'Exercise ' + i + ': explanation too short';
     }
@@ -460,25 +472,49 @@ function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
             try {
                 var prompt = buildPrompt(langWord, context, langCode, levelHint, explainLang);
-                var raw = await callOllama(prompt);
-                var json = extractJson(raw);
-                if (!json) {
-                    console.log('  \u274c Failed: could not extract JSON (raw length: ' + raw.length + ')');
+                var raw, json, valErr;
+                var success = false;
+                var maxAttempts = 3;
+
+                for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+                    raw = await callOllama(prompt);
+                    json = extractJson(raw);
+                    if (!json) {
+                        // Feed extraction error back into the prompt for retry
+                        if (attempt < maxAttempts) {
+                            prompt += '\n\nPREVIOUS ERROR: Could not extract valid JSON from your response. Output ONLY valid JSON with no extra text, no markdown, no code fences.\nRaw length was ' + raw.length + '. Make sure your response is pure JSON.';
+                            console.log('  Retrying (' + attempt + '/' + maxAttempts + '): JSON extraction failed');
+                            continue;
+                        }
+                        console.log('  \u274c Failed: could not extract JSON (raw length: ' + raw.length + ')');
+                        failed++;
+                        success = true; // skip the validation block below
+                        break;
+                    }
+                    var choiceLimit = 2;
+                    for (; choiceLimit <= 5; choiceLimit++) {
+                        valErr = validate(json, choiceLimit);
+                        if (!valErr) break;
+                    }
+                    if (!valErr) {
+                        success = true;
+                        if (choiceLimit > 2) console.log('  \u2139 Accepted with ' + choiceLimit + ' choices (relaxed)');
+                        break;
+                    }
+                    // Feed validation error back into the prompt for retry
+                    if (attempt < maxAttempts) {
+                        prompt += '\n\nPREVIOUS ERROR: ' + valErr + '\nFix your JSON to match the required schema exactly. Output ONLY valid JSON.';
+                        console.log('  Retrying (' + attempt + '/' + maxAttempts + '): ' + valErr);
+                    }
+                }
+
+                if (!success) {
+                    console.log('  \u274c All ' + maxAttempts + ' attempts failed: ' + (valErr || 'could not extract JSON'));
                     failed++;
+                    processed++;
+                    await sleep(500);
                     continue;
                 }
-                var valErr = null;
-                var choiceLimit = 2;
-                for (; choiceLimit <= 4; choiceLimit++) {
-                    valErr = validate(json, choiceLimit);
-                    if (!valErr) break;
-                }
-                if (valErr) {
-                    console.log('  \u274c Validation failed: ' + valErr);
-                    failed++;
-                    continue;
-                }
-                if (choiceLimit > 2) console.log('  \u2139 Accepted with ' + choiceLimit + ' choices (relaxed)');
 
                 // Compute labelA/labelB for each exercise (mirrors LLMService.resolveLabels)
                 var exercises = json.exercises.map(function(ex) {

@@ -2,7 +2,7 @@
 
 ## pregenerate-grammar.js
 
-Pre-generates Grammar Gym exercises for vocab words and saves them to Firebase RTDB at `grammar_exercises/{vocabId}/{langCode}/{token}`. The live Grammar Gym checks this cache first (via `loadCachedGrammarExercise`), so pre-generating avoids the ~100s wait on first visit.
+Pre-generates Grammar Gym exercises for vocab words and saves them to Firebase RTDB at `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}`. The live Grammar Gym checks this cache first (via `loadCachedGrammarExercise`), so pre-generating avoids the ~100s wait on first visit.
 
 ### How it works
 
@@ -13,7 +13,7 @@ Pre-generates Grammar Gym exercises for vocab words and saves them to Firebase R
    - Calls Ollama (`POST /api/generate`, `stream: false`, `temperature: 0`, `num_predict: 2048`)
    - Extracts JSON from the response
    - Validates: 12 exercises, all 12 type variants, answer balance 6A/6B
-   - Saves to `grammar_exercises/{vocabId}/{langCode}/{token}` in RTDB
+   - Saves to `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}` in RTDB
 
 ### Setup
 
@@ -69,14 +69,18 @@ node pregenerate-grammar.js --limit 10
 | `--ollama URL` | `http://127.0.0.1:11434` | Ollama API endpoint |
 | `--model NAME` | `gemma4:31b-cloud` | Model name to use |
 | `--service-account PATH` | env var | Path to Firebase service account JSON |
+| `--cloud` | off | Use cloud proxy (sets --ollama and --model automatically) |
+| `--vocab-range 0-100` | all | Only process vocab IDs in the given range (inclusive) |
+| `--explain-lang ko` | `en` | Language for questions/explanations (default English) |
 
 ### Notes
 
 - Uses Firebase Admin SDK which bypasses security rules
-- The RTDB rules at `grammar_exercises/{vocabId}/{langCode}/{token}` require `auth != null` for writes; the admin SDK satisfies this
+- The RTDB rules at `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}` require `auth != null` for writes; the admin SDK satisfies this
 - Generation takes ~5-15 seconds per word on a fast model, ~30-60s for larger models
 - 500ms delay between calls to avoid overwhelming the LLM
 - Failed generations are logged but don't stop the script; you can re-run with `--skip-existing` to retry only failed ones
+
 
 ## tag-jlpt.js
 

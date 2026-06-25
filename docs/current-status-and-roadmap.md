@@ -184,12 +184,10 @@ Detailed design, rationale, deployment notes, and testing instructions live in:
 
 See dedicated `docs/medium-term-roadmap.md` for details and live progress log. Significant work completed on collections, review queue, and Story integration with higher tiers.
 
-See dedicated `docs/medium-term-roadmap.md` for detailed plans, file impacts, and phased implementation steps.
-
 High-level:
 
 1. **Productize Collections + Tier Support**
-   - Turn the stub `vocabulary-collections.js` into a real system (multiple named collections, tier-based like "JLPT N3 Core", user custom).
+    - Turn the stub `collections.js` module into a real system (multiple named collections, tier-based like "JLPT N3 Core", user custom).
    - Integrate selection into home, data filtering (`getFilteredList`), game start, and Story word picking.
    - Higher-tier data (enriched N3/N2/N1 etc. from /data/ and RTDB) must be first-class and filterable.
 

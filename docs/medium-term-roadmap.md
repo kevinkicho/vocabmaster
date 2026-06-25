@@ -25,25 +25,24 @@
 - Basic UI for choosing "My Spanish A1", "JLPT N3 Core", or "All".
 
 ### Current State (as of now)
-- `public/js/vocabulary-collections.js`: Contains only a large hardcoded `SPANISH_A1` array. Not imported/used anywhere.
-- `data.js`: Loads primarily from RTDB `/vocab` or fallback CSV `./master112625.csv`. `getFilteredList()` uses `prefs.levelFilter` (tags like 'N3').
+- `public/js/data.js`: Loads primarily from RTDB `/vocab`. `getFilteredList()` uses `prefs.levelFilter` (tags like 'N3').
 - `config.js`: Strong `LEVEL_CONFIG` and `mapLevelToCEFR`. Good tag-based filtering.
-- Home in `main.js`: Hardcoded buttons for modes. No collection picker yet. There's `collection-bar.js` and `vocabulary-collections.js` suggesting partial prior intent.
-- Enriched data lives in `/data/` (tier1_enriched.json etc.) and large RTDB exports. Need to ensure tags like 'N3' are present on items.
+- Home in `main.js`: Hardcoded buttons for modes. No collection picker yet. `currentCollection` pref exists but unused.
+- Enriched data lives in RTDB `/vocab` with tag-based filtering. Collections are selectable via tag chips on the home screen.
 
 ### Detailed Tasks & Files
 1. **Make collections a first-class module**
-   - Refactor `vocabulary-collections.js`:
-     - Export a registry of collections (id, name, lang, level, words array or filter function).
-     - Support "built-in" (tier-based like "JLPT N3", language starters) + "user" (localStorage or RTDB per-user).
-     - Add helper: `getCollectionWords(collectionId)` or `applyCollectionFilter(list, collectionId)`.
-   - Add to `data.js`: `currentCollection = null;`, `getActiveList()` that combines levelFilter + collection if set.
-   - Update `getFilteredList()` or introduce `getPracticeList()`.
+    - Create a new `collections.js` module (replaces deleted `vocabulary-collections.js`):
+      - Export a registry of collections (id, name, lang, level, words array or filter function).
+      - Support "built-in" (tier-based like "JLPT N3", language starters) + "user" (localStorage or RTDB per-user).
+      - Add helper: `getCollectionWords(collectionId)` or `applyCollectionFilter(list, collectionId)`.
+    - Add to `data.js`: `currentCollection = null;`, `getActiveList()` that combines levelFilter + collection if set.
+    - Update `getFilteredList()` or introduce `getPracticeList()`.
 
 2. **Data loading for enriched tiers**
-   - In `data.js` load(), after RTDB/CSV, or as additional source, consider merging enriched tier data if not already in RTDB.
-   - Ensure every vocab item has proper `tags: ['N3', ...]` and language fields filled (from the enrichment work).
-   - Add a "Tiers" or "Collections" section in level filter UI if needed (but prefer dedicated collection picker).
+    - In `data.js` load(), after RTDB, consider merging enriched tier data if not already in RTDB.
+    - Ensure every vocab item has proper `tags: ['N3', ...]` and language fields filled.
+    - Add a "Tiers" or "Collections" section in level filter UI if needed (but prefer dedicated collection picker).
 
 3. **UI Integration (Home + Settings + Filters)**
    - In `main.js:goHome()`: Add a "Collections" section or picker above the mode buttons. Simple dropdown or cards for "All", "Spanish A1", "JLPT N3", etc.
@@ -58,7 +57,7 @@
    - Simple "Create Custom Collection" stub (for now: just name + current filtered words snapshot?).
 
 ### Files to Touch (Phase 1)
-- `public/js/vocabulary-collections.js` (main refactor)
+- `public/js/collections.js` (new module — replaces deleted `vocabulary-collections.js`)
 - `public/js/data.js` (filtering + load enhancements)
 - `public/js/main.js` (home UI picker, launch integration)
 - `public/js/ui.js` (settings or filter UI for collections)

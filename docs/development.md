@@ -151,7 +151,7 @@ firebase deploy --only functions
 
 ### Grammar Gym (`scripts/pregenerate-grammar.js`)
 
-Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}`. Each entry includes `explainLang` for cache filtering. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm/llm_roles.js`), scanning up to 5 recent entries and picking one matching the user's `presetSource`, to avoid ~30-100s waits on first visit.
+Bulk-generates Grammar Gym exercises and saves to RTDB at `grammar_exercises/{vocabId}/{langCode}/{explainLang}/{token}`. Each entry includes `explainLang` for cache filtering. The live app serves these from cache (see `loadCachedGrammarExercise` in `llm/llm_roles.js`), querying the matching explainLang path with `limitToLast(1)`, to avoid ~30-100s waits on first visit.
 
 ```bash
 cd scripts
@@ -167,6 +167,21 @@ node pregenerate-grammar.js --cloud --dry-run --limit 5
 # Single vocab:
 node pregenerate-grammar.js --cloud --lang ja --vocab-id 1759 --explain-lang ko
 ```
+
+Flags:
+- `--dry-run` — Preview only, no writes
+- `--limit N` — Max items to process (per language, per vocab)
+- `--lang ja` — Only process one language (ja, ko, en, zh, es, ru, etc.)
+- `--vocab-id N` — Only process a single vocab ID
+- `--vocab-range 0-100` — Only process vocab IDs in range (inclusive)
+- `--skip-existing` — Skip items that already have entries for this (lang, explainLang) combo
+- `--ollama URL` — Ollama endpoint (default: `http://127.0.0.1:11434`)
+- `--model NAME` — Model name (default: `gemma4:31b-cloud`)
+- `--cloud` — Use cloud proxy (sets `--ollama` + `--model` automatically)
+- `--explain-lang ko` — Language for questions/explanations (default `en`)
+- `--service-account PATH` — Firebase Admin SDK service account JSON
+
+Validation: 6-12 exercises per generation, all type variants at most once, answer balance not enforced. 500ms delay between calls. Without `--service-account`, uses Firebase Auth REST API (anonymous sign-in) + RTDB REST API.
 
 Flags:
 - `--dry-run` — Preview only, no writes

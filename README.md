@@ -1,6 +1,6 @@
 # VocabMaster
 
-**VocabMaster** is a personal-use PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features seven game modes (including AI-powered Story Mode, Grammar Gym, and Chat Practice), granular per-mode settings, context-aware audio, LLM integration via Ollama (local APK + cloud proxy), native Android TTS support, and a smooth render pipeline — all in a single-page app optimized for mobile.
+**VocabMaster** is a personal-use PWA language learning app built with Vanilla JavaScript, Tailwind CSS v3, and Firebase. It features nine game modes (including AI-powered Story Mode, Grammar Gym, and Chat Practice), granular per-mode settings, context-aware audio, LLM integration via Ollama (local APK + cloud proxy), native Android TTS support, and a smooth render pipeline — all in a single-page app optimized for mobile.
 
 ---
 
@@ -92,7 +92,7 @@ VocabMaster integrates with [Ollama](https://ollama.com) for AI-powered features
 
 An Android WebView wrapper (`android/`) provides native Android TTS support and bypasses Chrome's HTTPS-only restriction for localhost, enabling communication with [Ollama4Android](https://github.com/kevinkicho/Ollama4Android) running on the same device.
 
-- **Native TTS bridge** — `TTSBridge.kt` wraps Android's `TextToSpeech` API, exposing 393+ system voices (Google TTS, Samsung TTS, etc.) via `@JavascriptInterface`. Per-engine enumeration (`buildEngineVoiceMap()`) accurately labels voices by provider.
+- **Native TTS bridge** — `TTSBridge.kt` wraps Android's `TextToSpeech` API, exposing 393+ system voices (Google TTS, Samsung TTS, etc.) via `@JavascriptInterface`. Per-engine enumeration (`buildEngineVoiceMap()`) accurately labels voices by provider.. Per-engine enumeration (`buildEngineVoiceMap()`) accurately labels voices by provider.
 - **Native Google Sign-In** — `NativeAuthJSInterface` with Firebase Auth + Google Sign-In SDKs
 - **LLM bridge** — Kotlin `@JavascriptInterface` ↔ `evaluateJavascript()` bridge with promise-based async pattern
 - **AI model detection** — `autoDetect()` picks first non-`*-cloud` model from local Ollama; `_ping()` triggers `autoDetect()` on connectivity restore
@@ -109,7 +109,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## Key Features
 
-- **14 languages supported** — Japanese, Korean, English, Chinese, Spanish, Portuguese, Italian, French, German, Russian (+ Furigana, Romaji, Pinyin, Transliteration visual columns)
+- **10 languages supported** — Japanese, Korean, English, Chinese, Spanish, Portuguese, Italian, French, German, Russian (+ Furigana, Romaji, Pinyin, Transliteration visual columns)
 - **Per-mode settings** — Each game mode has independent controls for language pairs, audio behavior, randomization, and example display
 - **Native Android TTS** — Dedicated Android WebView wrapper with `TTSBridge` providing 393+ system voices via native `TextToSpeech` API. Cross-engine voice enumeration accurately labels providers (Google, Samsung, Local, Network).
 - **Voice selection** — Per-language TTS voice picker in Settings, with instant preview playback. Voices display locale name + quality badge. In APK mode, picker replaced by info box directing to system TTS settings.

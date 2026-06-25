@@ -94,7 +94,7 @@ if (!this.useNative && (window.NativeTTS || /VocabMasterApp/i.test(navigator.use
 }
 ```
 
-1. **Primary check:** Is `window.NativeTTSBridge` defined AND does `window.NativeTTS.speak` exist?
+1. **Primary check:** Is `window.NativeTTSBridge` defined AND does `window.NativeTTSBridge.isAvailable()` return true?
 2. **Fallback:** Is `window.NativeTTS` truthy OR does UA contain "VocabMasterApp"?
 
 **Important:** All references to `NativeTTSBridge` in `services.js` must use `window.NativeTTSBridge` (not bare `NativeTTSBridge`). JavaScript `const` declarations in one `<script>` tag are not visible to other `<script>` tags — only `window.*` globals cross script boundaries. The `const NativeTTSBridge` in `native_tts.js` is a local variable; the actual global is set via `window.NativeTTSBridge = bridge` at line 144.
@@ -219,7 +219,7 @@ private fun heuristicProvider(v: Voice, features: String): String {
 
 ### Step 4: Provider String Flows Through JS Unchanged
 
-In `services.js:loadVoices()` (line 130), the `provider` field from the Java JSON is preserved:
+In `services.js:loadVoices()` (line 124), the `provider` field from the Java JSON is preserved:
 
 ```javascript
 this.voices = raw.map(v => ({

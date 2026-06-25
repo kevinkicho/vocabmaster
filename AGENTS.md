@@ -110,12 +110,12 @@ The web app uses a **Cloud Run proxy** (`https://ollama-proxy-1020976660084.us-c
 `TTSBridge.kt` line 136 (`tts!!.voice = targetVoice`) is **not dead code**. It enables cross-engine voice selection — users can pick a Samsung TTS voice even when the system default TTS engine is Google TTS.
 
 **How it works:**
-- `TextToSpeech` is initialized without specifying an engine (`TTSBridge.kt:37`), which uses the system default. But `getVoices()` (`TTSBridge.kt:60`) returns voices from **all installed engines** — this is standard Android API behavior (API 21+).
+- `TextToSpeech` is initialized without specifying an engine (`TTSBridge.kt:46`), which uses the system default. But `getVoices()` (`TTSBridge.kt:149`) returns voices from **all installed engines** — this is standard Android API behavior (API 21+).
 - When the user selects a voice from a non-default engine, `targetVoice` is found in the unified voice set and `setVoice()` routes the speech to the correct engine transparently.
 - Do NOT remove `tts!!.voice = targetVoice` or replace it with `setLanguage()`-only logic. Doing so would lock the app to the system default engine's voices only.
 
 **Do NOT "clean up" these related blocks either:**
-- The `provider` heuristic in `TTSBridge.kt:72-80` (Google/Samsung/Network/Local detection). This is the only way to label voices by engine — Android's API returns all voices in one flat set without engine attribution.
+- The `provider` heuristic in `TTSBridge.kt:65-73` (Google/Samsung/Network/Local detection). This is the only way to label voices by engine — Android's API returns all voices in one flat set without engine attribution.
 - The `window.NativeTTSBridge = bridge` in `native_tts.js:144`. Without this, `const NativeTTSBridge` is invisible to `services.js` (per JS `const`/`let`/`class` not crossing `<script>` tag boundaries — see rule above).
 - The `useNative` branching in `services.js:6-12` and `renderVoiceSelector()` in `ui_llm.js:193-197` (which replaces the dropdown with an info box in APK mode). Note: `ui_llm.js` overrides `UIManager.prototype.renderVoiceSelector` — the active implementation is in `ui_llm.js`, not `ui.js`.
 - ADB is now available in this WSL environment. See `docs/audio-tts-architecture.md` for the full TTS provider detection chain and cross-engine routing details.
@@ -128,12 +128,11 @@ All AI-generated content respects the user's "I know..." language setting. The e
 - `_getExplainLang()` in `llm_roles.js:2-10` reads `window.app.store.prefs.presetSource`. Defaults to `'en'`.
 - This value flows as `knownLangCode` through `generateWithCritic()` → appended to `promptArgs` → received by each prompt builder as the `knownLang` parameter.
 - All 11 prompt builders in `llm_prompts.js` replace hardcoded `"English"` with the known language name for scenarios, explanations, translations, and feedback.
-- Grammar Gym cache entries store `explainLang` at `llm_roles.js:182`. On load, `loadCachedGrammarExercise` (line 193) fetches up to 5 recent entries and picks one matching `_getExplainLang()`, falling back to the latest if no match.
+- Grammar Gym cache entries store `explainLang` at `grammar_exercises/{vid}/{lang}/{explainLang}/{token}`. On load, `loadCachedGrammarExercise` (line 198) queries the matching explainLang path with `limitToLast(1)` — no client-side filtering needed.
 
 **Do NOT:**
 - Add a separate `explainLang` preference dropdown. It was intentionally removed — the preset source is the single source of truth.
 - Hardcode `"English"` back into prompts. Always pass `knownLang` through the pipeline.
-- Change `loadCachedGrammarExercise` to return `limitToLast(1)` — it needs 5 candidates for `explainLang` matching.
 
 **Affected files:**
 - `public/js/llm/llm_prompts.js` — all 11 `build*Prompt` functions accept `knownLang`

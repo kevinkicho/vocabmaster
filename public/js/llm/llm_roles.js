@@ -38,7 +38,7 @@ LLMService.prototype.findClozeMatch = async function(sentence, target, langCode,
         if (match) await this.setCache(sentence, target, langCode, match);
         return match;
     } catch (e) {
-        L('[LLM] Request failed for', this.endpoint, 'model', this.resolvedModel || this.model, ':', e.message || e, 'stack:', e.stack);
+        L('[LLM] Request failed for', this.endpoint, ':', e.message || e, 'stack:', e.stack);
         return null;
     }
 };
@@ -179,7 +179,7 @@ LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, dat
         usage: data.usage,
         example: data.example,
         exercises: validExercises,
-        model: this.resolvedModel || 'unknown',
+        model: (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'gemma4:31b-cloud',
         ts: firebase.database.ServerValue.TIMESTAMP
     };
     try {

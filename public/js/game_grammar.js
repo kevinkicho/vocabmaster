@@ -222,7 +222,7 @@ class Grammar extends GameMode {
         if (!this.list[this.i] || this.list[this.i].id !== card.id) return;
         if (!result || !result.exercises || result.exercises.length === 0) {
             if (this.dom.content) {
-                const modelName = (app.llm && app.llm.resolvedModel) || 'unknown';
+                const modelName = (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'unknown';
                 this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Could not generate grammar exercises.</p><p class="text-xs text-slate-400 mt-2">Model <strong>${escapeHtml(modelName)}</strong> returned an empty response. Try again or check AI settings.</p><button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button></div>`;
                 const anewBtnEl = document.getElementById('gr-anew-btn');
                 if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();

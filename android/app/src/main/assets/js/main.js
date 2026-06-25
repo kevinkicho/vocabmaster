@@ -161,7 +161,7 @@ class App {
             stub.isAdmin = false;
             stub.currentWordId = null;
         }
-        // llm: available/hasModel/model/resolvedModel/useCloud/endpoint/availableModels
+        // llm: available/hasModel/useCloud/endpoint — all stay undefined (falsy).
         // all stay undefined (falsy) — callers already guard with `if (app.llm && ...)`.
         // audio: synth/voices/useNative stay undefined — callers guard or no-op.
         return stub;

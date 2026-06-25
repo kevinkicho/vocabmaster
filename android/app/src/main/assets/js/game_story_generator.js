@@ -124,12 +124,12 @@ async startStory(forceAnew = false) {
         try {
             await this._generateStory(this.storyWords, wordList, langName, this._storyLevel, lang);
         } catch (e) {
-            const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud, available: app.llm.available, hasModel: app.llm.hasModel } : null;
+            const llmInfo = app.llm ? { endpoint: app.llm.endpoint, model: LLMService.MODEL, useCloud: app.llm.useCloud, available: app.llm.available, hasModel: app.llm.hasModel } : null;
             L('[Story] Generation failed:', e, 'llm:', llmInfo, 'wordList:', wordList, 'lang:', lang);
 
             if (this._elapsedTimer) clearInterval(this._elapsedTimer);
             this.phase = 'error';
-            const modelInfo = (app.llm && app.llm.resolvedModel) || 'unknown';
+            const modelInfo = (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'unknown';
             this.dom.body.innerHTML = `
                 <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
                     <i class="ph-duotone ph-warning-circle text-5xl text-rose-400"></i>
@@ -176,7 +176,7 @@ async _generateStory(storyWordsObjs, wordList, langName, storyLevel, lang) {
         if (!result || !result.story || !result.questions || result.questions.length === 0) {
             L('[Story] LLM failed to generate valid story+questions');
             this.phase = 'error';
-            var modelInfo = (app.llm && app.llm.resolvedModel) || 'unknown';
+            var modelInfo = (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'unknown';
             this.dom.body.innerHTML = `
                 <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
                     <i class="ph-duotone ph-warning-circle text-5xl text-rose-400"></i>

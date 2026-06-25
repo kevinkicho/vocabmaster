@@ -1,5 +1,9 @@
 /* js/llm/llm_service.js — Core LLMService class
  *
+ * Uses a single fixed model (gemma4:31b-cloud). No model detection,
+ * no fallback chain. If the model is unavailable, generate() throws
+ * with a clear error message.
+ *
  * === Transport layer ===
  *   _fetch() tries Capacitor HttpProxy first (Android WebView),
  *   falls back to native fetch() if proxy absent or throws.
@@ -14,12 +18,14 @@
  *
  * === Connection health ===
  *   _ping() runs on visibilitychange (app resume). 3s timeout /api/tags.
- *   On failure: clears available flag, schedules autoDetect() in 5s.
+ *   On failure: clears available flag, schedules checkConnection() in 5s.
  *   On success: restores available=true.
  *
  * See docs/architecture.md §1 for full pipeline description.
  */
 class LLMService {
+    static MODEL = 'gemma4:31b-cloud';
+
     constructor() {
         var isBrowser = !window.Capacitor && !window.NativeTTS;
         if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
@@ -35,11 +41,8 @@ class LLMService {
             this.useCloud = false; // APK / non-browser always uses local Ollama
             this.apiKey = window.OLLAMA_API_KEY || null;
         }
-        this.model = '';
         this.available = false;
-        this.availableModels = [];
         this.hasModel = false;
-        this.resolvedModel = null;
         this.cache = new Map();
         this.db = null;
         this._activeRequests = 0;
@@ -47,7 +50,7 @@ class LLMService {
         this._queue = [];
         this._initDB();
         if (typeof this.initValidator === 'function') this.initValidator();
-        L('[LLM] Endpoint configured:', this.endpoint);
+        L('[LLM] Endpoint:', this.endpoint, '| Model:', LLMService.MODEL);
 
         // Re-check connection when app returns to foreground
         document.addEventListener('visibilitychange', () => {
@@ -59,10 +62,9 @@ class LLMService {
         try {
             await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 3000 });
             L('[LLM] Resume ping OK');
-            // If connection was previously lost, re-run autoDetect to pick up the model
-            if (!this.available || !this.hasModel) {
-                L('[LLM] Ping recovered — re-running autoDetect');
-                this.autoDetect().catch(function(e) { L('[LLM] autoDetect after ping failed:', e); });
+            if (!this.available) {
+                L('[LLM] Ping recovered — re-running checkConnection');
+                this.checkConnection().catch(function(e) { L('[LLM] checkConnection after ping failed:', e); });
                 return true;
             }
             this.available = true;
@@ -73,7 +75,7 @@ class LLMService {
             this.available = false;
             if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
             setTimeout(() => {
-                if (!this.available) this.autoDetect().catch(() => {});
+                if (!this.available) this.checkConnection().catch(() => {});
             }, 5000);
             return false;
         }
@@ -200,61 +202,39 @@ class LLMService {
             this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
             this.endpoint = this.proxyUrl;
             this.useCloud = true;
-            this.apiKey = null; // key lives server-side in Firebase config
+            this.apiKey = null;
         } else {
             this.useProxy = false;
             this.proxyUrl = '';
             this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
-            this.useCloud = false; // APK / non-browser always uses local Ollama
+            this.useCloud = false;
             this.apiKey = window.OLLAMA_API_KEY || null;
         }
-        var p = (typeof app !== 'undefined' && app && app.store && app.store.prefs) ? app.store.prefs : {};
-        this.model = p.llmModel || '';
     }
 
     async autoDetect() {
-        L('[LLM] autoDetect endpoint:', this.endpoint);
-
+        L('[LLM] checkConnection endpoint:', this.endpoint);
         var ok = await this.checkConnection();
-        L('[LLM] checkConnection result:', ok);
-
         if (ok) {
-            // Prefer user's configured model (from Settings > AI > Model dropdown)
-            if (this.model && this.availableModels.indexOf(this.model) !== -1) {
-                this.resolvedModel = this.model;
-                L('[LLM] Using user-configured model:', this.resolvedModel);
-            } else if (this.useCloud) {
-                this.resolvedModel = 'gemma4:31b-cloud';
-            } else if (this.availableModels && this.availableModels.length > 0) {
-                // Pick first non-cloud local model (filter out any *-cloud names)
-                var localModels = this.availableModels.filter(function(m) { return m.indexOf('-cloud') === -1; });
-                this.resolvedModel = localModels[0] || this.availableModels[0];
-                L('[LLM] Local model selected:', this.resolvedModel);
-            } else {
-                this.resolvedModel = 'gemma4:31b-cloud';
-            }
-            this.hasModel = true;
-            L('[LLM] Ready with model:', this.resolvedModel);
-            if (app && app.ui) app.ui.renderAISettings();
-            // F9: persistent home-screen indicator replaces the surprise toast.
-            if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
-            // F9: home screen renders after autoDetect completes in init(), so
-            // the redundant app.goHome(false) here is no longer needed.
+            L('[LLM] Ready — model:', LLMService.MODEL);
         } else {
-            L('[LLM] No models available');
+            L('[LLM] Connection failed');
         }
+        if (app && app.ui) app.ui.renderAISettings();
+        if (app && app.ui && app.ui._updateAIStatus) app.ui._updateAIStatus();
     }
 
     async checkConnection() {
         try {
-            var data = await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 10000 });
+            await this._ollamaRequest('/api/tags', null, { stream: false, timeout: 10000 });
             this.available = true;
-            this.availableModels = (data.models || []).map(m => m.name || m.model || m);
-            L('[LLM] Connected —', this.availableModels.length, 'models');
+            this.hasModel = true;
+            L('[LLM] Connected —', this.endpoint);
             return true;
         } catch (e) {
-            L('[LLM] Connection failed for endpoint', this.endpoint, 'useCloud', this.useCloud, ':', e.message || e, 'stack:', e.stack);
+            L('[LLM] Connection failed for', this.endpoint, ':', e.message || e);
             this.available = false;
+            this.hasModel = false;
             return false;
         }
     }
@@ -300,17 +280,19 @@ class LLMService {
     }
 
     async generate(opts) {
-        const model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
+        if (!this.available) {
+            throw new Error('AI is offline — check your Ollama server or cloud proxy connection');
+        }
 
         const body = {
-            model: model,
+            model: LLMService.MODEL,
             prompt: opts.prompt,
             stream: false
         };
         if (opts.system) body.system = opts.system;
         if (opts.options) body.options = opts.options;
 
-        L('[LLM] generate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
+        L('[LLM] generate →', this.endpoint, 'model=' + LLMService.MODEL);
 
         return this._enqueue(async () => {
             try {
@@ -335,17 +317,19 @@ class LLMService {
             return;
         }
 
-        const model = this.resolvedModel || this.model || 'gemma4:31b-cloud';
+        if (!this.available) {
+            throw new Error('AI is offline — check your Ollama server or cloud proxy connection');
+        }
 
         const body = {
-            model: model,
+            model: LLMService.MODEL,
             prompt: opts.prompt,
             stream: true
         };
         if (opts.system) body.system = opts.system;
         if (opts.options) body.options = opts.options;
 
-        L('[LLM] streamGenerate sending to', this.endpoint, 'model=', body.model, 'resolvedModel=', this.resolvedModel);
+        L('[LLM] streamGenerate →', this.endpoint, 'model=' + LLMService.MODEL);
 
         return this._enqueue(async () => {
             let resp;
@@ -384,7 +368,7 @@ class LLMService {
                     try {
                         const obj = JSON.parse(line);
                         if (obj.error) {
-                            L('[LLM] stream error from backend for model', this.resolvedModel || model, ':', obj.error);
+                            L('[LLM] stream error from backend:', obj.error);
                             if (fullText.length < 10) throw new Error(obj.error);
                         }
                         if (obj.response) {

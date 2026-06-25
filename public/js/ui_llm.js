@@ -206,38 +206,23 @@ Object.assign(UIManager.prototype, {
     },
 
     async renderAISettings() {
-        // Populate model dropdown from available models
+        // Hide model dropdown — model is fixed (LLMService.MODEL)
         const modelSelect = document.getElementById('llm-model');
         const modelContainer = modelSelect ? modelSelect.parentElement : null;
-        if (modelSelect && app.llm && app.llm.availableModels && app.llm.availableModels.length > 0) {
-            const current = app.llm.resolvedModel || app.store.prefs.llmModel || '';
-            const models = [...new Set(app.llm.availableModels)].sort();
-            modelSelect.innerHTML = models.map(m =>
-                `<option value="${escapeHtml(m)}" ${m === current ? 'selected' : ''}>${escapeHtml(m)}</option>`
-            ).join('');
-            modelSelect.onchange = () => {
-                app.store.prefs.llmModel = modelSelect.value;
-                app.llm.resolvedModel = modelSelect.value;
-                app.store.saveSettings();
-            };
-            if (modelContainer) modelContainer.style.display = '';
-        }
+        if (modelContainer) modelContainer.style.display = 'none';
 
         // Update status dot
         const dot = document.getElementById('llm-status-dot');
         const text = document.getElementById('llm-status-text');
         if (dot && text && app.llm) {
-            if (app.llm.hasModel) {
+            if (app.llm.available) {
                 dot.style.background = '#10b981';
-                text.textContent = `Ready — ${app.llm.resolvedModel || 'model loaded'}`;
-            } else if (app.llm.available) {
-                dot.style.background = '#f59e0b';
-                text.textContent = 'Connected — no model selected';
+                text.textContent = 'Ready — ' + (typeof LLMService !== 'undefined' ? LLMService.MODEL : 'gemma4:31b-cloud');
             } else {
                 dot.style.background = '#94a3b8';
                 const ep = (app.llm && app.llm.endpoint) || '';
                 const isLocal = ep.includes('127.0.0.1') || ep.includes('localhost') || ep.startsWith('http://');
-                text.textContent = isLocal ? 'Local Ollama — checking 11434...' : 'Cloud API — checking...';
+                text.textContent = isLocal ? 'Local Ollama — not reachable' : 'Cloud proxy — not reachable';
             }
         }
 

@@ -85,7 +85,6 @@ const PREFERENCE_SCHEMA = [
 
   // ===== LLM / AI =====
   { key: 'llmEndpoint',       type: 'text',   default: 'http://localhost:11434',domId: 'llm-endpoint',          section: 'llm', label: 'Endpoint' },
-  { key: 'llmModel',          type: 'select', default: 'gemma4:31b-cloud',domId: 'llm-model',                   section: 'llm', label: 'Model' },
   { key: 'storyAutoRead',     type: 'bool',   default: true,    domId: 'story-auto-read',                section: 'llm', label: 'Auto-read Story' },
 
   // ===== CHAT (no DOM binding — set via in-game UI) =====

@@ -690,6 +690,7 @@ class Chat extends GameMode {
         } catch(e) {
             if (e.name === 'AbortError') {
                 L('[Chat] Opening aborted');
+                this._setBusyUI(false);
                 return;
             }
             this._setBusyUI(false);

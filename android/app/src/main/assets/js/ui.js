@@ -151,7 +151,7 @@ class UIManager {
             setChk('sentences-auto', p.sentencesAuto); setChk('sentences-random', p.sentencesRandom);
             setVal('sentences-audio-src', p.sentencesAudioSrc); setChk('sentences-play-correct', p.sentencesPlayCorrect); setChk('sentences-read-whole', p.sentencesReadWhole);
             // LLM
-            setVal('llm-endpoint', p.llmEndpoint || 'http://localhost:11434'); setVal('llm-model', p.llmModel || 'gemma3:1b'); setChk('story-auto-read', p.storyAutoRead !== false);
+            setVal('llm-endpoint', p.llmEndpoint || 'http://localhost:11434'); setChk('story-auto-read', p.storyAutoRead !== false);
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
@@ -935,8 +935,8 @@ class UIManager {
             } else {
                 mode = llm.endpoint ? 'remote' : 'local';
             }
-            var modelName = llm.resolvedModel || '';
-            label.textContent = 'AI Online (' + mode + ')' + (modelName ? ' \u00b7 ' + modelName : '');
+            var modelName = (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'gemma4:31b-cloud';
+            label.textContent = 'AI Online (' + mode + ') \u00b7 ' + modelName;
             label.className = 'text-[9px] font-bold text-emerald-500 uppercase';
         } else if (llm && !llm._isStub && llm.available) {
             dot.className = 'w-2 h-2 rounded-full bg-amber-400';

@@ -102,7 +102,7 @@ async _prefetchNext() {
                 L('[Story] Prefetch failed to generate story.');
             }
         } catch (e) {
-            const llmInfo = app.llm ? { endpoint: app.llm.endpoint, resolvedModel: app.llm.resolvedModel, useCloud: app.llm.useCloud } : null;
+            const llmInfo = app.llm ? { endpoint: app.llm.endpoint, model: LLMService.MODEL, useCloud: app.llm.useCloud } : null;
             L('[Story] Prefetch failed:', e, 'llm:', llmInfo);
         } finally {
             this._prefetching = false;

@@ -87,11 +87,10 @@ class Store {
             });
         }
 
-        // LLM model re-sync
+        // LLM connection re-sync
         if (window.app && window.app.llm) {
             app.llm.loadPrefs();
             app.llm.checkConnection().then(ok => {
-                if (ok) app.llm.hasModel = app.llm.availableModels.some(m => m.startsWith(app.llm.model.split(':')[0]));
                 if (app.ui) app.ui.updateLLMStatus(ok && app.llm.hasModel);
             });
         }

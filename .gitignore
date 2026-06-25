@@ -148,3 +148,4 @@ scripts/
 credentials.json
 data/backup
 android/app/src/main/assets/js/ollama_config.js
+screenshots/

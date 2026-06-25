@@ -121,7 +121,7 @@ class Context extends GameMode {
         this.sentences = [];
         this.answered = false;
         this.busy = false;
-        this.updateHeader();
+        this.setupHeader();
 
         var c = this.list[this.i];
         var p = app.store.prefs;

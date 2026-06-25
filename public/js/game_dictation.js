@@ -52,7 +52,6 @@ class Dictation extends GameMode {
         this.dom.result = this.root.querySelector('#dict-result');
 
         this.root.querySelector('#dict-nav').innerHTML = app.ui.nav();
-        this.setupHeader();
 
         var self = this;
         this.dom.playBtn.onclick = function() { self.playSentence(); };
@@ -74,7 +73,7 @@ class Dictation extends GameMode {
         this.answered = false;
         this.busy = false;
         this._clearResult();
-        this.updateHeader();
+        this.setupHeader();
 
         var c = this.list[this.i];
         var p = app.store.prefs;

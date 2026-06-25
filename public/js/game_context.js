@@ -1,15 +1,15 @@
 /* js/game_context.js — Vocabulary in Context
  *
  * AI generates 3 example sentences using a vocab word at increasing
- * difficulty levels. User reads through them, hears TTS, sees translations.
- * Requires AI for sentence generation.
+ * difficulty. User listens to TTS, reads translations, then taps "Got it"
+ * to score points and move to the next word. Sparkle regenerates.
  */
 class Context extends GameMode {
     constructor(k) {
         super(k);
         this.sentences = [];
         this.currentLevel = 0;
-        this.loading = false;
+        this._gotWord = false;
         this.setup();
         this.update();
     }
@@ -29,7 +29,7 @@ class Context extends GameMode {
                             <span class="text-sm text-slate-400">Generating examples...</span>
                         </div>
                     </div>
-                    <div id="ctx-progress" class="w-full max-w-md flex gap-2 mb-4 shrink-0">
+                    <div id="ctx-progress" class="w-full max-w-md flex gap-2 mb-4 shrink-0 hidden">
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
@@ -51,11 +51,11 @@ class Context extends GameMode {
                         <button id="ctx-next-btn" class="w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all hidden">
                             Next Level →
                         </button>
-                        <p id="ctx-done" class="text-center text-xs text-slate-400 mt-3 hidden">All 3 levels complete! Move to next word.</p>
+                        <p id="ctx-done" class="text-center text-xs text-slate-400 mt-3 hidden"></p>
                     </div>
                     <div id="ctx-no-ai" class="w-full max-w-md hidden">
                         <div class="text-center py-8">
-                            <p class="text-rose-500 font-bold text-sm">Vocabulary in Context requires AI.</p>
+                            <p class="text-rose-500 font-bold text-sm">Word Context requires AI.</p>
                             <p class="text-xs text-slate-400 mt-1">Connect AI in Settings to generate examples.</p>
                         </div>
                     </div>
@@ -85,7 +85,7 @@ class Context extends GameMode {
 
         var self = this;
         if (this.dom.playBtn) this.dom.playBtn.onclick = function() { self.playSentence(); };
-        if (this.dom.nextBtn) this.dom.nextBtn.onclick = function() { self.showNextLevel(); };
+        if (this.dom.nextBtn) this.dom.nextBtn.onclick = function() { self._onNext(); };
     }
 
     setupHeader() {
@@ -100,25 +100,22 @@ class Context extends GameMode {
     _generateAnew() {
         this.currentLevel = 0;
         this.sentences = [];
+        this._gotWord = false;
         this._hideAll();
+        this._showLoading();
+        this._fetchSentences();
+    }
+
+    _showLoading() {
         if (this.dom.loading) this.dom.loading.classList.remove('hidden');
-        var c = this.list[this.i];
-        var p = app.store.prefs;
-        var qKey = p.sentencesQ || p.presetTarget || 'ja';
-        var aKey = p.sentencesA || p.presetSource || 'en';
-        var exKey = '';
-        if (typeof LANG_MAP !== 'undefined') {
-            var conf = LANG_MAP.get(qKey);
-            if (conf && conf.exKey) exKey = conf.exKey;
-        }
-        var word = c[qKey] || '';
-        var existingExample = c[exKey] || '';
-        this._generateSentences(word, qKey, aKey, existingExample);
+        if (this.dom.progress) this.dom.progress.classList.add('hidden');
+        if (this.dom.sentenceCard) this.dom.sentenceCard.classList.add('hidden');
     }
 
     update() {
         this.currentLevel = 0;
         this.sentences = [];
+        this._gotWord = false;
         this.answered = false;
         this.busy = false;
         this.setupHeader();
@@ -129,14 +126,13 @@ class Context extends GameMode {
         var aKey = p.sentencesA || p.presetSource || 'en';
 
         var exKey = '';
-        if (typeof LANG_CONFIG !== 'undefined') {
+        if (typeof LANG_MAP !== 'undefined') {
             var conf = LANG_MAP.get(qKey);
             if (conf && conf.exKey) exKey = conf.exKey;
         }
 
         var word = c[qKey] || '';
         var meaning = c[aKey] || '';
-        var existingExample = c[exKey] || '';
 
         if (this.dom.word) this.dom.word.textContent = word;
         if (this.dom.meaning) this.dom.meaning.textContent = meaning;
@@ -148,17 +144,34 @@ class Context extends GameMode {
         if (!llmReady) {
             if (this.dom.noAi) this.dom.noAi.classList.remove('hidden');
             if (this.dom.wordCard) this.dom.wordCard.classList.add('hidden');
+            this.afterRender();
             return;
         }
 
-        if (this.dom.loading) this.dom.loading.classList.remove('hidden');
-        this._generateSentences(word, qKey, aKey, existingExample);
+        this._showLoading();
+        this._fetchSentences();
+        this.afterRender();
     }
 
-    async _generateSentences(word, qKey, aKey, existingExample) {
-        var langName = app.llm._getLangName(qKey);
-        var knownLang = app.llm._getLangName(app.store.prefs.presetSource || 'en');
+    _getContextKeys() {
+        var p = app.store.prefs;
+        var qKey = p.sentencesQ || p.presetTarget || 'ja';
+        var aKey = p.sentencesA || p.presetSource || 'en';
+        var exKey = '';
+        if (typeof LANG_MAP !== 'undefined') {
+            var conf = LANG_MAP.get(qKey);
+            if (conf && conf.exKey) exKey = conf.exKey;
+        }
+        return { qKey: qKey, aKey: aKey, exKey: exKey };
+    }
+
+    async _fetchSentences() {
+        var keys = this._getContextKeys();
         var c = this.list[this.i];
+        var word = c[keys.qKey] || '';
+        var existingExample = c[keys.exKey] || '';
+
+        var langName = app.llm._getLangName(keys.qKey);
         var level = '';
         if (c && c.tags) {
             var tags = c.tags || [];
@@ -185,27 +198,32 @@ class Context extends GameMode {
             var cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
             var data = JSON.parse(cleaned);
 
-            if (data && data.sentences && data.sentences.length === 3) {
+            if (data && data.sentences && data.sentences.length >= 1) {
                 this.sentences = data.sentences;
             } else {
-                throw new Error('Invalid sentence structure');
+                throw new Error('Invalid structure');
             }
         } catch (e) {
             L('[Context] Generation failed:', e.message);
             this.sentences = [];
             if (existingExample) {
-                this.sentences = [
-                    { level: 'beginner', sentence: existingExample, translation: '' }
-                ];
+                this.sentences = [{ level: 'beginner', sentence: existingExample, translation: '' }];
             }
         }
 
         if (this.dom.loading) this.dom.loading.classList.add('hidden');
         if (this.sentences.length > 0) {
+            if (this.dom.progress) this.dom.progress.classList.remove('hidden');
+            if (this.dom.sentenceCard) this.dom.sentenceCard.classList.remove('hidden');
             this.showNextLevel();
         } else {
             if (this.dom.sentenceCard) this.dom.sentenceCard.classList.remove('hidden');
-            if (this.dom.sentence) this.dom.sentence.textContent = 'Could not generate examples for this word.';
+            if (this.dom.sentence) this.dom.sentence.textContent = 'Could not generate examples.';
+            if (this.dom.nextBtn) {
+                this.dom.nextBtn.textContent = 'Skip →';
+                this.dom.nextBtn.classList.remove('hidden');
+                this.dom.nextBtn.classList.add('bg-slate-500');
+            }
         }
     }
 
@@ -214,7 +232,7 @@ class Context extends GameMode {
 
         var s = this.sentences[this.currentLevel];
 
-        var dots = this.dom.progress.querySelectorAll('.ctx-dot');
+        var dots = this.dom.progress ? this.dom.progress.querySelectorAll('.ctx-dot') : [];
         for (var i = 0; i < dots.length; i++) {
             if (i < this.currentLevel) {
                 dots[i].className = 'ctx-dot flex-1 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 transition-colors';
@@ -226,7 +244,7 @@ class Context extends GameMode {
         }
 
         var levelLabels = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
-        if (this.dom.levelBadge) this.dom.levelBadge.textContent = (this.currentLevel + 1) + '/3';
+        if (this.dom.levelBadge) this.dom.levelBadge.textContent = (this.currentLevel + 1) + '/' + this.sentences.length;
         if (this.dom.levelLabel) this.dom.levelLabel.textContent = levelLabels[s.level] || s.level || '';
         if (this.dom.sentence) this.dom.sentence.textContent = s.sentence;
 
@@ -242,8 +260,9 @@ class Context extends GameMode {
 
         var isLast = this.currentLevel >= this.sentences.length - 1;
         if (this.dom.nextBtn) {
+            this.dom.nextBtn.classList.remove('hidden', 'bg-slate-500');
             if (isLast) {
-                this.dom.nextBtn.textContent = '✓ Complete';
+                this.dom.nextBtn.textContent = '✓ Got it';
                 this.dom.nextBtn.classList.remove('bg-indigo-500');
                 this.dom.nextBtn.classList.add('bg-emerald-500');
             } else {
@@ -251,13 +270,29 @@ class Context extends GameMode {
                 this.dom.nextBtn.classList.add('bg-indigo-500');
                 this.dom.nextBtn.classList.remove('bg-emerald-500');
             }
-            this.dom.nextBtn.classList.remove('hidden');
         }
 
         this.currentLevel++;
 
         var self = this;
         setTimeout(function() { self.playSentence(); }, 300);
+    }
+
+    _onNext() {
+        if (this.currentLevel >= this.sentences.length) {
+            if (!this._gotWord) {
+                this._gotWord = true;
+                this.score(10);
+                app.celebration.play();
+                if (this.dom.done) {
+                    this.dom.done.textContent = '✓ Nice! Use < > for next word.';
+                    this.dom.done.classList.remove('hidden');
+                }
+                if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
+            }
+            return;
+        }
+        this.showNextLevel();
     }
 
     playSentence() {
@@ -275,6 +310,7 @@ class Context extends GameMode {
         if (this.dom.loading) this.dom.loading.classList.add('hidden');
         if (this.dom.sentenceCard) this.dom.sentenceCard.classList.add('hidden');
         if (this.dom.noAi) this.dom.noAi.classList.add('hidden');
+        if (this.dom.progress) this.dom.progress.classList.add('hidden');
     }
 
     afterRender() {

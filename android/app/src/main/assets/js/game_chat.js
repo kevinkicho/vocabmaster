@@ -262,19 +262,20 @@ class Chat extends GameMode {
 
         var tagInfo = tagFilter.includes('all') ? 'all levels' : tagFilter.join(', ');
 
-        var system = 'You are a ' + lang + ' language tutor. You speak only ' + lang + '.\n'
-            + 'You understand English and other languages, but always respond in ' + lang + '.\n\n'
-            + 'The user may sometimes write in English or mix languages when they don\'t know a word.\n'
-            + 'When this happens, respond in ' + lang + ' and include the ' + lang + ' word they were looking for.\n\n'
+        var langName = app.llm._getLangName(lang);
+        var system = 'CRITICAL: You are a ' + langName + ' conversation partner. EVERY response you write MUST be in ' + langName + '. Never use English or any other language in your replies.\n'
+            + 'The user is learning ' + langName + '. Even if they write in English or their mother tongue, you MUST reply entirely in ' + langName + '.\n'
+            + 'If the user writes in English, respond in ' + langName + ' and include the ' + langName + ' translation of what they were trying to say.\n\n'
             + 'Scenario: ' + scenarioDesc + '\n'
             + 'Learner level: ' + level + '\n'
             + 'Vocabulary range: ' + tagInfo + '\n'
             + (memoriesSection ? memoriesSection + '\n' : '')
-            + '\nGuidelines:\n'
-            + '- Respond in ' + lang + ' only, 2-3 sentences\n'
+            + '\nRules:\n'
+            + '- ALL responses MUST be in ' + langName + ' — never switch to English\n'
+            + '- Keep replies to 2-3 sentences\n'
             + '- Use ' + level + '-appropriate vocabulary\n'
-            + '- Gently correct mistakes\n'
-            + '- End with a follow-up question\n'
+            + '- Gently correct mistakes in ' + langName + '\n'
+            + '- End with a follow-up question in ' + langName + '\n'
             + '\nAt the end of your response, you may optionally append [MEMORY: ...] with a JSON object to save a compact summary. Example:\n'
             + '[MEMORY: {"summary": "Practiced restaurant vocabulary, struggled with ordering", "topics": ["food", "ordering"], "level": "B1"}]\n'
             + 'Never include full transcripts. Only save meaningful summaries.';
@@ -288,13 +289,13 @@ class Chat extends GameMode {
 
     _buildOpeningPrompt() {
         var lang = this._getTargetLang();
+        var langName = app.llm._getLangName(lang);
         var scenario = app.store.prefs.chatScenario || 'daily';
         return {
-            system: 'You are a ' + lang + ' language tutor. You speak only ' + lang + '.\n'
-                + 'You understand English but always respond in ' + lang + '.\n'
-                + 'Greet the user in ' + lang + ' and ask an opening question about ' + scenario + '.\n'
-                + '1-2 sentences.',
-            prompt: '[' + lang + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
+            system: 'You are a ' + langName + ' conversation partner. You MUST write everything in ' + langName + '.\n'
+                + 'NEVER use English. Greet the user in ' + langName + ' and ask an opening question about ' + scenario + '.\n'
+                + '1-2 sentences, all in ' + langName + '.',
+            prompt: '[' + langName + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
         };
     }
 

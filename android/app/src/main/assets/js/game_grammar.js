@@ -162,7 +162,7 @@ class Grammar extends GameMode {
             var el = document.getElementById('gr-elapsed');
             if (el) el.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
         }, 1000);
-        const anewBtn = allowAnew ? `<button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button>` : '';
+        const anewBtn = allowAnew ? `<button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate New</button>` : '';
         this.dom.content.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-1"><p id="gr-gen-text" class="text-slate-400 text-sm"><i class="ph-bold ph-spinner animate-spin mr-2"></i>Generating grammar exercises...</p><p id="gr-elapsed" class="text-[10px] text-slate-300 dark:text-neutral-600"></p>${anewBtn}</div>`;
         const anewBtnEl = document.getElementById('gr-anew-btn');
         if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();
@@ -223,7 +223,7 @@ class Grammar extends GameMode {
         if (!result || !result.exercises || result.exercises.length === 0) {
             if (this.dom.content) {
                 const modelName = (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'unknown';
-                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Could not generate grammar exercises.</p><p class="text-xs text-slate-400 mt-2">Model <strong>${escapeHtml(modelName)}</strong> returned an empty response. Try again or check AI settings.</p><button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate Anew</button></div>`;
+                this.dom.content.innerHTML = `<div class="text-center p-6"><p class="text-rose-500 font-bold text-sm">Could not generate grammar exercises.</p><p class="text-xs text-slate-400 mt-2">Model <strong>${escapeHtml(modelName)}</strong> returned an empty response. Try again or check AI settings.</p><button id="gr-anew-btn" class="mt-3 px-4 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Generate New</button></div>`;
                 const anewBtnEl = document.getElementById('gr-anew-btn');
                 if (anewBtnEl) anewBtnEl.onclick = () => this._generateAnew();
             }
@@ -384,7 +384,7 @@ class Grammar extends GameMode {
                         <div class="h-full rounded-full transition-all duration-500 ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-rose-500'}" style="width:${pct}%"></div>
                     </div>
                     <button id="gr-retry-btn" class="mt-6 w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all"><i class="ph-bold ph-arrow-counter-clockwise mr-1"></i>Try Again</button>
-                    <button id="gr-anew-btn" class="mt-3 w-full py-3 rounded-2xl font-bold text-sm bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-sparkle mr-1"></i>Generate Anew</button>
+                    <button id="gr-anew-btn" class="mt-3 w-full py-3 rounded-2xl font-bold text-sm bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all"><i class="ph-bold ph-sparkle mr-1"></i>Generate New</button>
                 </div>`;
             const retryBtn = document.getElementById('gr-retry-btn');
             if (retryBtn) retryBtn.onclick = () => { this.currentExercise = 0; this.exerciseResults = []; this.answered = false; this._showExercise(); };

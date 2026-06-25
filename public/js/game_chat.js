@@ -263,16 +263,16 @@ class Chat extends GameMode {
         var tagInfo = tagFilter.includes('all') ? 'all levels' : tagFilter.join(', ');
 
         var langName = app.llm._getLangName(lang);
-        var system = 'CRITICAL: You are a ' + langName + ' conversation partner. EVERY response you write MUST be in ' + langName + '. Never use English or any other language in your replies.\n'
-            + 'The user is learning ' + langName + '. Even if they write in English or their mother tongue, you MUST reply entirely in ' + langName + '.\n'
-            + 'If the user writes in English, respond in ' + langName + ' and include the ' + langName + ' translation of what they were trying to say.\n\n'
+        var system = 'You are a ' + langName + ' conversation partner.\n'
+            + 'RULE: Every response you write MUST be entirely in ' + langName + '.\n'
+            + 'No matter what language the user writes in, you reply only in ' + langName + '.\n'
+            + 'If the user writes in a language other than ' + langName + ', respond in ' + langName + ' and naturally include the ' + langName + ' words they were looking for.\n\n'
             + 'Scenario: ' + scenarioDesc + '\n'
             + 'Learner level: ' + level + '\n'
             + 'Vocabulary range: ' + tagInfo + '\n'
             + (memoriesSection ? memoriesSection + '\n' : '')
-            + '\nRules:\n'
-            + '- ALL responses MUST be in ' + langName + ' — never switch to English\n'
-            + '- Keep replies to 2-3 sentences\n'
+            + '\nGuidelines:\n'
+            + '- Reply in ' + langName + ' only, 2-3 sentences\n'
             + '- Use ' + level + '-appropriate vocabulary\n'
             + '- Gently correct mistakes in ' + langName + '\n'
             + '- End with a follow-up question in ' + langName + '\n'
@@ -292,8 +292,8 @@ class Chat extends GameMode {
         var langName = app.llm._getLangName(lang);
         var scenario = app.store.prefs.chatScenario || 'daily';
         return {
-            system: 'You are a ' + langName + ' conversation partner. You MUST write everything in ' + langName + '.\n'
-                + 'NEVER use English. Greet the user in ' + langName + ' and ask an opening question about ' + scenario + '.\n'
+            system: 'You are a ' + langName + ' conversation partner. Write everything in ' + langName + ' only.\n'
+                + 'Greet the user in ' + langName + ' and ask an opening question about ' + scenario + '.\n'
                 + '1-2 sentences, all in ' + langName + '.',
             prompt: '[' + langName + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
         };
@@ -407,6 +407,7 @@ class Chat extends GameMode {
             + '</div>'
             + '<div class="flex items-center gap-2">'
             + '<i class="ph-bold ph-info text-slate-400 cursor-pointer text-lg relative" id="chat-info-icon"></i>'
+            + '<button id="chat-clear-btn" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300" title="Long-press to clear chat"><i class="ph-bold ph-trash text-lg"></i></button>'
             + '<button onclick="app.goBack()" class="w-8 h-8 bg-slate-200 dark:bg-neutral-800 hover:bg-slate-300 rounded-full flex items-center justify-center active:scale-90 transition-all text-slate-600 dark:text-neutral-300"><i class="ph-bold ph-x text-lg"></i></button>'
             + '</div>'
             + '</div>'
@@ -443,6 +444,7 @@ class Chat extends GameMode {
 
         this._setupTooltip();
         this._setupLevelPicker();
+        this._setupClearButton();
         this._attachBubbleListeners();
         this._scrollToBottom();
         this.afterRender();
@@ -537,6 +539,45 @@ class Chat extends GameMode {
         localStorage.setItem(app.store.STORAGE_KEY, JSON.stringify(app.store.prefs));
         var badge = document.getElementById('chat-level-badge');
         if (badge) badge.textContent = level;
+    }
+
+    _setupClearButton() {
+        var btn = document.getElementById('chat-clear-btn');
+        if (!btn) return;
+        var self = this;
+        var timer = null;
+        var triggered = false;
+
+        function doClear() {
+            triggered = true;
+            self.messages = [];
+            self.memories = [];
+            self._transcript = null;
+            self._transcriptLoadIndex = 0;
+            self._updateMessages();
+            self._generateOpening();
+            try {
+                var uid = auth && auth.currentUser && auth.currentUser.uid;
+                if (uid && db) {
+                    db.ref('users/' + uid + '/chat_transcripts/' + self._getTargetLang()).remove();
+                    db.ref('users/' + uid + '/chat_memory').remove();
+                }
+            } catch(e) {}
+            try { localStorage.removeItem('chat_transcript_' + self._getTargetLang()); } catch(e) {}
+            if (app.ui) app.ui.showToast('Chat cleared', 'info');
+        }
+
+        btn.addEventListener('mousedown', function() {
+            timer = setTimeout(doClear, 600);
+        });
+        btn.addEventListener('mouseup', function() { clearTimeout(timer); });
+        btn.addEventListener('mouseleave', function() { clearTimeout(timer); });
+        btn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            timer = setTimeout(doClear, 600);
+        });
+        btn.addEventListener('touchend', function() { clearTimeout(timer); });
+        btn.addEventListener('touchcancel', function() { clearTimeout(timer); });
     }
 
     _attachBubbleListeners() {

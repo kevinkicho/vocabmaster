@@ -495,8 +495,9 @@ class App {
                     </div>
 
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
-                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
                         ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
+                        ${this.btn('Dictation', 'ph-headphones', 'rose', ()=>new Dictation('dictation'))}
                     </div>
 
                     <!-- AI section: 2x2 grid with Chat Practice, Story Mode, Grammar Gym.
@@ -514,6 +515,7 @@ class App {
                         ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
                         ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
                         ${this.btn('Chat Practice', 'ph-chat-circle-text', 'cyan', ()=>new Chat('chat'))}
+                        ${this.btn('Word Context', 'ph-flowers', 'emerald', ()=>new Context('context'))}
                     </div>
 
                     <!-- Medium-term: Smart Review (Phase 2) -->
@@ -542,6 +544,8 @@ class App {
         else if (mode === 'match') this.game = new Match('match');
         else if (mode === 'voice') this.game = new Voice('voice');
         else if (mode === 'sentences') this.game = new Sentences('sentences');
+        else if (mode === 'dictation') this.game = new Dictation('dictation');
+        else if (mode === 'context') this.game = new Context('context');
         else if (mode === 'story') this.game = new Story('story');
         else if (mode === 'grammar') this.game = new Grammar('grammar');
         else if (mode === 'chat') this.game = new Chat('chat');

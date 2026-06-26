@@ -1,15 +1,17 @@
-/* js/game_context.js — Vocabulary in Context
+/* js/game_context.js — Vocabulary in Context (gamified)
  *
- * AI generates 3 example sentences using a vocab word at increasing
- * difficulty. User listens to TTS, reads translations, then taps "Got it"
- * to score points and move to the next word. Sparkle regenerates.
+ * AI generates 3 sentences using a vocab word at increasing difficulty.
+ * Each sentence is shown as a cloze (word blanked out) with 4 options.
+ * User picks the correct word to fill in. Scores points per level.
+ * Progress dots track completion. Sparkle regenerates sentences.
  */
 class Context extends GameMode {
     constructor(k) {
         super(k);
         this.sentences = [];
         this.currentLevel = 0;
-        this._gotWord = false;
+        this.answered = false;
+        this._completedLevels = 0;
         this.setup();
         this.update();
     }
@@ -19,9 +21,9 @@ class Context extends GameMode {
             <div class="flex flex-col h-full w-full overflow-hidden">
                 <div id="ctx-header" class="shrink-0"></div>
                 <div class="flex-1 flex flex-col items-center px-4 min-h-0 overflow-y-auto">
-                    <div id="ctx-word-card" class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-6 text-center mb-4 shrink-0">
-                        <p id="ctx-word" class="text-2xl font-black text-slate-800 dark:text-white mb-1"></p>
-                        <p id="ctx-meaning" class="text-sm text-slate-400 dark:text-neutral-500"></p>
+                    <div id="ctx-word-card" class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-5 text-center mb-3 shrink-0">
+                        <p id="ctx-word" class="text-xl font-black text-slate-800 dark:text-white mb-0.5"></p>
+                        <p id="ctx-meaning" class="text-xs text-slate-400 dark:text-neutral-500"></p>
                     </div>
                     <div id="ctx-loading" class="w-full max-w-md hidden">
                         <div class="flex items-center justify-center gap-2 py-8">
@@ -29,7 +31,7 @@ class Context extends GameMode {
                             <span class="text-sm text-slate-400">Generating examples...</span>
                         </div>
                     </div>
-                    <div id="ctx-progress" class="w-full max-w-md flex gap-2 mb-4 shrink-0 hidden">
+                    <div id="ctx-progress" class="w-full max-w-md flex gap-2 mb-3 shrink-0 hidden">
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
@@ -48,6 +50,8 @@ class Context extends GameMode {
                         <div id="ctx-translation-card" class="bg-slate-50 dark:bg-neutral-800/50 rounded-xl border border-slate-100 dark:border-neutral-800 p-3 mb-3 hidden">
                             <p id="ctx-translation" class="text-sm text-slate-500 dark:text-neutral-400 select-text"></p>
                         </div>
+                        <div id="ctx-options" class="grid grid-cols-2 gap-2 mb-3 hidden"></div>
+                        <div id="ctx-result" class="hidden"></div>
                         <button id="ctx-next-btn" class="w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all hidden">
                             Next Level →
                         </button>
@@ -76,6 +80,8 @@ class Context extends GameMode {
         this.dom.playBtn = this.root.querySelector('#ctx-play-btn');
         this.dom.translationCard = this.root.querySelector('#ctx-translation-card');
         this.dom.translation = this.root.querySelector('#ctx-translation');
+        this.dom.options = this.root.querySelector('#ctx-options');
+        this.dom.result = this.root.querySelector('#ctx-result');
         this.dom.nextBtn = this.root.querySelector('#ctx-next-btn');
         this.dom.done = this.root.querySelector('#ctx-done');
         this.dom.noAi = this.root.querySelector('#ctx-no-ai');
@@ -99,8 +105,9 @@ class Context extends GameMode {
 
     _generateAnew() {
         this.currentLevel = 0;
+        this._completedLevels = 0;
+        this.answered = false;
         this.sentences = [];
-        this._gotWord = false;
         this._hideAll();
         this._showLoading();
         this._fetchSentences();
@@ -114,9 +121,9 @@ class Context extends GameMode {
 
     update() {
         this.currentLevel = 0;
-        this.sentences = [];
-        this._gotWord = false;
+        this._completedLevels = 0;
         this.answered = false;
+        this.sentences = [];
         this.busy = false;
         this.setupHeader();
 
@@ -124,18 +131,14 @@ class Context extends GameMode {
         var p = app.store.prefs;
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var aKey = p.sentencesA || p.presetSource || 'en';
-
         var exKey = '';
         if (typeof LANG_MAP !== 'undefined') {
             var conf = LANG_MAP.get(qKey);
             if (conf && conf.exKey) exKey = conf.exKey;
         }
 
-        var word = c[qKey] || '';
-        var meaning = c[aKey] || '';
-
-        if (this.dom.word) this.dom.word.textContent = word;
-        if (this.dom.meaning) this.dom.meaning.textContent = meaning;
+        if (this.dom.word) this.dom.word.textContent = c[qKey] || '';
+        if (this.dom.meaning) this.dom.meaning.textContent = c[aKey] || '';
 
         this._hideAll();
         this.updateHeader();
@@ -153,7 +156,7 @@ class Context extends GameMode {
         this.afterRender();
     }
 
-    _getContextKeys() {
+    async _fetchSentences() {
         var p = app.store.prefs;
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var aKey = p.sentencesA || p.presetSource || 'en';
@@ -162,21 +165,10 @@ class Context extends GameMode {
             var conf = LANG_MAP.get(qKey);
             if (conf && conf.exKey) exKey = conf.exKey;
         }
-        return { qKey: qKey, aKey: aKey, exKey: exKey };
-    }
-
-    async _fetchSentences() {
-        var keys = this._getContextKeys();
         var c = this.list[this.i];
-        var word = c[keys.qKey] || '';
-        var existingExample = c[keys.exKey] || '';
-
-        var langName = app.llm._getLangName(keys.qKey);
-        var level = '';
-        if (c && c.tags) {
-            var tags = c.tags || [];
-            level = tags.find(function(t) { return ['N5','N4','N3','N2','N1','A1','A2','B1','B2','C1','C2','HSK1','HSK2','HSK3','HSK4','HSK5','HSK6','TOPIK1','TOPIK2','TOPIK3','TOPIK4','TOPIK5'].indexOf(t) !== -1; }) || '';
-        }
+        var word = c[qKey] || '';
+        var existingExample = c[exKey] || '';
+        var langName = app.llm._getLangName(qKey);
 
         var prompt = 'Generate 3 example sentences using the ' + langName + ' word "' + word + '" at increasing difficulty levels.\n'
             + (existingExample ? 'The existing sentence in our database is: "' + existingExample + '" — use it as Level 1.\n' : '')
@@ -194,44 +186,43 @@ class Context extends GameMode {
                 options: { num_predict: 512, temperature: 0.7 },
                 timeout: 30000
             });
-
             var cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
             var data = JSON.parse(cleaned);
-
             if (data && data.sentences && data.sentences.length >= 1) {
                 this.sentences = data.sentences;
-            } else {
-                throw new Error('Invalid structure');
-            }
+            } else { throw new Error('Invalid'); }
         } catch (e) {
             L('[Context] Generation failed:', e.message);
             this.sentences = [];
-            if (existingExample) {
-                this.sentences = [{ level: 'beginner', sentence: existingExample, translation: '' }];
-            }
+            if (existingExample) this.sentences = [{ level: 'beginner', sentence: existingExample, translation: '' }];
         }
 
         if (this.dom.loading) this.dom.loading.classList.add('hidden');
         if (this.sentences.length > 0) {
             if (this.dom.progress) this.dom.progress.classList.remove('hidden');
             if (this.dom.sentenceCard) this.dom.sentenceCard.classList.remove('hidden');
-            this.showNextLevel();
+            this._showLevel();
         } else {
             if (this.dom.sentenceCard) this.dom.sentenceCard.classList.remove('hidden');
             if (this.dom.sentence) this.dom.sentence.textContent = 'Could not generate examples.';
-            if (this.dom.nextBtn) {
-                this.dom.nextBtn.textContent = 'Skip →';
-                this.dom.nextBtn.classList.remove('hidden');
-                this.dom.nextBtn.classList.add('bg-slate-500');
-            }
         }
     }
 
-    showNextLevel() {
-        if (this.currentLevel >= this.sentences.length) return;
+    _showLevel() {
+        if (this.currentLevel >= this.sentences.length) {
+            this._finish();
+            return;
+        }
 
+        this.answered = false;
         var s = this.sentences[this.currentLevel];
+        var c = this.list[this.i];
+        var p = app.store.prefs;
+        var qKey = p.sentencesQ || p.presetTarget || 'ja';
+        var aKey = p.sentencesA || p.presetSource || 'en';
+        var targetWord = c[qKey] || '';
 
+        // Update progress dots
         var dots = this.dom.progress ? this.dom.progress.querySelectorAll('.ctx-dot') : [];
         for (var i = 0; i < dots.length; i++) {
             if (i < this.currentLevel) {
@@ -244,25 +235,134 @@ class Context extends GameMode {
         }
 
         var levelLabels = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
+        var points = [5, 10, 15];
         if (this.dom.levelBadge) this.dom.levelBadge.textContent = (this.currentLevel + 1) + '/' + this.sentences.length;
-        if (this.dom.levelLabel) this.dom.levelLabel.textContent = levelLabels[s.level] || s.level || '';
-        if (this.dom.sentence) this.dom.sentence.textContent = s.sentence;
+        if (this.dom.levelLabel) this.dom.levelLabel.textContent = (levelLabels[s.level] || s.level || '') + ' · +' + points[this.currentLevel] + 'pts';
+
+        // Build cloze sentence (blank out the target word)
+        var clozeHtml = this._buildCloze(s.sentence, targetWord);
+        if (this.dom.sentence) this.dom.sentence.innerHTML = clozeHtml;
 
         if (s.translation) {
-            if (this.dom.translationCard) this.dom.translationCard.classList.remove('hidden');
-            if (this.dom.translation) this.dom.translation.textContent = s.translation;
+            if (this.dom.translationCard) this.dom.translationCard.classList.add('hidden');
         } else {
             if (this.dom.translationCard) this.dom.translationCard.classList.add('hidden');
         }
 
+        // Build multiple choice options
+        var distractors = this._getDistractors(c.id, targetWord, aKey, 3);
+        var options = [targetWord].concat(distractors);
+        this._shuffle(options);
+
+        if (this.dom.options) {
+            this.dom.options.classList.remove('hidden');
+            this.dom.options.innerHTML = options.map(function(opt) {
+                return '<button class="ctx-option w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all text-left">' + escapeHtml(opt) + '</button>';
+            }).join('');
+
+            var self = this;
+            this.dom.options.querySelectorAll('.ctx-option').forEach(function(btn) {
+                btn.onclick = function() { self._pickOption(btn, targetWord); };
+            });
+        }
+
+        if (this.dom.result) this.dom.result.classList.add('hidden');
         if (this.dom.sentenceCard) this.dom.sentenceCard.classList.remove('hidden');
+        if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
         if (this.dom.done) this.dom.done.classList.add('hidden');
 
-        var isLast = this.currentLevel >= this.sentences.length - 1;
+        var self = this;
+        setTimeout(function() { self.playSentence(); }, 300);
+    }
+
+    _buildCloze(sentence, word) {
+        if (!sentence || !word) return escapeHtml(sentence || '');
+        var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var regex = new RegExp('(' + escaped + ')', 'gi');
+        var sentenceHtml = escapeHtml(sentence);
+        var wordHtml = escapeHtml(word);
+        return sentenceHtml.replace(regex, '<span class="inline-block px-2 mx-0.5 border-b-2 border-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 rounded text-indigo-600 dark:text-indigo-300 font-black min-w-[3em] text-center">______</span>');
+    }
+
+    _getDistractors(cardId, correctWord, aKey, count) {
+        var list = this.list;
+        var candidates = [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === cardId) continue;
+            var w = list[i][aKey];
+            if (w && w !== correctWord) candidates.push(w);
+        }
+        this._shuffle(candidates);
+        return candidates.slice(0, count);
+    }
+
+    _shuffle(arr) {
+        for (var i = arr.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+        }
+        return arr;
+    }
+
+    _pickOption(btn, correctWord) {
+        if (this.answered) return;
+        this.answered = true;
+
+        var chosen = btn.textContent.trim();
+        var isCorrect = chosen === correctWord;
+
+        // Highlight chosen button
+        var allBtns = this.dom.options.querySelectorAll('.ctx-option');
+        allBtns.forEach(function(b) {
+            b.onclick = null;
+            b.classList.add('opacity-50');
+            if (b.textContent.trim() === correctWord) {
+                b.classList.remove('border-slate-200', 'dark:border-neutral-700', 'bg-white', 'dark:bg-neutral-800');
+                b.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-700', 'dark:text-emerald-300');
+            }
+        });
+
+        if (isCorrect) {
+            btn.classList.remove('opacity-50');
+            btn.classList.add('scale-105');
+            var points = [5, 10, 15][this.currentLevel] || 5;
+            this.score(points);
+            app.celebration.play();
+            this._completedLevels++;
+
+            if (this.dom.result) {
+                this.dom.result.classList.remove('hidden');
+                this.dom.result.innerHTML = '<div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-center"><p class="font-bold text-emerald-600 dark:text-emerald-400 text-sm">✓ Correct! +' + points + 'pts</p></div>';
+            }
+
+            // Show translation on correct answer
+            var s = this.sentences[this.currentLevel];
+            if (s && s.translation && this.dom.translationCard) {
+                this.dom.translationCard.classList.remove('hidden');
+                if (this.dom.translation) this.dom.translation.textContent = s.translation;
+            }
+
+            // Mark dot green
+            var dots = this.dom.progress ? this.dom.progress.querySelectorAll('.ctx-dot') : [];
+            if (dots[this.currentLevel]) {
+                dots[this.currentLevel].className = 'ctx-dot flex-1 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 transition-colors';
+            }
+        } else {
+            btn.classList.remove('opacity-50');
+            btn.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30', 'text-rose-600', 'dark:text-rose-400');
+            this.miss();
+
+            if (this.dom.result) {
+                this.dom.result.classList.remove('hidden');
+                this.dom.result.innerHTML = '<div class="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-center"><p class="font-bold text-rose-600 dark:text-rose-400 text-sm">The correct word is: <span class="underline">' + escapeHtml(correctWord) + '</span></p></div>';
+            }
+        }
+
         if (this.dom.nextBtn) {
-            this.dom.nextBtn.classList.remove('hidden', 'bg-slate-500');
+            this.dom.nextBtn.classList.remove('hidden');
+            var isLast = this.currentLevel >= this.sentences.length - 1;
             if (isLast) {
-                this.dom.nextBtn.textContent = '✓ Got it';
+                this.dom.nextBtn.textContent = '✓ Finish';
                 this.dom.nextBtn.classList.remove('bg-indigo-500');
                 this.dom.nextBtn.classList.add('bg-emerald-500');
             } else {
@@ -273,26 +373,24 @@ class Context extends GameMode {
         }
 
         this.currentLevel++;
-
-        var self = this;
-        setTimeout(function() { self.playSentence(); }, 300);
     }
 
     _onNext() {
         if (this.currentLevel >= this.sentences.length) {
-            if (!this._gotWord) {
-                this._gotWord = true;
-                this.score(10);
-                app.celebration.play();
-                if (this.dom.done) {
-                    this.dom.done.textContent = '✓ Nice! Use < > for next word.';
-                    this.dom.done.classList.remove('hidden');
-                }
-                if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
-            }
+            this._finish();
             return;
         }
-        this.showNextLevel();
+        this._showLevel();
+    }
+
+    _finish() {
+        if (this.dom.options) this.dom.options.classList.add('hidden');
+        if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
+        if (this.dom.done) {
+            var pct = this.sentences.length > 0 ? Math.round((this._completedLevels / this.sentences.length) * 100) : 0;
+            this.dom.done.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%). Use < > for next word.';
+            this.dom.done.classList.remove('hidden');
+        }
     }
 
     playSentence() {

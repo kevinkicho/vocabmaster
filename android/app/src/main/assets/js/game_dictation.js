@@ -32,7 +32,10 @@ class Dictation extends GameMode {
                     </div>
                     <div id="dict-input-area" class="w-full max-w-md hidden">
                         <textarea id="dict-input" rows="2" placeholder="Type what you heard..." class="w-full bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-neutral-200 outline-none focus:border-indigo-400 transition-colors resize-none placeholder:text-slate-300 dark:placeholder:text-neutral-600"></textarea>
-                        <button id="dict-check-btn" class="w-full mt-2 py-3 rounded-2xl font-bold text-sm bg-emerald-500 text-white shadow-lg active:scale-95 transition-all">Check</button>
+                        <div class="flex gap-2 mt-2">
+                            <button id="dict-check-btn" class="flex-1 py-3 rounded-2xl font-bold text-sm bg-emerald-500 text-white shadow-lg active:scale-95 transition-all">Check</button>
+                            <button id="dict-reveal-btn" class="py-3 px-4 rounded-2xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 active:scale-95 transition-all whitespace-nowrap">Show Answer</button>
+                        </div>
                     </div>
                     <div id="dict-result" class="w-full max-w-md hidden"></div>
                 </div>
@@ -49,6 +52,7 @@ class Dictation extends GameMode {
         this.dom.inputArea = this.root.querySelector('#dict-input-area');
         this.dom.input = this.root.querySelector('#dict-input');
         this.dom.checkBtn = this.root.querySelector('#dict-check-btn');
+        this.dom.revealBtn = this.root.querySelector('#dict-reveal-btn');
         this.dom.result = this.root.querySelector('#dict-result');
 
         this.root.querySelector('#dict-nav').innerHTML = app.ui.nav();
@@ -56,6 +60,7 @@ class Dictation extends GameMode {
         var self = this;
         this.dom.playBtn.onclick = function() { self.playSentence(); };
         this.dom.checkBtn.onclick = function() { self.checkAnswer(); };
+        this.dom.revealBtn.onclick = function() { self.revealAnswer(); };
         this.dom.input.onkeydown = function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); self.checkAnswer(); } };
     }
 
@@ -153,6 +158,7 @@ class Dictation extends GameMode {
             this.score(Math.max(5, 15 - (this.attempts - 1) * 5));
             this.dom.input.disabled = true;
             if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
+            if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
             var self = this;
             this.waitAndNav(null, 3000);
         } else if (this.attempts >= this.maxAttempts) {
@@ -160,11 +166,23 @@ class Dictation extends GameMode {
             this._showResult(userText, expected, false);
             this.dom.input.disabled = true;
             if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
+            if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
             this.miss();
         } else {
             this._showResult(userText, expected, false);
             if (this.dom.input) { this.dom.input.value = ''; this.dom.input.focus(); }
         }
+    }
+
+    revealAnswer() {
+        if (this.answered) return;
+        this.answered = true;
+        if (this.dom.input) { this.dom.input.value = this.currentText; this.dom.input.disabled = true; }
+        if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
+        if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
+        if (this.dom.attempts) this.dom.attempts.textContent = 'Answer revealed';
+        this._showResult(this.currentText, this.currentText, false);
+        this.miss();
     }
 
     _calculateSimilarity(input, expected) {

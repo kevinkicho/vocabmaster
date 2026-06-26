@@ -10,6 +10,7 @@ class Context extends GameMode {
         super(k);
         this.sentences = [];
         this.currentLevel = 0;
+        this._currentSentenceText = '';
         this.answered = false;
         this._completedLevels = 0;
         this.setup();
@@ -42,13 +43,11 @@ class Context extends GameMode {
                                 <span id="ctx-level-badge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 uppercase"></span>
                                 <span id="ctx-level-label" class="text-[9px] text-slate-400"></span>
                             </div>
-                            <p id="ctx-sentence" class="text-lg font-bold text-slate-800 dark:text-white leading-relaxed mb-3 select-text"></p>
-                            <button id="ctx-play-btn" class="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 active:scale-95 transition-all flex items-center gap-1">
-                                <i class="ph-bold ph-speaker-high"></i> Listen
-                            </button>
+                            <p id="ctx-sentence" class="text-lg font-bold text-slate-800 dark:text-white leading-relaxed mb-1 cursor-pointer active:scale-[0.98] transition-transform select-text"></p>
+                            <p class="text-[9px] text-slate-400 dark:text-neutral-500 italic">Tap sentence to listen</p>
                         </div>
-                        <div id="ctx-translation-card" class="bg-slate-50 dark:bg-neutral-800/50 rounded-xl border border-slate-100 dark:border-neutral-800 p-3 mb-3 hidden">
-                            <p id="ctx-translation" class="text-sm text-slate-500 dark:text-neutral-400 select-text"></p>
+                        <div id="ctx-translation-card" class="bg-slate-100 dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700 p-3 mb-3 hidden">
+                            <p id="ctx-translation" class="text-sm text-slate-600 dark:text-neutral-300 select-text"></p>
                         </div>
                         <div id="ctx-options" class="grid grid-cols-2 gap-2 mb-3 hidden"></div>
                         <div id="ctx-result" class="hidden"></div>
@@ -77,7 +76,6 @@ class Context extends GameMode {
         this.dom.levelBadge = this.root.querySelector('#ctx-level-badge');
         this.dom.levelLabel = this.root.querySelector('#ctx-level-label');
         this.dom.sentence = this.root.querySelector('#ctx-sentence');
-        this.dom.playBtn = this.root.querySelector('#ctx-play-btn');
         this.dom.translationCard = this.root.querySelector('#ctx-translation-card');
         this.dom.translation = this.root.querySelector('#ctx-translation');
         this.dom.options = this.root.querySelector('#ctx-options');
@@ -90,7 +88,7 @@ class Context extends GameMode {
         this.setupHeader();
 
         var self = this;
-        if (this.dom.playBtn) this.dom.playBtn.onclick = function() { self.playSentence(); };
+        if (this.dom.sentence) this.dom.sentence.onclick = function() { self.playSentence(); };
         if (this.dom.nextBtn) this.dom.nextBtn.onclick = function() { self._onNext(); };
     }
 
@@ -216,6 +214,7 @@ class Context extends GameMode {
 
         this.answered = false;
         var s = this.sentences[this.currentLevel];
+        this._currentSentenceText = s.sentence;
         var c = this.list[this.i];
         var p = app.store.prefs;
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
@@ -388,20 +387,18 @@ class Context extends GameMode {
         if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
         if (this.dom.done) {
             var pct = this.sentences.length > 0 ? Math.round((this._completedLevels / this.sentences.length) * 100) : 0;
-            this.dom.done.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%). Use < > for next word.';
+            this.dom.done.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%)';
             this.dom.done.classList.remove('hidden');
         }
     }
 
     playSentence() {
-        var idx = Math.max(0, this.currentLevel - 1);
-        if (idx >= this.sentences.length) return;
-        var s = this.sentences[idx];
+        if (!this._currentSentenceText) return;
         var p = app.store.prefs;
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(qKey) : null;
         var audioLang = (conf && conf.audioSrc) ? conf.audioSrc : qKey;
-        if (s.sentence) app.audio.play(s.sentence, audioLang, 'context', 0);
+        app.audio.play(this._currentSentenceText, audioLang, 'context', 0);
     }
 
     _hideAll() {

@@ -23,7 +23,7 @@ window.addEventListener('unhandledrejection', (e) => _handleUncaught('unhandledr
 
 class App {
     constructor() {
-        L("App Constructing...");
+        L("App Constructing... v1202");
         this.score = 0; 
         this.dailyScore = 0; 
         this.score = Math.max(0, Number(this.score) || 0);

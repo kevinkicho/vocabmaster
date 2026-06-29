@@ -66,24 +66,21 @@ npm run validate:critical # fast node checker only
 npm run build:android     # Full: tests + prepare + clean Gradle APK build
 ```
 
-After code changes (especially settings, LLM/Story/AI Cloze prompts, collections, data filters, game modes, menu items):
+After code changes (especially settings, LLM/Story prompts, collections, data filters, game modes, menu items):
 
 **Web / Android / Feature Parity Rule (critical for diagnosis)**
 
 public/ (and its js/) is the *single source of truth* for all functionality, including AI-powered activities.
 
-- Story Mode and AI Cloze (the mandatory-AI, no-fallback versions) must be identically available and behave the same whether you load the webapp directly from public/ (browser / local server / Firebase Hosting) or run the packaged APK (which is just a WebView loading the last copied assets from android/app/src/main/assets/).
-- Never introduce platform/runtime guards (e.g. `if (app.llm)`, `if (window.NativeTTS)`, `isWebView`, `Capacitor` etc.) that hide, rename, or change the availability/behavior of the AI activities (Story, AI Cloze / the enforcing Sentences path) between web and Android.
+- Story Mode, Grammar Gym, Chat Practice, and Word Context must be identically available and behave the same whether you load the webapp directly from public/ (browser / local server / Firebase Hosting) or run the packaged APK (which is just a WebView loading the last copied assets from android/app/src/main/assets/).
+- Sentences is now offline (regex-based cloze from vocab data) and works without AI.
+- Never introduce platform/runtime guards (e.g. `if (window.NativeTTS)`, `isWebView`, `Capacitor` etc.) that hide, rename, or change the availability/behavior of the AI activities between web and Android.
 - The menu always renders the AI section and its buttons the same way.
-- The enforcement (AI required / clean error instead of dummy content) lives in the shared game_story.js and game_sentences.js.
-- After any edit to AI logic, menu, LLM, or games: run the sync (or full `npm run build:android`) so the Android copy matches. Stale assets in the APK are a common source of "two different copies with different capabilities" and diagnosis pain.
-- For web users: AI works by configuring a compatible backend in Settings > AI (local ollama on the desktop machine at http://localhost:11434, or the Firebase proxy + cloud key for hosted web). The same mandatory "AI required" UX applies as on device.
-- Platform differences are allowed *only* for non-AI concerns (e.g. native TTS quality via bridge vs browser speech, WebView auth vs popup, file loading). Core activity availability and LLM-powered behavior must stay the same.
-- The validate gate now always runs before asset sync / Gradle, catching init/runtime errors early.
-- Still recommended to run explicitly for non-Android deploys (firebase hosting, etc.).
-- Per AGENTS.md build protocol: use the full `npm run build:android` (or at minimum validate + prepare + clean gradle) after changes. No incremental — always clean for APK. 
+- After any edit to AI logic, menu, LLM, or games: run the sync (or full `npm run build:android`) so the Android copy matches.
+- For web users: AI works via the cloud proxy with `gemma4:31b-cloud`. The APK uses local `ollama4android`.
+- Platform differences are allowed *only* for non-AI concerns (e.g. native TTS quality via bridge vs browser speech, WebView auth vs popup, file loading).
 
-The gate covers schema, collections/tiers/review, LLM prompt/response handling, Story/AI Cloze mandatory paths (no fallbacks), first-run, etc.
+The gate covers schema, collections/tiers/review, LLM prompt/response handling, Story/Grammar mandatory paths, first-run, etc.
 
 ```bash
 # Development

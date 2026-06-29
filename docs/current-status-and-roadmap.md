@@ -1,12 +1,16 @@
 # Current Status & Roadmap
 
-**Last major update**: 2026-06-17 (Refactor + Feature 9 + Playwright verification session)
+**Last major update**: 2026-06-25 (Dictation, Word Context, Chat language enforcement, AI pipeline simplification)
 
-## Current Status (v1195)
-- **Phase C Complete**: Full support for Collections (JLPT N5-N1, HSK levels, Spanish A1-C1). Tiers are now dynamically selectable and natively scope practice modes.
-- **Review Queue Added**: Adaptive learning loop prioritizes missed words across all modes.
-- **LLM/Ollama Backend**: Improved caching, robust error handling, rate-limiting fixes, and seamless integration with `ollama4android`.
-- **Bug Fixes & Refactors**: Cleaned up the project structure, migrated orphaned scripts to `/scripts`, optimized loading times, improved dark mode responsiveness, and addressed N1-N15 UX bugs.
+## Current Status (v1200+)
+- **11 game modes**: Flashcards, True/False, Quiz, Matching, Sentences (offline cloze), Voice Challenge, Dictation, Story Mode, Grammar Gym, Chat Practice, Word Context.
+- **AI pipeline simplified**: Single fixed model `gemma4:31b-cloud`. No model detection, no dropdown, no fallback chain. Clear error on failure.
+- **Chat Practice**: Language-agnostic prompts (AI always responds in target language). Long-press trash to clear chat. Transcript stores formatted HTML.
+- **Sentences (offline)**: Regex-based cloze from existing vocab example sentences. No AI dependency.
+- **Dictation**: TTS plays sentence, user types, word-by-word accuracy. "Show Answer" reveals partial correct words.
+- **Word Context**: Gamified cloze quiz — AI generates 3 sentences at increasing difficulty, 4 multiple-choice options, scoring 5/10/15 pts.
+- **Dark mode fixes**: Translation cards, cloze blanks, option buttons all properly themed.
+- **TTS fixes**: Cross-engine voice selection, provider labels, Word Context skips blank word in TTS.
 
 ## Session 2026-06-17: Refactoring + Feature 9 + Verification
 

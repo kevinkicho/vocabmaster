@@ -93,12 +93,17 @@ class Dictation extends GameMode {
 
         var sentence = c[exKey] || '';
         var word = c[qKey] || '';
-        var meaning = c[aKey] || '';
 
         this.currentText = sentence || word;
 
+        // Sub-text: show sentence translation if available, else word meaning
+        var subText = c[aKey] || '';
+        var srcConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(aKey) : null;
+        var srcExKey = srcConf && srcConf.exKey ? srcConf.exKey : '';
+        if (srcExKey && c[srcExKey]) subText = c[srcExKey];
+
         if (this.dom.word) this.dom.word.textContent = word;
-        if (this.dom.meaning) this.dom.meaning.textContent = meaning;
+        if (this.dom.meaning) this.dom.meaning.textContent = subText;
         if (this.dom.attempts) this.dom.attempts.textContent = '';
 
         if (this.dom.inputArea) this.dom.inputArea.classList.add('hidden');
@@ -177,12 +182,44 @@ class Dictation extends GameMode {
     revealAnswer() {
         if (this.answered) return;
         this.answered = true;
-        if (this.dom.input) { this.dom.input.value = this.currentText; this.dom.input.disabled = true; }
+        var userText = this.dom.input ? this.dom.input.value.trim() : '';
+        this.dom.input.disabled = true;
         if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
         if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
         if (this.dom.attempts) this.dom.attempts.textContent = 'Answer revealed';
-        this._showResult(this.currentText, this.currentText, false);
+
+        // Show sentence with correct words visible, incorrect parts masked
+        var expected = this.currentText;
+        if (!userText) {
+            this._showResult(expected, expected, false);
+        } else {
+            this._showPartialReveal(userText, expected);
+        }
         this.miss();
+    }
+
+    _showPartialReveal(input, expected) {
+        if (!this.dom.result) return;
+        var inputWords = input.toLowerCase().replace(/[.,!?;:'"()\-]/g, '').trim().split(/\s+/);
+        var expectedWords = expected.split(/(\s+|[.,!?;:'"()\-])/);
+
+        var result = '';
+        for (var i = 0; i < expectedWords.length; i++) {
+            var w = expectedWords[i];
+            var clean = w.toLowerCase().replace(/[.,!?;:'"()\-]/g, '');
+            if (!clean) { result += escapeHtml(w); continue; }
+            if (inputWords.indexOf(clean) !== -1) {
+                result += '<span class="font-bold text-emerald-500 dark:text-emerald-400">' + escapeHtml(w) + '</span>';
+            } else {
+                result += '<span class="font-black text-slate-400 dark:text-neutral-500 bg-slate-200 dark:bg-neutral-700 px-1 rounded">???</span>';
+            }
+        }
+
+        this.dom.result.classList.remove('hidden');
+        this.dom.result.innerHTML = '<div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">'
+            + '<p class="font-bold text-amber-600 dark:text-amber-400 text-xs mb-2">Partially correct — hidden parts you missed:</p>'
+            + '<p class="text-sm text-slate-600 dark:text-neutral-300 leading-relaxed">' + result + '</p>'
+            + '</div>';
     }
 
     _calculateSimilarity(input, expected) {

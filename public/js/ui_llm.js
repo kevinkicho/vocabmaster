@@ -68,7 +68,7 @@ Object.assign(UIManager.prototype, {
 
     renderVoiceSelector() {
         const container = document.getElementById('voice-selector-container');
-        if (!container || container.offsetParent === null) return;
+        if (!container) return;
         if (typeof LANG_CONFIG === 'undefined') return;
 
         const hasSynth = !!(app.audio && (app.audio.synth || app.audio.useNative));

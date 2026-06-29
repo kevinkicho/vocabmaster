@@ -44,7 +44,6 @@ class Context extends GameMode {
                                 <span id="ctx-level-label" class="text-[9px] text-slate-400"></span>
                             </div>
                             <p id="ctx-sentence" class="text-lg font-bold text-slate-800 dark:text-white leading-relaxed mb-1 cursor-pointer active:scale-[0.98] transition-transform select-text"></p>
-                            <p class="text-[9px] text-slate-400 dark:text-neutral-500 italic">Tap sentence to listen</p>
                         </div>
                         <div id="ctx-translation-card" class="bg-slate-100 dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700 p-3 mb-3 hidden">
                             <p id="ctx-translation" class="text-sm text-slate-600 dark:text-neutral-300 select-text"></p>
@@ -280,7 +279,7 @@ class Context extends GameMode {
         var regex = new RegExp('(' + escaped + ')', 'gi');
         var sentenceHtml = escapeHtml(sentence);
         var wordHtml = escapeHtml(word);
-        return sentenceHtml.replace(regex, '<span class="inline-block px-2 mx-0.5 border-b-2 border-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 rounded text-indigo-600 dark:text-indigo-300 font-black min-w-[3em] text-center">______</span>');
+        return sentenceHtml.replace(regex, '<span class="inline-block px-2 mx-0.5 border-b-2 border-indigo-400 dark:border-indigo-500 bg-indigo-100 dark:bg-neutral-800 rounded text-indigo-600 dark:text-indigo-300 font-black min-w-[3em] text-center">______</span>');
     }
 
     _getDistractors(cardId, correctWord, aKey, count) {
@@ -387,7 +386,21 @@ class Context extends GameMode {
         if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
         if (this.dom.done) {
             var pct = this.sentences.length > 0 ? Math.round((this._completedLevels / this.sentences.length) * 100) : 0;
-            this.dom.done.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%)';
+            this.dom.done.innerHTML = '';
+            var scoreLine = document.createElement('p');
+            scoreLine.className = 'text-xs text-slate-400 mb-2';
+            scoreLine.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%)';
+            this.dom.done.appendChild(scoreLine);
+            var retryBtn = document.createElement('button');
+            retryBtn.className = 'px-4 py-1.5 rounded-xl text-[10px] font-bold bg-indigo-500 text-white active:scale-95 transition-all mr-2';
+            retryBtn.textContent = '↻ Try Again';
+            retryBtn.onclick = this._generateAnew.bind(this);
+            this.dom.done.appendChild(retryBtn);
+            var finishBtn = document.createElement('button');
+            finishBtn.className = 'px-4 py-1.5 rounded-xl text-[10px] font-bold bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 active:scale-95 transition-all';
+            finishBtn.textContent = 'Finish';
+            finishBtn.onclick = function() { app.goBack(); };
+            this.dom.done.appendChild(finishBtn);
             this.dom.done.classList.remove('hidden');
         }
     }
@@ -398,7 +411,9 @@ class Context extends GameMode {
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(qKey) : null;
         var audioLang = (conf && conf.audioSrc) ? conf.audioSrc : qKey;
-        app.audio.play(this._currentSentenceText, audioLang, 'context', 0);
+        // Replace blank placeholder with "..." for TTS pause
+        var ttsText = this._currentSentenceText.replace(/______/g, '...').replace(/_{3,}/g, '...');
+        app.audio.play(ttsText, audioLang, 'context', 0);
     }
 
     _hideAll() {

@@ -183,7 +183,11 @@ class Chat extends GameMode {
         if (!uid || !db || this.messages.length === 0) return;
         var entry = {
             messages: this.messages.map(function(m) {
-                return { role: m.role, text: m.text };
+                var html = '';
+                if (m.units && m.units.length > 0) {
+                    html = m.units.map(function(u) { return u.html || escapeHtml(u.text || ''); }).join('');
+                }
+                return { role: m.role, text: m.text, html: html || '' };
             }),
             scenario: app.store.prefs.chatScenario || 'daily',
             level: app.store.prefs.chatLevel || 'B1',
@@ -367,7 +371,8 @@ class Chat extends GameMode {
             var self = this;
             recent.forEach(function(m) {
                 if (m.role === 'assistant') {
-                    self.messages.push({ role: 'assistant', text: m.text, units: [{ text: m.text, lang: self._getTargetLang(), html: escapeHtml(m.text) }] });
+                    var html = m.html || escapeHtml(m.text);
+                    self.messages.push({ role: 'assistant', text: m.text, units: [{ text: m.text, lang: self._getTargetLang(), html: html }] });
                 } else {
                     self.messages.push({ role: 'user', text: m.text });
                 }

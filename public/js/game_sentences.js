@@ -177,15 +177,6 @@ class Sentences extends GameMode {
         this.maskedHtml = cloze.html;
         this.maskedAudioText = cloze.audio;
 
-        let transHtml = '';
-        const transLang = p.sentencesTrans;
-        if (transLang && transLang !== qKey) {
-            const transWord = c[transLang];
-            if (transWord) {
-                transHtml = `<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 mt-2 italic">${escapeHtml(transWord)}</p>`;
-            }
-        }
-
         let bottomHtml = '';
         const dispMode = p.sentencesBottomDisp || 'sentence_masked';
 
@@ -214,7 +205,7 @@ class Sentences extends GameMode {
              this.dom.text.innerHTML = "";
              this.dom.text.dataset.brProcessed = "";
              this.dom.text.dataset.lastFitted = "";
-             this.dom.text.innerHTML = this.maskedHtml + transHtml;
+             this.dom.text.innerHTML = this.maskedHtml;
              this.dom.text.dataset.wid = c.id;
         }
 

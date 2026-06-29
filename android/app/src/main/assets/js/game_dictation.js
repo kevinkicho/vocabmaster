@@ -182,19 +182,14 @@ class Dictation extends GameMode {
     revealAnswer() {
         if (this.answered) return;
         this.answered = true;
-        var userText = this.dom.input ? this.dom.input.value.trim() : '';
         this.dom.input.disabled = true;
         if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
         if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
         if (this.dom.attempts) this.dom.attempts.textContent = 'Answer revealed';
 
-        // Show sentence with correct words visible, incorrect parts masked
         var expected = this.currentText;
-        if (!userText) {
-            this._showResult(expected, expected, false);
-        } else {
-            this._showPartialReveal(userText, expected);
-        }
+        this.dom.input.value = expected;
+        this._showResult(expected, expected, false);
         this.miss();
     }
 

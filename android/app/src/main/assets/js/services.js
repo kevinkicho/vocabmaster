@@ -118,7 +118,10 @@ class AudioService {
             try {
                 const raw = window.NativeTTSBridge.getVoices();
                 if (raw.length === 0) {
-                    setTimeout(() => this.loadVoices(), 500);
+                    this._voicePollAttempts = (this._voicePollAttempts || 0) + 1;
+                    if (this._voicePollAttempts < 20) {
+                        setTimeout(() => this.loadVoices(), 500);
+                    }
                     return;
                 }
                 this.voices = raw.map(v => ({
@@ -134,6 +137,7 @@ class AudioService {
                 }));
                 this._voicePollAttempts = 100;
                 L('[Audio] Native loadVoices: found', this.voices.length, 'voices');
+                this._buildVoiceMap();
                 if (app && app.ui) app.ui.renderVoiceSelector();
             } catch(e) { L('[Audio] Native voice load error:', e); }
             return;

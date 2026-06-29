@@ -843,7 +843,7 @@ class Chat extends GameMode {
                     var u = m.units[j];
                     if (!u.text) continue;
                     html += '<div class="flex justify-start mb-1">'
-                        + '<div class="chat-sentence max-w-[80%] cursor-pointer select-none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || this._getTargetLang()) + '">'
+                        + '<div class="chat-sentence max-w-[80%] bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-neutral-100 rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed cursor-pointer select-none" data-text="' + escapeHtml(u.text) + '" data-lang="' + (u.lang || this._getTargetLang()) + '">'
                         + (u.html || escapeHtml(u.text))
                         + '</div></div>';
                 }

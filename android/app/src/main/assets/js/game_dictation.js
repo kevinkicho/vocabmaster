@@ -96,14 +96,8 @@ class Dictation extends GameMode {
 
         this.currentText = sentence || word;
 
-        // Sub-text: show sentence translation if available, else word meaning
-        var subText = c[aKey] || '';
-        var srcConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(aKey) : null;
-        var srcExKey = srcConf && srcConf.exKey ? srcConf.exKey : '';
-        if (srcExKey && c[srcExKey]) subText = c[srcExKey];
-
         if (this.dom.word) this.dom.word.textContent = word;
-        if (this.dom.meaning) this.dom.meaning.textContent = subText;
+        if (this.dom.meaning) this.dom.meaning.textContent = c[aKey] || '';
         if (this.dom.attempts) this.dom.attempts.textContent = '';
 
         if (this.dom.inputArea) this.dom.inputArea.classList.add('hidden');
@@ -188,8 +182,13 @@ class Dictation extends GameMode {
         if (this.dom.attempts) this.dom.attempts.textContent = 'Answer revealed';
 
         var expected = this.currentText;
-        this.dom.input.value = expected;
-        this._showResult(expected, expected, false);
+        var userText = this.dom.input.value.trim();
+        if (userText) {
+            this._showPartialReveal(userText, expected);
+        } else {
+            this.dom.input.value = expected;
+            this._showResult(expected, expected, false);
+        }
         this.miss();
     }
 

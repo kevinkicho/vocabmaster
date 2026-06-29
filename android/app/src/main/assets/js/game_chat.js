@@ -93,14 +93,15 @@ class Chat extends GameMode {
 
     toggleSpeech() {
         if (this._speechActive) return;
-        if (!('webkitSpeechRecognition' in window)) {
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
             if (app.ui) app.ui.showToast('Voice input not supported in this browser.', 'error');
             return;
         }
         this._speechActive = true;
         var lang = this._getTargetLang();
         var localeMap = { ja:'ja-JP', en:'en-US', ko:'ko-KR', zh:'zh-CN', es:'es-ES', fr:'fr-FR', de:'de-DE', it:'it-IT', pt:'pt-BR', ru:'ru-RU' };
-        var recognition = new webkitSpeechRecognition();
+        var recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
         recognition.lang = localeMap[lang] || 'en-US';
@@ -123,9 +124,14 @@ class Chat extends GameMode {
                 self.dom.mic.classList.remove('text-rose-500', 'animate-pulse');
             }
         };
-        recognition.start();
-        if (this.dom.mic) {
-            this.dom.mic.classList.add('text-rose-500', 'animate-pulse');
+        try {
+            recognition.start();
+            if (this.dom.mic) {
+                this.dom.mic.classList.add('text-rose-500', 'animate-pulse');
+            }
+        } catch (e) {
+            self._speechActive = false;
+            if (app.ui) app.ui.showToast('Speech recognition not available on this device. Type instead.', 'error');
         }
     }
 
@@ -399,7 +405,7 @@ class Chat extends GameMode {
             }
         }
 
-        var micBtn = ('webkitSpeechRecognition' in window)
+        var micBtn = (window.SpeechRecognition || window.webkitSpeechRecognition)
             ? '<button id="chat-mic" onclick="app.game.toggleSpeech()" class="w-10 h-10 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-slate-500 dark:text-neutral-400 rounded-full flex items-center justify-center active:scale-90 transition-all shadow-sm shrink-0"><i class="ph-bold ph-microphone text-lg"></i></button>'
             : '';
 

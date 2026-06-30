@@ -90,11 +90,6 @@ Object.assign(UIManager.prototype, {
             html += `<p class="text-[10px] text-rose-400 text-center p-3">Your browser does not support speech synthesis. Try Chrome, Edge, or Samsung Internet.</p>`;
             container.innerHTML = html;
             return;
-        } else if(voices.length === 0) {
-            html += `<p class="text-[10px] text-slate-400 text-center p-3">Press <b>Detect Voices</b> above. On Android, TTS voices only load after user interaction — tapping the button will trigger detection.</p>
-            <p class="text-[10px] text-slate-400 text-center p-2"><b>Note:</b> Also check Settings → General Management → Text-to-speech → tap gear ⚙ → Install voice data. You may need to download language packs for voices to appear.</p>`;
-            container.innerHTML = html;
-            return;
         }
 
         const getProviderName = (voice) => {
@@ -189,18 +184,6 @@ Object.assign(UIManager.prototype, {
 
         const isAndroid = /Android/i.test(navigator.userAgent);
         const isNative = app.audio && app.audio.useNative;
-
-        if (isNative) {
-            html = `<div class="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
-                <p class="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Using Android default TTS engine</p>
-                <p class="text-[9px] text-emerald-600 dark:text-emerald-500 mt-1">Voice selection is managed by Android. To change your TTS voice: <b>Settings → General Management → Text-to-speech output → Preferred engine</b>, then tap gear ⚙ to choose a voice.</p>
-            </div>`;
-        } else if (isAndroid) {
-            html += `<div class="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-900/50">
-                <p class="text-[9px] text-amber-700 dark:text-amber-400 font-bold">Android Chrome limitation</p>
-                <p class="text-[9px] text-amber-600 dark:text-amber-500 mt-1">Voice selection may not work on Android Chrome. To change your TTS engine, go to: <b>Android Settings → General Management → Text-to-speech output → Preferred engine</b> and pick Google or Samsung TTS.</p>
-            </div>`;
-        }
 
         container.innerHTML = html;
     },

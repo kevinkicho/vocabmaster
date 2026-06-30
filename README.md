@@ -47,7 +47,7 @@
 ### Context
 | Mode | Description | AI? |
 |------|-------------|-----|
-| **Sentences** | Fill-in-the-blank cloze using existing example sentences from vocab data. Smart masking handles conjugations, multi-word phrases, and CJK. | No |
+| **Sentences** | Fill-in-the-blank cloze using existing example sentences from vocab data. Regex-based masking handles conjugations. 70:30 grid layout — question text top, translation bottom with fixed divider. | No |
 
 ### Speaking
 | Mode | Description | AI? |
@@ -83,12 +83,14 @@ The app uses `gemma4:31b-cloud` as the fixed model. No model detection, no dropd
 
 ### Word Context (Gamified Cloze)
 - AI generates 3 sentences using a vocab word at increasing difficulty (beginner → intermediate → advanced)
-- Target word is blanked out (`______`) in the sentence
-- 4 multiple-choice options: correct word + 3 distractors from vocab list
+- **AI-marked blanks** — LLM returns sentences with `{{BLANK}}` markers, app replaces with styled placeholder (handles conjugations that regex can't)
+- **70:30 layout** — Question text fills top 70%, translation fills bottom 30%, fixed divider between them
+- 4 multiple-choice options with `fitSmart` text auto-sizing for CJK compatibility
 - **Scoring**: Beginner +5, Intermediate +10, Advanced +15
 - TTS skips the blank word (replaced with `...` for pause)
-- Translation revealed after correct answer
-- Retry button + Finish button on completion
+- **Vocab card** — Click to reveal vocab + translation for 5 seconds (helps before answering)
+- **Long-press question** — Shows translation on demand
+- **Dark mode compatible** — Correct/wrong border effects use Grammar Gym's emerald/rose pattern
 
 ### Story Mode
 - Selects 4 random vocab words, prompts the LLM to generate a short story in the target language

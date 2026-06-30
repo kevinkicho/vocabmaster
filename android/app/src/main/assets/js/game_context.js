@@ -22,9 +22,12 @@ class Context extends GameMode {
             <div class="flex flex-col h-full w-full overflow-hidden">
                 <div id="ctx-header" class="shrink-0"></div>
                 <div class="flex-1 flex flex-col items-center px-4 min-h-0 overflow-y-auto">
-                    <div id="ctx-word-card" class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-5 text-center mb-3 shrink-0">
-                        <p id="ctx-word" class="text-xl font-black text-slate-800 dark:text-white mb-0.5"></p>
-                        <p id="ctx-meaning" class="text-xs text-slate-400 dark:text-neutral-500"></p>
+                    <div id="ctx-word-card" class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm mb-2 shrink-0 hidden cursor-pointer overflow-hidden" style="height: 3.5rem" onclick="app.game._toggleWord()">
+                        <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <p id="ctx-word-placeholder" class="text-2xl font-black text-slate-300 dark:text-neutral-600 leading-tight">?</p>
+                            <p id="ctx-word" class="text-xl font-black text-slate-800 dark:text-white mb-0 hidden leading-tight"></p>
+                            <p id="ctx-meaning" class="text-[10px] text-slate-400 dark:text-neutral-500 hidden leading-tight">&nbsp;</p>
+                        </div>
                     </div>
                     <div id="ctx-loading" class="w-full max-w-md hidden">
                         <div class="flex items-center justify-center gap-2 py-8">
@@ -38,21 +41,23 @@ class Context extends GameMode {
                         <div class="ctx-dot flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-neutral-700 transition-colors"></div>
                     </div>
                     <div id="ctx-sentence-card" class="w-full max-w-md hidden">
-                        <div class="bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-5 mb-3">
-                            <div class="flex items-center gap-2 mb-3">
-                                <span id="ctx-level-badge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 uppercase"></span>
+                        <div class="bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-4 px-5 mb-3">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span id="ctx-level-badge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 uppercase"></span>
                                 <span id="ctx-level-label" class="text-[9px] text-slate-400"></span>
                             </div>
-                            <p id="ctx-sentence" class="text-lg font-bold text-slate-800 dark:text-white leading-relaxed mb-1 cursor-pointer active:scale-[0.98] transition-transform select-text"></p>
+                            <p id="ctx-sentence" class="text-lg font-bold text-slate-800 dark:text-white leading-snug mb-0 cursor-pointer active:scale-[0.98] transition-transform select-text"></p>
                         </div>
                         <div id="ctx-translation-card" class="bg-slate-100 dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700 p-3 mb-3 hidden">
                             <p id="ctx-translation" class="text-sm text-slate-600 dark:text-neutral-300 select-text"></p>
                         </div>
                         <div id="ctx-options" class="grid grid-cols-2 gap-2 mb-3 hidden"></div>
                         <div id="ctx-result" class="hidden"></div>
-                        <button id="ctx-next-btn" class="w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all hidden">
-                            Next Level →
-                        </button>
+                        <div class="flex justify-center">
+                            <button id="ctx-next-btn" class="px-6 py-2 rounded-xl text-xs font-bold bg-indigo-500 text-white active:scale-95 transition-all hidden">
+                                Next Level →
+                            </button>
+                        </div>
                         <p id="ctx-done" class="text-center text-xs text-slate-400 mt-3 hidden"></p>
                     </div>
                     <div id="ctx-no-ai" class="w-full max-w-md hidden">
@@ -67,6 +72,7 @@ class Context extends GameMode {
 
         this.dom.header = this.root.querySelector('#ctx-header');
         this.dom.wordCard = this.root.querySelector('#ctx-word-card');
+        this.dom.wordPlaceholder = this.root.querySelector('#ctx-word-placeholder');
         this.dom.word = this.root.querySelector('#ctx-word');
         this.dom.meaning = this.root.querySelector('#ctx-meaning');
         this.dom.loading = this.root.querySelector('#ctx-loading');
@@ -87,7 +93,23 @@ class Context extends GameMode {
         this.setupHeader();
 
         var self = this;
-        if (this.dom.sentence) this.dom.sentence.onclick = function() { self.playSentence(); };
+        if (this.dom.sentence) {
+            // Tap to play TTS
+            this.dom.sentence.onclick = function() { self.playSentence(); };
+            // Long-click to show translation
+            var pressTimer = null;
+            this.dom.sentence.addEventListener('mousedown', function() {
+                pressTimer = setTimeout(function() { self._showTranslation(); }, 500);
+            });
+            this.dom.sentence.addEventListener('mouseup', function() { clearTimeout(pressTimer); });
+            this.dom.sentence.addEventListener('mouseleave', function() { clearTimeout(pressTimer); });
+            this.dom.sentence.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                pressTimer = setTimeout(function() { self._showTranslation(); }, 500);
+            });
+            this.dom.sentence.addEventListener('touchend', function() { clearTimeout(pressTimer); });
+            this.dom.sentence.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
+        }
         if (this.dom.nextBtn) this.dom.nextBtn.onclick = function() { self._onNext(); };
     }
 
@@ -105,9 +127,36 @@ class Context extends GameMode {
         this._completedLevels = 0;
         this.answered = false;
         this.sentences = [];
+        this._genId = (this._genId || 0) + 1;
         this._hideAll();
         this._showLoading();
         this._fetchSentences();
+    }
+
+    _toggleWord() {
+        if (this._wordRevealed) return;
+        this._wordRevealed = true;
+        if (this.dom.wordPlaceholder) this.dom.wordPlaceholder.classList.add('hidden');
+        if (this.dom.word) this.dom.word.classList.remove('hidden');
+        if (this.dom.meaning) this.dom.meaning.classList.remove('hidden');
+        var self = this;
+        setTimeout(function() {
+            if (self.dom.wordPlaceholder) self.dom.wordPlaceholder.classList.remove('hidden');
+            if (self.dom.word) self.dom.word.classList.add('hidden');
+            if (self.dom.meaning) self.dom.meaning.classList.add('hidden');
+            self._wordRevealed = false;
+        }, 5000);
+    }
+
+    _showTranslation() {
+        var level = this.currentLevel - 1;
+        if (level < 0 || level >= this.sentences.length) return;
+        var s = this.sentences[level];
+        if (!s || !s.translation) return;
+        if (this.dom.translationCard) {
+            this.dom.translationCard.classList.remove('hidden');
+            if (this.dom.translation) this.dom.translation.textContent = s.translation;
+        }
     }
 
     _showLoading() {
@@ -119,6 +168,7 @@ class Context extends GameMode {
     update() {
         this.currentLevel = 0;
         this._completedLevels = 0;
+        this._genId = (this._genId || 0) + 1;
         this.answered = false;
         this.sentences = [];
         this.busy = false;
@@ -135,9 +185,19 @@ class Context extends GameMode {
         }
 
         if (this.dom.word) this.dom.word.textContent = c[qKey] || '';
-        if (this.dom.meaning) this.dom.meaning.textContent = c[aKey] || '';
+        // Sub-text: show vocab translation in user's "I know..." language
+        var knownLang = app.store.prefs.presetSource || 'en';
+        if (this.dom.meaning) this.dom.meaning.textContent = c[knownLang] || '';
 
         this._hideAll();
+        // Show word card with ? placeholder
+        if (this.dom.wordCard) {
+            this.dom.wordCard.classList.remove('hidden');
+            this._wordRevealed = false;
+            if (this.dom.wordPlaceholder) this.dom.wordPlaceholder.classList.remove('hidden');
+            if (this.dom.word) this.dom.word.classList.add('hidden');
+            if (this.dom.meaning) this.dom.meaning.classList.add('hidden');
+        }
         this.updateHeader();
 
         var llmReady = app.llm && app.llm.available && app.llm.hasModel;
@@ -154,6 +214,7 @@ class Context extends GameMode {
     }
 
     async _fetchSentences() {
+        var myGenId = this._genId;
         var p = app.store.prefs;
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var aKey = p.sentencesA || p.presetSource || 'en';
@@ -168,12 +229,13 @@ class Context extends GameMode {
         var langName = app.llm._getLangName(qKey);
 
         var prompt = 'Generate 3 example sentences using the ' + langName + ' word "' + word + '" at increasing difficulty levels.\n'
-            + (existingExample ? 'The existing sentence in our database is: "' + existingExample + '" — use it as Level 1.\n' : '')
+            + 'IMPORTANT: In each sentence, replace the word (or its conjugated form) with {{BLANK}} so the student must fill it in.\n'
+            + (existingExample ? 'The existing sentence in our database is: "' + existingExample + '" — use it as Level 1 (replace the word with {{BLANK}}).\n' : '')
             + 'Output JSON only, no markdown, no extra text:\n'
             + '{"sentences": [\n'
-            + '  {"level": "beginner", "sentence": "...", "translation": "..."},\n'
-            + '  {"level": "intermediate", "sentence": "...", "translation": "..."},\n'
-            + '  {"level": "advanced", "sentence": "...", "translation": "..."}\n'
+            + '  {"level": "beginner", "sentence": "... with {{BLANK}} ...", "translation": "..."},\n'
+            + '  {"level": "intermediate", "sentence": "... with {{BLANK}} ...", "translation": "..."},\n'
+            + '  {"level": "advanced", "sentence": "... with {{BLANK}} ...", "translation": "..."}\n'
             + ']}';
 
         try {
@@ -185,11 +247,14 @@ class Context extends GameMode {
             });
             var cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
             var data = JSON.parse(cleaned);
+            // Check if user navigated away during generation
+            if (myGenId !== this._genId) return;
             if (data && data.sentences && data.sentences.length >= 1) {
                 this.sentences = data.sentences;
             } else { throw new Error('Invalid'); }
         } catch (e) {
             L('[Context] Generation failed:', e.message);
+            if (myGenId !== this._genId) return;
             this.sentences = [];
             if (existingExample) this.sentences = [{ level: 'beginner', sentence: existingExample, translation: '' }];
         }
@@ -212,6 +277,11 @@ class Context extends GameMode {
         }
 
         this.answered = false;
+        // Reset card border from previous answer
+        var card = this.dom.sentenceCard ? this.dom.sentenceCard.querySelector('div') : null;
+        if (card) {
+            card.className = 'bg-white dark:bg-neutral-900 rounded-2xl border border-slate-100 dark:border-neutral-800 shadow-sm p-4 px-5 mb-3';
+        }
         var s = this.sentences[this.currentLevel];
         this._currentSentenceText = s.sentence;
         var c = this.list[this.i];
@@ -233,9 +303,8 @@ class Context extends GameMode {
         }
 
         var levelLabels = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
-        var points = [5, 10, 15];
         if (this.dom.levelBadge) this.dom.levelBadge.textContent = (this.currentLevel + 1) + '/' + this.sentences.length;
-        if (this.dom.levelLabel) this.dom.levelLabel.textContent = (levelLabels[s.level] || s.level || '') + ' · +' + points[this.currentLevel] + 'pts';
+        if (this.dom.levelLabel) this.dom.levelLabel.textContent = levelLabels[s.level] || s.level || '';
 
         // Build cloze sentence (blank out the target word)
         var clozeHtml = this._buildCloze(s.sentence, targetWord);
@@ -255,12 +324,14 @@ class Context extends GameMode {
         if (this.dom.options) {
             this.dom.options.classList.remove('hidden');
             this.dom.options.innerHTML = options.map(function(opt) {
-                return '<button class="ctx-option w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all text-left">' + escapeHtml(opt) + '</button>';
+                return '<button class="ctx-option w-full rounded-xl bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 text-slate-700 dark:text-neutral-200 active:scale-95 transition-all text-center overflow-hidden" style="height: 3.5rem" data-value="' + escapeHtml(opt) + '"><div class="fit-box w-full h-full"><span class="fit-target font-black text-base">' + escapeHtml(opt) + '</span></div></button>';
             }).join('');
 
             var self = this;
             this.dom.options.querySelectorAll('.ctx-option').forEach(function(btn) {
                 btn.onclick = function() { self._pickOption(btn, targetWord); };
+                var span = btn.querySelector('.fit-target');
+                if (span) app.fitter.fit(span);
             });
         }
 
@@ -274,12 +345,19 @@ class Context extends GameMode {
     }
 
     _buildCloze(sentence, word) {
-        if (!sentence || !word) return escapeHtml(sentence || '');
+        if (!sentence) return '';
+        // AI already put {{BLANK}} markers in the sentence — just replace them
+        if (sentence.indexOf('{{BLANK}}') !== -1) {
+            var blankHtml = '<span class="inline-block px-3 mx-0.5 bg-slate-400 dark:bg-slate-500 rounded" style="width: 5em; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; overflow: hidden;">&nbsp;</span>';
+            return escapeHtml(sentence).replace(/\{\{BLANK\}\}/g, blankHtml);
+        }
+        // Fallback: try regex match (for existing sentences without markers)
+        if (!word) return escapeHtml(sentence);
         var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         var regex = new RegExp('(' + escaped + ')', 'gi');
         var sentenceHtml = escapeHtml(sentence);
-        var wordHtml = escapeHtml(word);
-        return sentenceHtml.replace(regex, '<span class="inline-block px-2 mx-0.5 border-b-2 border-indigo-400 dark:border-indigo-500 bg-indigo-100 dark:bg-neutral-800 rounded text-indigo-600 dark:text-indigo-300 font-black min-w-[3em] text-center">______</span>');
+        var blankHtml = '<span class="inline-block px-3 mx-0.5 bg-slate-400 dark:bg-slate-500 rounded" style="width: 5em; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; overflow: hidden;">&nbsp;</span>';
+        return sentenceHtml.replace(regex, blankHtml);
     }
 
     _getDistractors(cardId, correctWord, aKey, count) {
@@ -306,19 +384,19 @@ class Context extends GameMode {
         if (this.answered) return;
         this.answered = true;
 
-        var chosen = btn.textContent.trim();
+        var chosen = btn.getAttribute('data-value') || btn.textContent.trim();
         var isCorrect = chosen === correctWord;
 
         // Highlight chosen button
         var allBtns = this.dom.options.querySelectorAll('.ctx-option');
-        allBtns.forEach(function(b) {
-            b.onclick = null;
-            b.classList.add('opacity-50');
-            if (b.textContent.trim() === correctWord) {
-                b.classList.remove('border-slate-200', 'dark:border-neutral-700', 'bg-white', 'dark:bg-neutral-800');
-                b.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-700', 'dark:text-emerald-300');
-            }
-        });
+            allBtns.forEach(function(b) {
+                b.onclick = null;
+                b.classList.add('opacity-50');
+                if (b.getAttribute('data-value') === correctWord) {
+                    b.classList.remove('border-slate-200', 'dark:border-neutral-700', 'bg-white', 'dark:bg-neutral-800');
+                    b.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30', 'text-emerald-700', 'dark:text-emerald-300');
+                }
+            });
 
         if (isCorrect) {
             btn.classList.remove('opacity-50');
@@ -328,16 +406,24 @@ class Context extends GameMode {
             app.celebration.play();
             this._completedLevels++;
 
-            if (this.dom.result) {
-                this.dom.result.classList.remove('hidden');
-                this.dom.result.innerHTML = '<div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-center"><p class="font-bold text-emerald-600 dark:text-emerald-400 text-sm">✓ Correct! +' + points + 'pts</p></div>';
-            }
-
-            // Show translation on correct answer
-            var s = this.sentences[this.currentLevel];
-            if (s && s.translation && this.dom.translationCard) {
-                this.dom.translationCard.classList.remove('hidden');
-                if (this.dom.translation) this.dom.translation.textContent = s.translation;
+            // Apply correct effect to question box — insert answer after blank, don't replace
+            var sentenceEl = this.dom.sentence;
+            if (sentenceEl) {
+                var blank = sentenceEl.querySelector('span');
+                if (blank) {
+                    // Hide the blank, insert the answer as a separate styled element
+                    blank.style.display = 'none';
+                    var answerSpan = document.createElement('span');
+                    answerSpan.className = 'inline-block px-2 mx-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded font-bold';
+                    answerSpan.textContent = correctWord;
+                    blank.parentNode.insertBefore(answerSpan, blank.nextSibling);
+                }
+                // Border matches correct answer choice — use the sentence card's parent
+                var card = this.dom.sentenceCard ? this.dom.sentenceCard.querySelector('div') : sentenceEl.parentElement;
+                if (card) {
+                    card.classList.add('border-emerald-500', 'dark:border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-900/30');
+                    card.classList.remove('border-slate-100', 'dark:border-neutral-800', 'bg-white', 'dark:bg-neutral-900');
+                }
             }
 
             // Mark dot green
@@ -350,19 +436,25 @@ class Context extends GameMode {
             btn.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30', 'text-rose-600', 'dark:text-rose-400');
             this.miss();
 
-            if (this.dom.result) {
-                this.dom.result.classList.remove('hidden');
-                this.dom.result.innerHTML = '<div class="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-center"><p class="font-bold text-rose-600 dark:text-rose-400 text-sm">The correct word is: <span class="underline">' + escapeHtml(correctWord) + '</span></p></div>';
+            // Apply wrong effect to question box — rose/red border
+            var sentenceEl2 = this.dom.sentence;
+            if (sentenceEl2) {
+                var card2 = this.dom.sentenceCard ? this.dom.sentenceCard.querySelector('div') : sentenceEl2.parentElement;
+                if (card2) {
+                    card2.classList.add('border-rose-500', 'dark:border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30');
+                    card2.classList.remove('border-slate-100', 'dark:border-neutral-800', 'bg-white', 'dark:bg-neutral-900');
+                }
             }
         }
 
         if (this.dom.nextBtn) {
             this.dom.nextBtn.classList.remove('hidden');
+            this.dom.nextBtn.className = 'px-6 py-2 rounded-xl text-xs font-bold bg-indigo-500 text-white active:scale-95 transition-all';
             var isLast = this.currentLevel >= this.sentences.length - 1;
             if (isLast) {
-                this.dom.nextBtn.textContent = '✓ Finish';
-                this.dom.nextBtn.classList.remove('bg-indigo-500');
-                this.dom.nextBtn.classList.add('bg-emerald-500');
+                // Go straight to finish — no "Got it" step
+                this._finish();
+                return;
             } else {
                 this.dom.nextBtn.textContent = 'Next Level →';
                 this.dom.nextBtn.classList.add('bg-indigo-500');
@@ -382,7 +474,6 @@ class Context extends GameMode {
     }
 
     _finish() {
-        if (this.dom.options) this.dom.options.classList.add('hidden');
         if (this.dom.nextBtn) this.dom.nextBtn.classList.add('hidden');
         if (this.dom.done) {
             var pct = this.sentences.length > 0 ? Math.round((this._completedLevels / this.sentences.length) * 100) : 0;
@@ -392,15 +483,11 @@ class Context extends GameMode {
             scoreLine.textContent = '✓ ' + this._completedLevels + '/' + this.sentences.length + ' correct (' + pct + '%)';
             this.dom.done.appendChild(scoreLine);
             var retryBtn = document.createElement('button');
-            retryBtn.className = 'px-4 py-1.5 rounded-xl text-[10px] font-bold bg-indigo-500 text-white active:scale-95 transition-all mr-2';
+            retryBtn.className = 'px-6 py-2 rounded-xl text-xs font-bold bg-indigo-500 text-white active:scale-95 transition-all';
             retryBtn.textContent = '↻ Try Again';
             retryBtn.onclick = this._generateAnew.bind(this);
             this.dom.done.appendChild(retryBtn);
-            var finishBtn = document.createElement('button');
-            finishBtn.className = 'px-4 py-1.5 rounded-xl text-[10px] font-bold bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 active:scale-95 transition-all';
-            finishBtn.textContent = 'Finish';
-            finishBtn.onclick = function() { app.goBack(); };
-            this.dom.done.appendChild(finishBtn);
+            this.dom.done.classList.remove('hidden');
             this.dom.done.classList.remove('hidden');
         }
     }

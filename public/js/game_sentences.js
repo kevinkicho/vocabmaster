@@ -16,11 +16,11 @@ class Sentences extends GameMode {
             <div class="flex flex-col landscape:flex-row h-full w-full landscape:gap-4 overflow-hidden">
                 <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col min-h-0">
                     <div id="sn-header" class="shrink-0"></div>
-                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 flex flex-col items-center p-4 landscape:p-3 text-center relative mb-2 landscape:mb-0 overflow-hidden min-h-0">
-                         <div class="flex-1 w-full flex items-center justify-center overflow-hidden relative min-h-0">
-                             <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-relaxed break-words"></p>
+                    <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 grid grid-rows-[7fr_3fr] mb-2 landscape:mb-0 overflow-hidden min-h-0">
+                         <div class="overflow-hidden px-4 py-3 flex items-center justify-center">
+                             <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-relaxed break-words text-center"></p>
                          </div>
-                         <div id="sn-bottom-disp" class="shrink-0 max-h-[30%] overflow-hidden w-full"></div>
+                         <div id="sn-bottom-disp" class="border-t-2 border-slate-300 dark:border-neutral-600 overflow-hidden px-4 py-2 flex items-center justify-center"></div>
                     </div>
                 </div>
                 <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
@@ -126,7 +126,6 @@ class Sentences extends GameMode {
         this.busy = false;
         this.answered = false;
         this._clearOverlays();
-        if (this.dom.text) this.dom.text.classList.remove('text-white', 'dark:text-white');
         const c = this.list[this.i];
         const p = app.store.prefs;
         const qKey = p.sentencesQ || 'ja';
@@ -198,7 +197,7 @@ class Sentences extends GameMode {
                 case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${escapeHtml(wordText)}</span>`; break;
                 case 'word_full': bottomText = escapeHtml(wordText); break;
             }
-            if(bottomText) bottomHtml = `<div class="mt-4 pt-4 border-t border-slate-100 dark:border-neutral-800 w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
+            if(bottomText) bottomHtml = `<div class="w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
         }
 
         if(this.dom.text) {

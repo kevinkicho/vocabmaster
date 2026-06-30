@@ -24,15 +24,12 @@ class Dictation extends GameMode {
                         <p id="dict-meaning" class="text-sm text-slate-400 dark:text-neutral-500"></p>
                     </div>
                     <div id="dict-play-area" class="w-full max-w-md mb-4">
-                        <button id="dict-play-btn" class="w-full py-3 rounded-2xl font-bold text-sm bg-indigo-500 text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
-                            <i class="ph-bold ph-speaker-high text-lg"></i>
-                            <span>Play Sentence</span>
-                        </button>
                         <p id="dict-attempts" class="text-center text-[10px] text-slate-400 mt-2"></p>
                     </div>
                     <div id="dict-input-area" class="w-full max-w-md hidden">
                         <textarea id="dict-input" rows="2" placeholder="Type what you heard..." class="w-full bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-neutral-200 outline-none focus:border-indigo-400 transition-colors resize-none placeholder:text-slate-300 dark:placeholder:text-neutral-600"></textarea>
                         <div class="flex gap-2 mt-2">
+                            <button id="dict-play-btn" class="py-3 px-3 rounded-2xl font-bold text-xs bg-indigo-500 text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1 whitespace-nowrap"><i class="ph-bold ph-speaker-high"></i> Play</button>
                             <button id="dict-check-btn" class="flex-1 py-3 rounded-2xl font-bold text-sm bg-emerald-500 text-white shadow-lg active:scale-95 transition-all">Check</button>
                             <button id="dict-reveal-btn" class="py-3 px-4 rounded-2xl font-bold text-xs bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 active:scale-95 transition-all whitespace-nowrap">Show Answer</button>
                         </div>
@@ -97,7 +94,9 @@ class Dictation extends GameMode {
         this.currentText = sentence || word;
 
         if (this.dom.word) this.dom.word.textContent = word;
-        if (this.dom.meaning) this.dom.meaning.textContent = c[aKey] || '';
+        // Sub-text: show vocab translation in the user's "I know..." language
+        var knownLang = app.store.prefs.presetSource || 'en';
+        if (this.dom.meaning) this.dom.meaning.textContent = c[knownLang] || '';
         if (this.dom.attempts) this.dom.attempts.textContent = '';
 
         if (this.dom.inputArea) this.dom.inputArea.classList.add('hidden');
@@ -179,7 +178,6 @@ class Dictation extends GameMode {
         this.dom.input.disabled = true;
         if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
         if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
-        if (this.dom.attempts) this.dom.attempts.textContent = 'Answer revealed';
 
         var expected = this.currentText;
         var userText = this.dom.input.value.trim();
@@ -252,7 +250,6 @@ class Dictation extends GameMode {
                 + '</div>';
         } else {
             this.dom.result.innerHTML = '<div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">'
-                + '<p class="font-black text-rose-600 dark:text-rose-400 text-sm mb-2">Not quite — here\'s what was said:</p>'
                 + '<p class="text-sm text-slate-600 dark:text-neutral-300 leading-relaxed select-text">' + expectedHtml + '</p>'
                 + '</div>';
         }

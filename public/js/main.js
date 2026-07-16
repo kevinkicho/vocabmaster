@@ -64,7 +64,7 @@ class App {
         initService('fitter', () => new TextFitter(), false);
         initService('celebration', () => new CelebrationService(), false);
         initService('analytics', () => new AnalyticsService(), false);
-        initService('memory', () => new MemoryService(), false);
+        initService('memory', () => new window.MemoryService(), false);
         initService('llm', () => new LLMService(), true);
         initService('presets', () => new PresetManager(), false);
 

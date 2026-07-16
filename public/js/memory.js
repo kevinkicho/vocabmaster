@@ -31,7 +31,8 @@ var MIGRATE_CONFIG = Object.freeze({
 
 /**
  * Feature flag: MEMORY_ENGINE_ENABLED default false.
- * Reads window first, then optional prefs.memoryEngineEnabled.
+ * Prefers explicit window.MEMORY_ENGINE_ENABLED when set (boolean).
+ * Else optional prefs.memoryEngineEnabled. Does not force-write window.
  * @returns {boolean}
  */
 function isMemoryEngineEnabled() {
@@ -91,15 +92,14 @@ function createNewMemoryCard(wordId, nowMs) {
 /**
  * Bootstrap a card from analytics word stats (c/w/last).
  * Pure: no I/O. Used by maybeMigrate and unit tests.
+ * Stagger is id-based only: wordId % MIGRATE_CONFIG.staggerDays (stable across re-runs).
  *
  * @param {number|string} wordId
  * @param {{c?:number,w?:number,last?:number}} stats
  * @param {number} now
- * @param {number} [staggerIndex=0]
- * @param {number} [staggerTotal]
  * @returns {object}
  */
-function bootstrapCardFromStats(wordId, stats, now, staggerIndex, staggerTotal) {
+function bootstrapCardFromStats(wordId, stats, now) {
     var c = (stats && stats.c) || 0;
     var w = (stats && stats.w) || 0;
     var last = (stats && stats.last) || 0;
@@ -204,12 +204,10 @@ class MemoryService {
         this._uid = null;
         this._flushTimer = null;
         this._flushing = false;
+        this._metaDirty = false;
         this._bindLifecycle();
-
-        // Default flag if never set
-        if (typeof window !== 'undefined' && typeof window.MEMORY_ENGINE_ENABLED === 'undefined') {
-            window.MEMORY_ENGINE_ENABLED = false;
-        }
+        // Flag default is false via isMemoryEngineEnabled() — do not force-write
+        // window.MEMORY_ENGINE_ENABLED so prefs.memoryEngineEnabled remains usable.
     }
 
     // --- Feature flag (read-only helper for callers) ---
@@ -519,7 +517,7 @@ class MemoryService {
             var existing = this.cards.get(row.wordId);
             // Never overwrite live FSRS cards
             if (existing && existing.source === 'fsrs') continue;
-            var card = bootstrapCardFromStats(row.wordId, row, t, i, rows.length);
+            var card = bootstrapCardFromStats(row.wordId, row, t);
             this.cards.set(row.wordId, card);
             this._markDirty(row.wordId);
             n++;
@@ -528,7 +526,9 @@ class MemoryService {
     }
 
     /**
-     * Staggered migration from users/{uid}/words. Offline / no stats → no-op, leave pending.
+     * Staggered migration from users/{uid}/words. Offline / read fail → leave pending.
+     * Uses direct RTDB read (not analytics.getWordStats, which swallows errors as null).
+     * Only mark done with 0 cards when the snapshot succeeds and history is empty.
      */
     async maybeMigrate() {
         if (this.meta.migrationStatus === 'done') return { status: 'done', migrated: 0 };
@@ -545,26 +545,25 @@ class MemoryService {
 
         var wordStats = null;
         try {
-            if (typeof app !== 'undefined' && app && app.analytics &&
-                typeof app.analytics.getWordStats === 'function') {
-                wordStats = await app.analytics.getWordStats();
-            } else {
-                var snap = await db.ref('users/' + uid + '/words').once('value');
-                wordStats = snap.val();
-            }
+            // Direct RTDB: errors throw into catch → leave pending (do not treat as empty history).
+            // analytics.getWordStats() returns null on failure and would falsely mark done.
+            var snap = await db.ref('users/' + uid + '/words').once('value');
+            wordStats = snap.val();
         } catch (e) {
-            L('[Memory] maybeMigrate getWordStats failed', e);
+            L('[Memory] maybeMigrate words read failed', e);
             this.meta.migrationStatus = 'pending';
             this.meta.lastError = String(e && e.message ? e.message : e);
             this._persistLocalCache();
             return { status: 'pending', migrated: 0, reason: 'stats-failed' };
         }
 
-        if (!wordStats || typeof wordStats !== 'object') {
-            // No history: mark done with zero cards
+        // Successful read, no history (null or non-object empty)
+        if (wordStats == null || typeof wordStats !== 'object' ||
+            Object.keys(wordStats).length === 0) {
             this.meta.migrationStatus = 'done';
             this.meta.migratedAt = Date.now();
             this.meta.migratedCards = 0;
+            this.meta.lastError = null;
             this._markMetaDirty();
             await this.flush();
             return { status: 'done', migrated: 0 };
@@ -756,8 +755,11 @@ class MemoryService {
 
     _persistDirtySet() {
         try {
-            var arr = Array.from(this.dirty);
-            localStorage.setItem(MEMORY_DIRTY_KEY, JSON.stringify(arr));
+            var payload = {
+                uid: this._resolveUid() || null,
+                ids: Array.from(this.dirty)
+            };
+            localStorage.setItem(MEMORY_DIRTY_KEY, JSON.stringify(payload));
         } catch (e) { /* ignore */ }
     }
 
@@ -768,27 +770,43 @@ class MemoryService {
                 var parsed = JSON.parse(raw);
                 if (parsed && typeof parsed === 'object') {
                     if (uid && parsed.uid && parsed.uid !== uid) {
-                        // Different user — drop cache
+                        // Different user — drop cache + dirty for previous owner
                         this.cards.clear();
                         this.dirty.clear();
-                    } else {
-                        if (parsed.meta) this.meta = Object.assign({}, this.meta, parsed.meta);
-                        if (parsed.cards && typeof parsed.cards === 'object') {
-                            var keys = Object.keys(parsed.cards);
-                            for (var i = 0; i < keys.length; i++) {
-                                var card = this._normalizeCard(parsed.cards[keys[i]], keys[i]);
-                                if (card) this.cards.set(card.wordId, card);
-                            }
+                        try {
+                            localStorage.removeItem(MEMORY_CACHE_KEY);
+                            localStorage.removeItem(MEMORY_DIRTY_KEY);
+                        } catch (_) { /* ignore */ }
+                        return;
+                    }
+                    if (parsed.meta) this.meta = Object.assign({}, this.meta, parsed.meta);
+                    if (parsed.cards && typeof parsed.cards === 'object') {
+                        var keys = Object.keys(parsed.cards);
+                        for (var i = 0; i < keys.length; i++) {
+                            var card = this._normalizeCard(parsed.cards[keys[i]], keys[i]);
+                            if (card) this.cards.set(card.wordId, card);
                         }
                     }
                 }
             }
             var dirtyRaw = localStorage.getItem(MEMORY_DIRTY_KEY);
             if (dirtyRaw) {
-                var dirtyArr = JSON.parse(dirtyRaw);
-                if (Array.isArray(dirtyArr)) {
-                    for (var j = 0; j < dirtyArr.length; j++) {
-                        var did = Number(dirtyArr[j]);
+                var dirtyParsed = JSON.parse(dirtyRaw);
+                var dirtyIds = null;
+                if (Array.isArray(dirtyParsed)) {
+                    // Legacy bare array
+                    dirtyIds = dirtyParsed;
+                } else if (dirtyParsed && typeof dirtyParsed === 'object') {
+                    if (uid && dirtyParsed.uid && dirtyParsed.uid !== uid) {
+                        try { localStorage.removeItem(MEMORY_DIRTY_KEY); } catch (_) { /* ignore */ }
+                        dirtyIds = null;
+                    } else {
+                        dirtyIds = Array.isArray(dirtyParsed.ids) ? dirtyParsed.ids : null;
+                    }
+                }
+                if (dirtyIds) {
+                    for (var j = 0; j < dirtyIds.length; j++) {
+                        var did = Number(dirtyIds[j]);
                         if (Number.isFinite(did)) this.dirty.add(did);
                     }
                 }
@@ -852,7 +870,9 @@ class MemoryService {
     }
 
     /**
-     * Orphan-hold recovery: if cards have sessionHold and no active plan for today, finalize.
+     * Orphan-hold recovery: finalize sessionHold cards only when we positively know
+     * today's plan is not active. Fail closed when offline or status read fails —
+     * leave holds for Continue / later online load (design §1.6).
      */
     async _maybeRecoverOrphanHolds() {
         var hasHold = false;
@@ -863,19 +883,25 @@ class MemoryService {
 
         if (this._isDailySessionActive()) return;
 
-        // Check RTDB dailySessions/{today} if available
-        var activePlan = false;
+        // Fail closed: cannot prove plan is inactive offline or without db
         var uid = this._resolveUid();
-        if (uid && typeof db !== 'undefined' && db && this._isOnline()) {
-            try {
-                var today = this._getTodayKey();
-                var snap = await db.ref('users/' + uid + '/dailySessions/' + today + '/status').once('value');
-                if (snap.val() === 'active') activePlan = true;
-            } catch (e) {
-                L('[Memory] orphan-hold dailySession check failed', e);
-            }
+        if (!uid || typeof db === 'undefined' || !db || !this._isOnline()) {
+            L('[Memory] orphan-hold recovery deferred (offline/unknown plan status)');
+            return;
         }
-        if (activePlan) return;
+
+        var status = undefined;
+        try {
+            var today = this._getTodayKey();
+            var snap = await db.ref('users/' + uid + '/dailySessions/' + today + '/status').once('value');
+            status = snap.val(); // null if no session row; 'active'|'completed'|'abandoned'
+        } catch (e) {
+            L('[Memory] orphan-hold dailySession check failed; leaving holds', e);
+            return;
+        }
+
+        // Keep holds while plan is still active (pause leaves status active)
+        if (status === 'active') return;
 
         var n = this.finalizeSessionHolds(Date.now());
         if (n > 0) {
@@ -913,6 +939,7 @@ class MemoryService {
 }
 
 // Multi-script exports (explicit window — AGENTS.md / design §3.6)
+// Do not force-write MEMORY_ENGINE_ENABLED here; default false via isMemoryEngineEnabled().
 if (typeof window !== 'undefined') {
     window.MemoryService = MemoryService;
     window.MIGRATE_CONFIG = MIGRATE_CONFIG;
@@ -920,7 +947,4 @@ if (typeof window !== 'undefined') {
     window.createNewMemoryCard = createNewMemoryCard;
     window.selectTopWordStatsForMigrate = selectTopWordStatsForMigrate;
     window.isMemoryEngineEnabled = isMemoryEngineEnabled;
-    if (typeof window.MEMORY_ENGINE_ENABLED === 'undefined') {
-        window.MEMORY_ENGINE_ENABLED = false;
-    }
 }

@@ -71,7 +71,10 @@ beforeAll(() => {
 
 beforeEach(() => {
     globalThis.localStorage = makeLocalStorage();
-    globalThis.window.MEMORY_ENGINE_ENABLED = false;
+    delete globalThis.window.MEMORY_ENGINE_ENABLED;
+    globalThis.app = undefined;
+    globalThis.auth = undefined;
+    globalThis.db = undefined;
 });
 
 describe('MIGRATE_CONFIG', () => {
@@ -150,15 +153,23 @@ describe('selectTopWordStatsForMigrate', () => {
 });
 
 describe('isMemoryEngineEnabled', () => {
-    it('defaults false', () => {
+    it('defaults false when window flag unset', () => {
+        delete globalThis.window.MEMORY_ENGINE_ENABLED;
+        expect(isMemoryEngineEnabled()).toBe(false);
+    });
+
+    it('reads window flag when boolean', () => {
+        globalThis.window.MEMORY_ENGINE_ENABLED = true;
+        expect(isMemoryEngineEnabled()).toBe(true);
         globalThis.window.MEMORY_ENGINE_ENABLED = false;
         expect(isMemoryEngineEnabled()).toBe(false);
     });
 
-    it('reads window flag', () => {
-        globalThis.window.MEMORY_ENGINE_ENABLED = true;
+    it('falls back to prefs when window flag unset', () => {
+        delete globalThis.window.MEMORY_ENGINE_ENABLED;
+        globalThis.app = { store: { prefs: { memoryEngineEnabled: true } } };
         expect(isMemoryEngineEnabled()).toBe(true);
-        globalThis.window.MEMORY_ENGINE_ENABLED = false;
+        globalThis.app = undefined;
     });
 });
 
@@ -260,7 +271,55 @@ describe('MemoryService core', () => {
         const result = await mem.maybeMigrate();
         expect(result.status).toBe('pending');
         expect(result.reason).toBe('offline');
+        expect(mem.meta.migrationStatus).toBe('pending');
         mem._isOnline = orig;
+    });
+
+    it('maybeMigrate leaves pending when words read throws', async () => {
+        globalThis.auth = { currentUser: { uid: 'u1' } };
+        globalThis.db = {
+            ref: () => ({
+                once: async () => { throw new Error('network'); }
+            })
+        };
+        mem._uid = 'u1';
+        mem._isOnline = () => true;
+        const result = await mem.maybeMigrate();
+        expect(result.status).toBe('pending');
+        expect(result.reason).toBe('stats-failed');
+        expect(mem.meta.migrationStatus).toBe('pending');
+    });
+
+    it('maybeMigrate marks done only on successful empty words snapshot', async () => {
+        globalThis.auth = { currentUser: { uid: 'u1' } };
+        globalThis.db = {
+            ref: (path) => ({
+                once: async () => ({ val: () => null }),
+                update: async () => {},
+                set: async () => {}
+            })
+        };
+        // flush/meta writes also use db.ref().update
+        globalThis.db.ref = function (path) {
+            return {
+                once: async () => ({ val: () => null }),
+                update: async () => {},
+                set: async () => {}
+            };
+        };
+        // Multi-path update: db.ref().update
+        const rootRef = {
+            update: async () => {},
+            once: async () => ({ val: () => null }),
+            set: async () => {}
+        };
+        globalThis.db.ref = function () { return rootRef; };
+        mem._uid = 'u1';
+        mem._isOnline = () => true;
+        const result = await mem.maybeMigrate();
+        expect(result.status).toBe('done');
+        expect(result.migrated).toBe(0);
+        expect(mem.meta.migrationStatus).toBe('done');
     });
 
     it('countDue excludes holds', () => {
@@ -310,5 +369,103 @@ describe('MemoryService core', () => {
         expect(good.due).toBeGreaterThan(T0);
 
         globalThis.app = undefined;
+    });
+
+    it('orphan-hold recovery defers offline (does not finalize)', async () => {
+        const held = mem.ensureCard(40);
+        held.sessionHold = true;
+        held.sessionHoldAt = T0;
+        held.sessionHoldRating = 1;
+        held.due = T0 - 1000;
+        held.state = 'review';
+        held.introducedAt = T0;
+        mem.cards.set(40, held);
+
+        mem._isOnline = () => false;
+        mem._uid = 'u1';
+        await mem._maybeRecoverOrphanHolds();
+        expect(mem.getCard(40).sessionHold).toBe(true);
+    });
+
+    it('orphan-hold recovery defers when status read fails', async () => {
+        const held = mem.ensureCard(41);
+        held.sessionHold = true;
+        held.due = T0 - 1000;
+        held.state = 'review';
+        held.introducedAt = T0;
+        mem.cards.set(41, held);
+
+        mem._isOnline = () => true;
+        mem._uid = 'u1';
+        globalThis.db = {
+            ref: () => ({
+                once: async () => { throw new Error('rtdb down'); }
+            })
+        };
+        await mem._maybeRecoverOrphanHolds();
+        expect(mem.getCard(41).sessionHold).toBe(true);
+    });
+
+    it('orphan-hold recovery keeps holds when plan status is active', async () => {
+        const held = mem.ensureCard(42);
+        held.sessionHold = true;
+        held.due = T0 - 1000;
+        held.state = 'review';
+        held.introducedAt = T0;
+        mem.cards.set(42, held);
+
+        mem._isOnline = () => true;
+        mem._uid = 'u1';
+        globalThis.db = {
+            ref: () => ({
+                once: async () => ({ val: () => 'active' })
+            })
+        };
+        await mem._maybeRecoverOrphanHolds();
+        expect(mem.getCard(42).sessionHold).toBe(true);
+    });
+
+    it('orphan-hold recovery finalizes when status known non-active', async () => {
+        const held = mem.ensureCard(43);
+        held.sessionHold = true;
+        held.due = T0 - 1000;
+        held.state = 'review';
+        held.introducedAt = T0;
+        mem.cards.set(43, held);
+
+        mem._isOnline = () => true;
+        mem._uid = 'u1';
+        globalThis.db = {
+            ref: () => ({
+                once: async () => ({ val: () => 'completed' }),
+                update: async () => {}
+            })
+        };
+        // flush uses db.ref().update
+        globalThis.db.ref = function () {
+            return {
+                once: async () => ({ val: () => 'completed' }),
+                update: async () => {}
+            };
+        };
+        await mem._maybeRecoverOrphanHolds();
+        expect(mem.getCard(43).sessionHold).toBeUndefined();
+    });
+
+    it('uid mismatch clears dirty localStorage', () => {
+        globalThis.localStorage.setItem('vm_memory_cache_v1', JSON.stringify({
+            uid: 'old-user',
+            meta: { migrationStatus: 'done' },
+            cards: { 1: { wordId: 1, state: 'review', due: T0, stability: 1, difficulty: 5 } }
+        }));
+        globalThis.localStorage.setItem('vm_memory_dirty_v1', JSON.stringify({
+            uid: 'old-user',
+            ids: [1, 2, 3]
+        }));
+        mem._recoverLocalCache('new-user');
+        expect(mem.cards.size).toBe(0);
+        expect(mem.dirty.size).toBe(0);
+        expect(globalThis.localStorage.getItem('vm_memory_cache_v1')).toBeNull();
+        expect(globalThis.localStorage.getItem('vm_memory_dirty_v1')).toBeNull();
     });
 });

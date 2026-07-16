@@ -236,6 +236,25 @@ describe('buildQuizOnlyPlan', () => {
         expect(composed.steps.some((s) => s.type === 'ai')).toBe(false);
         expect(composed.defaults.includeDictation).toBe(false);
     });
+
+    it('quizOnly wins over intensity rebuild + includeAiBlock/includeDictation flags', () => {
+        const svc = new DailySessionService();
+        globalThis.app = { store: { prefs: {} }, data: null, memory: null };
+        const composed = svc.compose({
+            quizOnly: true,
+            intensity: 'cram',
+            includeAiBlock: true,
+            includeDictation: true,
+            newItems: vocab([1, 2]),
+            due: vocab([10, 11, 12])
+        });
+        expect(composed.defaults.includeAiBlock).toBe(false);
+        expect(composed.defaults.includeDictation).toBe(false);
+        expect(composed.steps.some((s) => s.type === 'ai')).toBe(false);
+        expect(composed.steps.some((s) => s.mode === 'dictation')).toBe(false);
+        // still multi-mode drills when no wordIds (quizOnly only strips AI/dictation flags)
+        expect(composed.intensity).toBe('cram');
+    });
 });
 
 describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
@@ -816,6 +835,92 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         game._showStoryNavFooter();
         expect(svc.status).toBe('completed');
         expect(app.memory.reviews.length).toBe(0);
+    });
+
+    it('clears _sessionStorySeedWordIds on pause / abandon / complete (not only finishStep)', async () => {
+        function mockAiGame() {
+            return {
+                key: 'story',
+                list: [{ id: 1 }],
+                i: 0,
+                root: { firstChild: null, querySelector: () => null, insertBefore() {}, appendChild() {} },
+                score() {},
+                miss() {},
+                destroy() {},
+                _showStoryNavFooter() {},
+                _loadNext() {},
+                _nextStory() {}
+            };
+        }
+
+        // pause
+        {
+            const svc = new DailySessionService();
+            svc.plan = {
+                steps: [{ type: 'ai', mode: 'story', wordIds: [1, 2] }, { type: 'complete' }],
+                intensity: 'casual',
+                defaults: getSessionDefaults({})
+            };
+            svc.defaults = getSessionDefaults({});
+            svc.status = 'active';
+            svc.cursor = 0;
+            app.data = mockData([1, 2]);
+            app.memory = mockMemory();
+            app.game = mockAiGame();
+            app._sessionStorySeedWordIds = [1, 2];
+            svc.attachController(app.game, { wordIds: [1, 2], mode: 'story', type: 'ai' });
+
+            await svc.pause();
+            expect(app._sessionStorySeedWordIds).toBeNull();
+            expect(svc.status).toBe('active');
+            expect(svc.isPaused).toBe(true);
+        }
+
+        // abandon
+        {
+            const svc = new DailySessionService();
+            svc.plan = {
+                steps: [{ type: 'ai', mode: 'story', wordIds: [3] }, { type: 'complete' }],
+                intensity: 'casual',
+                defaults: getSessionDefaults({})
+            };
+            svc.defaults = getSessionDefaults({});
+            svc.status = 'active';
+            svc.cursor = 0;
+            app.data = mockData([3]);
+            app.memory = mockMemory();
+            app.game = mockAiGame();
+            app._sessionStorySeedWordIds = [3];
+            svc.attachController(app.game, { wordIds: [3], mode: 'story', type: 'ai' });
+
+            await svc.abandon();
+            expect(app._sessionStorySeedWordIds).toBeNull();
+            expect(svc.status).toBe('abandoned');
+        }
+
+        // complete (direct, not via finishStep)
+        {
+            const svc = new DailySessionService();
+            svc.plan = {
+                steps: [{ type: 'ai', mode: 'story', wordIds: [4] }, { type: 'complete' }],
+                intensity: 'casual',
+                defaults: getSessionDefaults({})
+            };
+            svc.defaults = getSessionDefaults({});
+            svc.status = 'active';
+            svc.cursor = 0;
+            app.data = mockData([4]);
+            app.memory = mockMemory();
+            app.game = mockAiGame();
+            app._sessionStorySeedWordIds = [4];
+            // Avoid goHome side effects from complete()
+            app.goHome = () => {};
+            svc.attachController(app.game, { wordIds: [4], mode: 'story', type: 'ai' });
+
+            await svc.complete();
+            expect(app._sessionStorySeedWordIds).toBeNull();
+            expect(svc.status).toBe('completed');
+        }
     });
 });
 

@@ -297,22 +297,24 @@ class DailySessionService {
 
         if (options.includeAiBlock != null) d.includeAiBlock = !!options.includeAiBlock;
         if (options.includeDictation != null) d.includeDictation = !!options.includeDictation;
-        if (options.quizOnly) {
-            // Quiz-only plans: no Flash/TF/Dictation/AI (buildQuizOnlyPlan or stripped flags)
-            d.includeAiBlock = false;
-            d.includeDictation = false;
-        }
 
         var intensity = (prefs && prefs.sessionIntensity) === 'cram' ? 'cram' : 'casual';
         if (options.intensity === 'cram' || options.intensity === 'casual') {
             intensity = options.intensity;
             d = Object.assign({}, getSessionDefaults({ sessionIntensity: intensity }), options.defaults || {});
-            if (options.quizOnly) {
-                d.includeAiBlock = false;
-                d.includeDictation = false;
-            }
+            // Re-apply explicit overrides after intensity rebuild (quizOnly applied last below)
             if (options.includeAiBlock != null) d.includeAiBlock = !!options.includeAiBlock;
             if (options.includeDictation != null) d.includeDictation = !!options.includeDictation;
+            if (options.defaults) {
+                if (options.defaults.includeAiBlock != null) d.includeAiBlock = !!options.defaults.includeAiBlock;
+                if (options.defaults.includeDictation != null) d.includeDictation = !!options.defaults.includeDictation;
+            }
+        }
+
+        // quizOnly always wins last — cannot re-enable AI/dictation via intensity or flags
+        if (options.quizOnly) {
+            d.includeAiBlock = false;
+            d.includeDictation = false;
         }
 
         // Prebuilt steps win
@@ -970,9 +972,8 @@ class DailySessionService {
         this._ownsMemoryReviews = false;
         this._step = null;
         // Clear Story seed so free-play Story does not inherit session seeds
-        try {
-            if (typeof app !== 'undefined' && app) app._sessionStorySeedWordIds = null;
-        } catch (_) { /* ignore */ }
+        // (also cleared on pause/abandon/complete — see _clearSessionStorySeeds)
+        this._clearSessionStorySeeds();
         this.cursor++;
         this._updatedAt = Date.now();
         this._persistPlan(); // fire-and-forget ok
@@ -990,6 +991,17 @@ class DailySessionService {
 
         this._finishing = false;
         this._launchStepAtCursor();
+    }
+
+    /**
+     * Drop global Story seeds so free-play Story cannot inherit Daily Session seeds
+     * after leave mid-AI (pause), abandon, complete, or normal step finish.
+     * Continue of a paused AI step re-sets seeds in _startAiStep.
+     */
+    _clearSessionStorySeeds() {
+        try {
+            if (typeof app !== 'undefined' && app) app._sessionStorySeedWordIds = null;
+        } catch (_) { /* ignore */ }
     }
 
     /**
@@ -1011,6 +1023,8 @@ class DailySessionService {
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
+        // Mid-AI Home: do not leave global seeds for free-play Story (continue re-seeds)
+        this._clearSessionStorySeeds();
         try {
             if (typeof app !== 'undefined' && app && app.data) {
                 app.data.endReviewSession();
@@ -1043,6 +1057,7 @@ class DailySessionService {
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
+        this._clearSessionStorySeeds();
 
         try {
             if (typeof app !== 'undefined' && app && app.data) {
@@ -1094,6 +1109,7 @@ class DailySessionService {
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
+        this._clearSessionStorySeeds();
 
         try {
             if (typeof app !== 'undefined' && app && app.data) {

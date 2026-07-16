@@ -113,7 +113,7 @@ If `load()` returns 0:
 
 ### 3.3 Tag-based filtering
 
-The home screen has a **Tag Filter** section with 24 clickable tag chips (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare). Selecting a tag filters `app.data.list` client-side via `getFilteredList()`. The filter persists in localStorage and works alongside the existing level filter (both are ANDed). All game modes automatically respect the filtered list since they call `getFilteredList()` in their constructor.
+The home screen has a **Tag Filter** section with 24 clickable tag chips (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare). Selecting a tag filters `app.data.list` client-side via `getFilteredList()`. The filter persists in localStorage and works alongside the existing level filter (both are ANDed). Game modes get their list via `assignGameList()` (`game_core.js`): when `app.data._reviewList` is set (Smart Review / Daily Session), that scoped list is used; otherwise `getFilteredList()`. Settings and tag/level handlers also call `assignGameList` so they do not expand past a live review session.
 
 ### 3.4 Why no mock data
 

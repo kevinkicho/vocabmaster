@@ -557,13 +557,17 @@ class App {
     _buildTodayCardHtml(state) {
         if (!state || !state.enabled) return '';
 
+        // sessionDue/sessionNew already capped; both 0 ⇒ compose/start would empty-plan
+        var nothingToCompose = state.sessionDue === 0 && state.sessionNew === 0;
+
         var countsLine = state.sessionDue + ' due · ' + state.sessionNew + ' new · ~' +
             state.estimatedMinutes + ' min';
         var backlogLine = state.backlog > 0
             ? '<p class="text-[11px] text-indigo-100 mt-1">+' + state.backlog + ' due later</p>'
             : '';
-        var emptyHint = (state.sessionDue === 0 && state.sessionNew === 0 && !state.canContinue)
-            ? '<p class="text-[11px] text-indigo-100 mt-1">Nothing due right now — start to learn new words, or practice freely below.</p>'
+        // Empty queue: do not invite Start (start() cannot succeed with same inputs)
+        var emptyHint = (nothingToCompose && !state.canContinue)
+            ? '<p class="text-[11px] text-indigo-100 mt-1">All caught up — practice freely below, or check back later.</p>'
             : '';
 
         var progressLine = '';
@@ -573,10 +577,23 @@ class App {
                 stepNum + ' of ' + state.progress.stepsTotal + '</p>';
         }
 
-        var actions = state.canContinue
-            ? `<button type="button" onclick="app.continueTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Continue</button>
-               <button type="button" onclick="app.startTodaySession(true)" class="w-full py-2 rounded-2xl text-[11px] font-bold text-white border border-white/40 active:scale-95 transition-transform">Start new session</button>`
-            : `<button type="button" onclick="app.startTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Start session</button>`;
+        var actions = '';
+        if (state.canContinue) {
+            // Resume existing plan even if current due/new caps are 0
+            actions = `<button type="button" onclick="app.continueTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Continue</button>`;
+            // Hide force-Start when a fresh compose would also be empty
+            if (!nothingToCompose) {
+                actions += `
+               <button type="button" onclick="app.startTodaySession(true)" class="w-full py-2 rounded-2xl text-[11px] font-bold text-white border border-white/40 active:scale-95 transition-transform">Start new session</button>`;
+            }
+        } else if (!nothingToCompose) {
+            actions = `<button type="button" onclick="app.startTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Start session</button>`;
+        }
+        // else: empty queue, no resumable plan — no Start CTA (would empty-plan)
+
+        var actionsBlock = actions
+            ? `<div class="flex flex-col gap-2 mt-1">${actions}</div>`
+            : '';
 
         return `
             <div id="today-card" class="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] p-6 sm:p-8 shadow-lg border border-white/20 w-full shrink-0 relative overflow-hidden">
@@ -589,9 +606,7 @@ class App {
                     ${emptyHint}
                     ${progressLine}
                     <p class="text-[10px] text-indigo-100 leading-relaxed">Your spaced repetition queue for this list — due reviews first, then new words.</p>
-                    <div class="flex flex-col gap-2 mt-1">
-                        ${actions}
-                    </div>
+                    ${actionsBlock}
                 </div>
                 <div class="text-8xl opacity-10 absolute -right-4 -bottom-4 select-none pointer-events-none">📅</div>
             </div>`;

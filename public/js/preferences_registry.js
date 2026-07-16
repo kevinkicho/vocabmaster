@@ -96,6 +96,8 @@ const PREFERENCE_SCHEMA = [
   { key: 'chatLevel',         type: 'select', default: 'B1',     domId: null,                       section: 'chat', label: 'Chat Level' },
   { key: 'chatAutoPlay',      type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Chat Auto-play TTS' },
   { key: 'chatLang',          type: 'select', default: 'ja',     domId: null,                       section: 'chat', label: 'Chat Language' },
+  { key: 'chatFabEnabled',    type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Show AI tutor FAB' },
+  { key: 'chatFabBilingual',  type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'FAB tutor bilingual' },
 
   // ===== LEVEL FILTER (no DOM binding) =====
   { key: 'levelFilter',       type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Level Filter' },

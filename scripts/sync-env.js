@@ -1,24 +1,29 @@
 /* scripts/sync-env.js — Generates ollama_config.js from .env
  * Run: node scripts/sync-env.js
- * This ensures API keys stay in .env (gitignored) and the
- * runtime config is generated from it.
+ *
+ * SECURITY: Never emit API keys or bearer secrets into public/ or APK assets.
+ * Allowed: OLLAMA_ENDPOINT, OLLAMA_USE_CLOUD, OLLAMA_PROXY_URL, OLLAMA_MODEL
+ * Forbidden: OLLAMA_API_KEY, ZEN_API_KEY, any secret token
  */
 const fs = require('fs');
 const path = require('path');
 
 const envPath = path.join(__dirname, '..', '.env');
 const configPath = path.join(__dirname, '..', 'public', 'js', 'ollama_config.js');
+const DEFAULT_PROXY = 'https://ollama-proxy-1020976660084.us-central1.run.app';
 
-// Parse .env
+const FORBIDDEN_KEYS = [
+  'OLLAMA_API_KEY',
+  'ZEN_API_KEY',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+];
+
 const env = {};
 if (!fs.existsSync(envPath)) {
-  console.warn('⚠ .env not found at', envPath, '— using defaults only (no API keys)');
+  console.warn('⚠ .env not found at', envPath, '— using defaults only (no secrets)');
 } else {
-  const stat = fs.statSync(envPath);
-  const mode = stat.mode & 0o777;
-  if (mode & 0o004) {
-    console.warn('⚠ .env is world-readable (mode', mode.toString(8), '). Run: chmod 600 .env');
-  }
   const raw = fs.readFileSync(envPath, 'utf8');
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
@@ -37,28 +42,90 @@ if (!fs.existsSync(envPath)) {
 const lines = [
   '/* js/ollama_config.js — Auto-generated from .env. Do not edit by hand.',
   ' * Edit .env at project root instead (gitignored).',
+  ' * SECRETS ARE NEVER WRITTEN HERE — OLLAMA_API_KEY stays server/CI only.',
   ' */',
-  'window.OLLAMA_ENDPOINT = "http://127.0.0.1:11434";',
-  'window.OLLAMA_USE_CLOUD = false;',
+  'window.OLLAMA_ENDPOINT = ' + JSON.stringify(env.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434') + ';',
 ];
 
-if (env.OLLAMA_API_KEY) {
-  lines.push('');
-  lines.push('// Ollama Cloud API');
-  lines.push(`window.OLLAMA_API_KEY = ${JSON.stringify(env.OLLAMA_API_KEY)};`);
-  lines.push(`window.OLLAMA_CLOUD_ENDPOINT = ${JSON.stringify(env.OLLAMA_CLOUD_ENDPOINT || 'https://api.ollama.com')};`);
-  lines.push('window.OLLAMA_USE_CLOUD = true;');
+const useCloud =
+  env.OLLAMA_USE_CLOUD === 'true' ||
+  env.OLLAMA_USE_CLOUD === '1' ||
+  (!env.OLLAMA_USE_CLOUD && !!env.OLLAMA_PROXY_URL);
+
+lines.push('window.OLLAMA_USE_CLOUD = ' + (useCloud ? 'true' : 'false') + ';');
+lines.push(
+  'window.OLLAMA_PROXY_URL = ' +
+    JSON.stringify(env.OLLAMA_PROXY_URL || DEFAULT_PROXY) +
+    ';'
+);
+
+if (env.OLLAMA_MODEL) {
+  lines.push('window.OLLAMA_MODEL = ' + JSON.stringify(env.OLLAMA_MODEL) + ';');
 }
 
-if (env.ZEN_API_KEY || env.ZEN_ENDPOINT) {
-  lines.push('');
-  lines.push('// OpenCode Zen backup provider');
-  if (env.ZEN_API_KEY) lines.push(`window.ZEN_API_KEY = ${JSON.stringify(env.ZEN_API_KEY)};`);
-  lines.push(`window.ZEN_ENDPOINT = ${JSON.stringify(env.ZEN_ENDPOINT || 'https://opencode.ai/zen/go/v1/chat/completions')};`);
-  lines.push(`window.ZEN_MODEL = ${JSON.stringify(env.ZEN_MODEL || 'deepseek-v4-flash-free')};`);
+// Explicitly do not emit forbidden keys (even if present in .env)
+for (const k of FORBIDDEN_KEYS) {
+  if (env[k]) {
+    console.log('ℹ ' + k + ' present in .env — kept server-side only (not written to public/)');
+  }
 }
 
 lines.push('');
-fs.writeFileSync(configPath, lines.join('\n'));
-fs.chmodSync(configPath, 0o600);
+const out = lines.join('\n');
+
+// Safety scan
+for (const k of FORBIDDEN_KEYS) {
+  if (out.includes(k) && out.includes('window.' + k)) {
+    console.error('✗ Refusing to write config: would emit', k);
+    process.exit(1);
+  }
+}
+
+fs.writeFileSync(configPath, out);
+try {
+  fs.chmodSync(configPath, 0o600);
+} catch (_) { /* windows */ }
+
+// Fail CI if secrets already leaked into public or android assets
+const scanRoots = [
+  path.join(__dirname, '..', 'public'),
+  path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'assets'),
+];
+let leaked = false;
+function scanDir(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    let st;
+    try {
+      st = fs.statSync(p);
+    } catch (_) {
+      continue;
+    }
+    if (st.isDirectory()) {
+      if (name === 'node_modules') continue;
+      scanDir(p);
+    } else if (/\.(js|html|json|txt)$/i.test(name)) {
+      try {
+        const t = fs.readFileSync(p, 'utf8');
+        for (const k of FORBIDDEN_KEYS) {
+          // Flag only actual assignments / window bindings of secrets
+          if (new RegExp('window\\.' + k + '\\s*=').test(t)) {
+            console.error('✗ Secret emission window.' + k, 'in', p);
+            leaked = true;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+}
+scanDir(scanRoots[0]);
+scanDir(scanRoots[1]);
+if (leaked) {
+  console.error('✗ Secret scan failed — remove keys from client bundles');
+  process.exit(1);
+}
+
 console.log('Generated:', configPath);
+console.log('  OLLAMA_USE_CLOUD=', useCloud);
+console.log('  OLLAMA_PROXY_URL=', env.OLLAMA_PROXY_URL || DEFAULT_PROXY);

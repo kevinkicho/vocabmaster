@@ -381,51 +381,70 @@ class DailySessionService {
             };
         }
 
-        var pool = [];
-        try {
-            if (typeof app !== 'undefined' && app && app.data) {
-                pool = app.data.getFilteredList ? app.data.getFilteredList() : (app.data.list || []);
-                if (!pool || !pool.length) pool = app.data.list || [];
-            }
-        } catch (_) {
-            pool = [];
-        }
-
         var now = options.now != null ? options.now : Date.now();
         var dueCards = options.due || null;
         var newItems = options.newItems || null;
-        var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+        var pathMeta = null;
 
-        if (!dueCards && mem && typeof mem.getDueCards === 'function') {
-            var filteredIds = new Set();
-            for (var i = 0; i < pool.length; i++) {
-                if (pool[i] && pool[i].id != null) filteredIds.add(Number(pool[i].id));
-            }
-            var cards = mem.getDueCards(now, {
-                limit: d.maxDue,
-                filterFn: function (card) {
-                    if (!card) return false;
-                    return filteredIds.has(Number(card.wordId));
+        // Dual-universe path compose (unit new + multi-pass due) when LearningPath available
+        var path = (typeof app !== 'undefined' && app) ? app.learningPath : null;
+        if ((!dueCards || !newItems) && path && typeof path.selectTodayItems === 'function' && path.getProfile) {
+            try {
+                var prof = path.getProfile();
+                if (prof && prof.pathMode === 'guided') {
+                    var sel = path.selectTodayItems(d, now);
+                    if (!newItems) newItems = sel.newItems || [];
+                    if (!dueCards) dueCards = sel.due || [];
+                    pathMeta = sel.meta || null;
                 }
-            });
-            // Map cards → vocab
-            dueCards = [];
-            var byId = new Map();
-            for (var p = 0; p < pool.length; p++) {
-                if (pool[p] && pool[p].id != null) byId.set(Number(pool[p].id), pool[p]);
+            } catch (e) {
+                if (typeof L === 'function') L('[Session] path selectTodayItems failed', e);
             }
-            for (var c = 0; c < (cards || []).length; c++) {
-                var card = cards[c];
-                var vocab = byId.get(Number(card.wordId));
-                if (vocab) dueCards.push(vocab);
-                else dueCards.push({ id: Number(card.wordId) });
+        }
+
+        // Free-path / fallback: filtered list universe (legacy single-pool)
+        if (!dueCards || !newItems) {
+            var pool = [];
+            try {
+                if (typeof app !== 'undefined' && app && app.data) {
+                    if (app.data.getFilteredListStrict) pool = app.data.getFilteredListStrict();
+                    else if (app.data.getFilteredList) pool = app.data.getFilteredList();
+                    else pool = app.data.list || [];
+                    if ((!pool || !pool.length) && app.data.list) pool = app.data.list;
+                }
+            } catch (_) {
+                pool = [];
+            }
+            var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+            if (!dueCards && mem && typeof mem.getDueCards === 'function') {
+                var filteredIds = new Set();
+                for (var i = 0; i < pool.length; i++) {
+                    if (pool[i] && pool[i].id != null) filteredIds.add(Number(pool[i].id));
+                }
+                var cards = mem.getDueCards(now, {
+                    limit: d.maxDue,
+                    filterFn: function (card) {
+                        if (!card) return false;
+                        return filteredIds.has(Number(card.wordId));
+                    }
+                });
+                dueCards = [];
+                var byId = new Map();
+                for (var p = 0; p < pool.length; p++) {
+                    if (pool[p] && pool[p].id != null) byId.set(Number(pool[p].id), pool[p]);
+                }
+                for (var c = 0; c < (cards || []).length; c++) {
+                    var card = cards[c];
+                    var vocab = byId.get(Number(card.wordId));
+                    if (vocab) dueCards.push(vocab);
+                    else dueCards.push({ id: Number(card.wordId) });
+                }
+            }
+            if (!newItems && mem && typeof mem.getNewCandidates === 'function') {
+                newItems = mem.getNewCandidates(pool, { limit: d.maxNew }) || [];
             }
         }
         if (!dueCards) dueCards = [];
-
-        if (!newItems && mem && typeof mem.getNewCandidates === 'function') {
-            newItems = mem.getNewCandidates(pool, { limit: d.maxNew }) || [];
-        }
         if (!newItems) newItems = [];
 
         // Cap new so total preference is soft (due already limited by maxDue)
@@ -437,7 +456,8 @@ class DailySessionService {
             newItems: newItems,
             due: dueCards,
             defaults: d,
-            intensity: intensity
+            intensity: intensity,
+            meta: pathMeta
         };
     }
 

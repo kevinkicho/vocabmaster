@@ -18,6 +18,7 @@ This index is the navigation page for VocabMaster documentation. Prefer current-
 | [Root README](../README.md) | Product overview, game modes, file map |
 | [Architecture](architecture.md) | Runtime pipelines, auth, AI transport, **memory engine / Today** (§3.4) |
 | [Memory engine & Daily Session](memory-engine-daily-session.md) | FSRS design, Today UX, session plan, PR sequence (rev 4) |
+| [Tiered Learning + AI Engagement + Chat FAB](tiered-learning-ai-engagement-fab-chat.md) | Path/units, tutor moments, secure Ollama transport, global Chat FAB (Draft 2026-07-16) |
 | [Telemetry & User Feedback](telemetry-feedback.md) | Analytics, question feedback, learning loop — **not** legacy “analytics owns SRS” |
 | [Audio & TTS Architecture](audio-tts-architecture.md) | Browser/native TTS routing |
 | [Web AI Parity Proxy](web-ai-parity-proxy-implementation.md) | Cloud Run proxy for Ollama (web) |

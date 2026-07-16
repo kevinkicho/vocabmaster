@@ -53,6 +53,14 @@ describe('FSRS reference pin', () => {
         expect(FSRS.MEMORY_CONFIG).toBe(MEMORY_CONFIG);
         expect(FSRS.RATING.Good).toBe(3);
     });
+
+    it('freezes config/weights against mutation', () => {
+        expect(Object.isFrozen(MEMORY_CONFIG)).toBe(true);
+        expect(Object.isFrozen(FSRS_W)).toBe(true);
+        expect(Object.isFrozen(FSRS_RATING)).toBe(true);
+        expect(Object.isFrozen(FSRS)).toBe(true);
+        expect(() => { MEMORY_CONFIG.maxIntervalDays = 999; }).toThrow();
+    });
 });
 
 describe('MEMORY_CONFIG', () => {
@@ -92,7 +100,7 @@ describe('rating helpers', () => {
         expect(ratingFromBinary(false)).toBe(1);
     });
 
-    it('normalizeRating accepts numbers and names', () => {
+    it('normalizeRating accepts integers and names', () => {
         expect(normalizeRating(1)).toBe(1);
         expect(normalizeRating('good')).toBe(3);
         expect(normalizeRating('Easy')).toBe(4);
@@ -100,8 +108,56 @@ describe('rating helpers', () => {
     });
 
     it('normalizeRating rejects invalid values', () => {
-        expect(() => normalizeRating(0)).toThrow();
-        expect(() => normalizeRating('maybe')).toThrow();
+        expect(() => normalizeRating(0)).toThrow(/Invalid FSRS rating/);
+        expect(() => normalizeRating('maybe')).toThrow(/Invalid FSRS rating/);
+        expect(() => normalizeRating(3.9)).toThrow(/Invalid FSRS rating/);
+        expect(() => normalizeRating(1.5)).toThrow(/Invalid FSRS rating/);
+    });
+});
+
+describe('card validation', () => {
+    it('rejects null/non-object cards', () => {
+        expect(() => schedule(null, 3, T0)).toThrow(/Invalid FSRS card/);
+        expect(() => schedule(undefined, 3, T0)).toThrow(/Invalid FSRS card/);
+    });
+
+    it('rejects unknown state', () => {
+        expect(() => schedule({
+            state: 'unknown',
+            stability: 1,
+            difficulty: 5,
+            due: T0,
+            lastReview: T0,
+            reps: 1,
+            lapses: 0,
+            elapsedDays: 0,
+            scheduledDays: 1
+        }, 3, T0)).toThrow(/Invalid FSRS card state/);
+    });
+
+    it('rejects non-finite stability/difficulty when not new', () => {
+        expect(() => schedule({
+            state: 'review',
+            stability: NaN,
+            difficulty: 5,
+            due: T0,
+            lastReview: T0,
+            reps: 1,
+            lapses: 0,
+            elapsedDays: 0,
+            scheduledDays: 1
+        }, 3, T0)).toThrow(/stability/);
+        expect(() => schedule({
+            state: 'learning',
+            stability: 1,
+            difficulty: undefined,
+            due: T0,
+            lastReview: T0,
+            reps: 1,
+            lapses: 0,
+            elapsedDays: 0,
+            scheduledDays: 0
+        }, 3, T0)).toThrow(/difficulty/);
     });
 });
 
@@ -207,7 +263,7 @@ describe('golden vectors', () => {
     /**
      * Review golden base: New→Good→Good then review at scheduled due (elapsedDays=4).
      * Prior state: S=4.1386, D=5.1443, state=review.
-     * R(4, 4.1386) ≈ 0.90294 with FSRS-4.5 power curve.
+     * R(4, 4.1386) ≈ 0.9028771 with FSRS-4.5 power curve (toFixed(8)).
      */
     function reviewBaseAtDue() {
         let card = schedule(createEmptyCard(T0), 3, T0);
@@ -274,8 +330,7 @@ describe('golden vectors', () => {
         expect(a.state).toBe(b.state);
     });
 
-    it('max interval never exceeds 180 days', () => {
-        // Synthesize a very stable review card
+    it('max interval is exactly 180 for huge-S Review Hard/Good/Easy', () => {
         const card = {
             due: T0,
             stability: 500,
@@ -287,7 +342,39 @@ describe('golden vectors', () => {
             state: 'review',
             lastReview: T0 - 180 * MS_PER_DAY
         };
-        const next = schedule(card, 3, T0);
-        expect(next.scheduledDays).toBeLessThanOrEqual(180);
+        const hard = schedule(card, 2, T0);
+        const good = schedule(card, 3, T0);
+        const easy = schedule(card, 4, T0);
+        // At the ceiling, ordering + re-clamp collapses distinctions to 180.
+        expect(hard.scheduledDays).toBe(180);
+        expect(good.scheduledDays).toBe(180);
+        expect(easy.scheduledDays).toBe(180);
+    });
+
+    it('Learning/Relearning → Easy clamps scheduledDays to 180', () => {
+        const learning = {
+            due: T0,
+            stability: 180,
+            difficulty: 5,
+            elapsedDays: 0,
+            scheduledDays: 0,
+            reps: 2,
+            lapses: 0,
+            state: 'learning',
+            lastReview: T0 - hardMs
+        };
+        const relearning = {
+            ...learning,
+            state: 'relearning',
+            lapses: 1
+        };
+        const learnEasy = schedule(learning, 4, T0);
+        const relearnEasy = schedule(relearning, 4, T0);
+        // Without clamp, max(180, 180+1) would be 181.
+        expect(learnEasy.scheduledDays).toBe(180);
+        expect(relearnEasy.scheduledDays).toBe(180);
+        expect(learnEasy.state).toBe('review');
+        expect(relearnEasy.state).toBe('review');
+        expect(learnEasy.due).toBe(T0 + 180 * MS_PER_DAY);
     });
 });

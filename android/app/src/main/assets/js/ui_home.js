@@ -63,8 +63,24 @@ UIManager.prototype.toggleLevel = function(level) {
     localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
     this.renderLevelFilter();
     if (app.game) {
-        app.game.list = app.data.getFilteredList();
-        if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
+        // Keep review/session scope when _reviewList is set (do not expand to full filter)
+        if (typeof window.assignGameList === 'function') {
+            window.assignGameList(app.game);
+            if (!app.data._reviewList && app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.levelFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
+        } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+            app.game.list = app.data._reviewList;
+        } else {
+            app.game.list = app.data.getFilteredList();
+            if (!app.game.list || app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.levelFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
+        }
         if (app.game.i >= app.game.list.length) app.game.i = 0;
         if (app.game.update) app.game.update(); else app.game.render();
     }
@@ -167,8 +183,24 @@ UIManager.prototype.toggleTag = function(tag) {
     localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
     this.renderTagFilter();
     if (app.game) {
-        app.game.list = app.data.getFilteredList();
-        if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.tagFilter = ['all']; }
+        // Keep review/session scope when _reviewList is set (do not expand to full filter)
+        if (typeof window.assignGameList === 'function') {
+            window.assignGameList(app.game);
+            if (!app.data._reviewList && app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.tagFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
+        } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+            app.game.list = app.data._reviewList;
+        } else {
+            app.game.list = app.data.getFilteredList();
+            if (!app.game.list || app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.tagFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
+        }
         if (app.game.i >= app.game.list.length) app.game.i = 0;
         if (app.game.update) app.game.update(); else app.game.render();
     }

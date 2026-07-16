@@ -1,10 +1,28 @@
 /* js/game_core.js */
+
+// Shared list assignment for GameMode ctor + settings/filter handlers.
+// When _reviewList is set (Smart Review / Daily Session), keep that scope —
+// do not expand to the full filtered list.
+function assignGameList(game) {
+    if (!game || !app || !app.data) return;
+    if (app.data._reviewList && app.data._reviewList.length) {
+        game.list = app.data._reviewList;
+        return;
+    }
+    game.list = app.data.getFilteredList();
+    if (!game.list || game.list.length === 0) {
+        game.list = app.data.activeList || [];
+    }
+}
+window.assignGameList = assignGameList;
+
 class GameMode {
     constructor(key) {
         this.key = key;
         L(`[GameMode] Init: ${key}`);
         this.i = app.store.getLoc(key);
-        this.list = app.data.getFilteredList();
+        // Prefer review/session list when set; otherwise filtered list
+        assignGameList(this);
         this.root = document.getElementById('app-view');
         this.busy = false;
         this.answered = false;

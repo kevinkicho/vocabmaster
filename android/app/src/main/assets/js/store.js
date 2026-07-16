@@ -100,8 +100,16 @@ class Store {
         
         if(window.app && window.app.game) {
             const game = window.app.game;
-            game.list = app.data.getFilteredList();
-            if (game.list.length === 0) game.list = app.data.activeList;
+            // Keep review/session scope when _reviewList is set (do not expand to full filter)
+            if (typeof window.assignGameList === 'function') {
+                window.assignGameList(game);
+            } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+                // Fallback if game_core failed to load: still honor review scope
+                game.list = app.data._reviewList;
+            } else {
+                game.list = app.data.getFilteredList();
+                if (!game.list || game.list.length === 0) game.list = (app.data.activeList || []);
+            }
             if (game.i >= game.list.length) game.i = 0;
             game.historyStack = [game.i];
             game.historyPtr = 0;
@@ -127,8 +135,16 @@ class Store {
         if(window.app && window.app.ui) window.app.ui.loadSettings();
         if(window.app && window.app.game) {
             const game = window.app.game;
-            game.list = app.data.getFilteredList();
-            if (game.list.length === 0) game.list = app.data.activeList;
+            // Keep review/session scope when _reviewList is set (do not expand to full filter)
+            if (typeof window.assignGameList === 'function') {
+                window.assignGameList(game);
+            } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+                // Fallback if game_core failed to load: still honor review scope
+                game.list = app.data._reviewList;
+            } else {
+                game.list = app.data.getFilteredList();
+                if (!game.list || game.list.length === 0) game.list = (app.data.activeList || []);
+            }
             if (game.i >= game.list.length) game.i = 0;
             game.historyStack = [game.i];
             game.historyPtr = 0;

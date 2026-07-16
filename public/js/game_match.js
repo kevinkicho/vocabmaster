@@ -223,7 +223,9 @@ class Match extends GameMode {
             } else {
                 setFailStyle(el);
                 setFailStyle(prevEl);
-                // Route through miss() so session controllers / analytics stay consistent
+                // Route through miss() so session controllers / analytics stay consistent.
+                // Intentional parity: only the second card's wordId is recorded (pre-PR
+                // bare recordAttempt behavior). First selection (this.sel.match) is not dual-missed.
                 this.miss(parseInt(match));
                 if(app.store.prefs.matchHint) {
                     const m = this.state.cards.find(c => String(c.match) === String(this.sel.match) && c.id !== this.sel.id)?.id;

@@ -14,20 +14,27 @@ const matchSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'game_
 let DataService;
 let selectWordsForReview;
 let mockAppForData;
+/** Production assignGameList extracted from game_core.js (not a hand copy). */
+let assignGameListFromSrc;
+/** Production miss() extracted from game_core.js. */
+let missFromSrc;
 
-/** Mirrors public/js/game_core.js assignGameList (kept in sync via source assertions). */
-function makeAssignGameList(app) {
-    return function assignGameList(game) {
-        if (!game || !app || !app.data) return;
-        if (app.data._reviewList && app.data._reviewList.length) {
-            game.list = app.data._reviewList;
-            return;
+/** Extract a top-level or method function body by brace matching from a start marker. */
+function extractFunctionBlock(src, startMarker) {
+    const start = src.indexOf(startMarker);
+    if (start < 0) throw new Error('marker not found: ' + startMarker);
+    const braceStart = src.indexOf('{', start);
+    if (braceStart < 0) throw new Error('no { after ' + startMarker);
+    let depth = 0;
+    for (let i = braceStart; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === '{') depth++;
+        else if (ch === '}') {
+            depth--;
+            if (depth === 0) return src.slice(start, i + 1);
         }
-        game.list = app.data.getFilteredList();
-        if (!game.list || game.list.length === 0) {
-            game.list = app.data.activeList || [];
-        }
-    };
+    }
+    throw new Error('unbalanced braces for ' + startMarker);
 }
 
 beforeAll(() => {
@@ -41,6 +48,21 @@ beforeAll(() => {
     const dataFn = new Function('app', dataSrc + '\nreturn { DataService };');
     const dataResult = dataFn(mockAppForData);
     DataService = dataResult.DataService;
+
+    // Load real assignGameList from production source
+    const assignBlock = extractFunctionBlock(gameCoreSrc, 'function assignGameList(game)');
+    const assignFactory = new Function(
+        'app',
+        'window',
+        assignBlock + '\nwindow.assignGameList = assignGameList;\nreturn assignGameList;'
+    );
+    const fakeWindow = {};
+    assignGameListFromSrc = assignFactory(mockAppForData, fakeWindow);
+
+    // Load real miss() from production source
+    const missBlock = extractFunctionBlock(gameCoreSrc, 'miss(wordId=null)');
+    const missFactory = new Function('app', 'return { ' + missBlock + ' };');
+    missFromSrc = missFactory(mockAppForData).miss;
 });
 
 describe('DataService review + filtering (runtime critical)', () => {
@@ -111,66 +133,121 @@ describe('DataService review + filtering (runtime critical)', () => {
         expect(ok).toBe(true);
         expect(data._reviewList).toHaveLength(2);
 
-        // Same pick logic as game_core assignGameList / GameMode ctor
-        const gameList = (data._reviewList && data._reviewList.length)
-            ? data._reviewList
-            : data.getFilteredList();
-        expect(gameList).toHaveLength(2);
-        expect(gameList.map(w => w.id)).toEqual([10, 11]);
+        // Production assignGameList from game_core.js (extracted, not mirrored)
+        const game = { list: null };
+        assignGameListFromSrc(game);
+        expect(game.list).toHaveLength(2);
+        expect(game.list.map(w => w.id)).toEqual([10, 11]);
         // Full filtered list is larger — proves we did not expand to it
         expect(data.getFilteredList().length).toBeGreaterThan(2);
 
         data.endReviewSession();
-        const after = (data._reviewList && data._reviewList.length)
-            ? data._reviewList
-            : data.getFilteredList();
-        expect(after.length).toBe(data.list.length);
+        assignGameListFromSrc(game);
+        expect(game.list.length).toBe(data.list.length);
     });
 
-    it('assignGameList keeps _reviewList and does not expand on filter reassign', () => {
-        const assignGameList = makeAssignGameList(mockAppForData);
-
+    it('assignGameList (from production source) keeps _reviewList on filter reassign', () => {
         const reviewWords = [
             { id: 10, tags: ['N3'], en: 'a' },
             { id: 11, tags: ['N3'], en: 'b' },
         ];
         data.startSpecificReview(reviewWords);
         const game = { list: null };
-        assignGameList(game);
+        assignGameListFromSrc(game);
         expect(game.list).toHaveLength(2);
         expect(game.list.map(w => w.id)).toEqual([10, 11]);
 
         // Simulate settings/filter reassign while review active
         mockAppForData.store.prefs.levelFilter = ['N5'];
-        assignGameList(game);
+        assignGameListFromSrc(game);
         expect(game.list).toHaveLength(2);
         expect(game.list.map(w => w.id)).toEqual([10, 11]);
 
         data.endReviewSession();
         mockAppForData.store.prefs.levelFilter = ['all'];
-        assignGameList(game);
+        assignGameListFromSrc(game);
         expect(game.list.length).toBe(data.list.length);
     });
 });
 
+describe('GameMode.miss analytics contract (production source)', () => {
+    it('miss(wordId) calls analytics.recordAttempt(id, mode, false)', () => {
+        const calls = [];
+        mockAppForData.analytics = {
+            getMostMissedWords: async () => [],
+            recordAttempt: (id, mode, ok) => { calls.push({ id, mode, ok }); }
+        };
+        // Re-bind miss against current mockAppForData.analytics
+        const missBlock = extractFunctionBlock(gameCoreSrc, 'miss(wordId=null)');
+        const miss = new Function('app', 'return { ' + missBlock + ' };')(mockAppForData).miss;
+
+        const ctx = { key: 'match', list: [{ id: 7 }, { id: 8 }], i: 0 };
+        miss.call(ctx, 42);
+        expect(calls).toEqual([{ id: 42, mode: 'match', ok: false }]);
+
+        // Default wordId from list[i]
+        calls.length = 0;
+        miss.call(ctx, null);
+        expect(calls).toEqual([{ id: 7, mode: 'match', ok: false }]);
+    });
+});
+
 describe('GameMode / Match list scoping (source + review contract)', () => {
-    it('game_core prefers _reviewList via assignGameList', () => {
+    it('game_core prefers _reviewList via assignGameList with early-return body', () => {
         expect(gameCoreSrc).toMatch(/function\s+assignGameList\s*\(/);
         expect(gameCoreSrc).toMatch(/window\.assignGameList\s*=\s*assignGameList/);
-        expect(gameCoreSrc).toMatch(/_reviewList/);
         expect(gameCoreSrc).toMatch(/assignGameList\s*\(\s*this\s*\)/);
+        // Body: early return on non-empty _reviewList before getFilteredList
+        const assignBlock = extractFunctionBlock(gameCoreSrc, 'function assignGameList(game)');
+        expect(assignBlock).toMatch(/_reviewList\s*&&\s*app\.data\._reviewList\.length/);
+        const reviewIdx = assignBlock.indexOf('_reviewList');
+        const filteredIdx = assignBlock.indexOf('getFilteredList');
+        expect(reviewIdx).toBeGreaterThanOrEqual(0);
+        expect(filteredIdx).toBeGreaterThan(reviewIdx);
+        expect(assignBlock.slice(0, filteredIdx)).toMatch(/return/);
     });
 
-    it('store and ui_home use assignGameList (do not wipe review scope)', () => {
-        expect(storeSrc).toMatch(/window\.assignGameList/);
-        expect(homeSrc).toMatch(/window\.assignGameList/);
+    it('saveSettings and applyPresetSettings both call window.assignGameList', () => {
+        const saveIdx = storeSrc.indexOf('saveSettings()');
+        const applyIdx = storeSrc.indexOf('applyPresetSettings(');
+        expect(saveIdx).toBeGreaterThanOrEqual(0);
+        expect(applyIdx).toBeGreaterThan(saveIdx);
+
+        const saveBlock = storeSrc.slice(saveIdx, applyIdx);
+        expect(saveBlock).toMatch(/window\.assignGameList/);
+        // Fallback must still honor _reviewList when assignGameList missing
+        expect(saveBlock).toMatch(/_reviewList/);
+
+        const applyEnd = storeSrc.indexOf('setTheme(', applyIdx);
+        const applyBlock = storeSrc.slice(applyIdx, applyEnd > applyIdx ? applyEnd : applyIdx + 800);
+        expect(applyBlock).toMatch(/window\.assignGameList/);
+        expect(applyBlock).toMatch(/_reviewList/);
     });
 
-    it('Match clears matchState under review and miss() on fail', () => {
-        expect(matchSrc).toMatch(/clearMatch\s*\(/);
-        expect(matchSrc).toMatch(/_reviewList/);
+    it('toggleLevel and toggleTag both call window.assignGameList', () => {
+        const levelIdx = homeSrc.indexOf('UIManager.prototype.toggleLevel');
+        const tagIdx = homeSrc.indexOf('UIManager.prototype.toggleTag');
+        expect(levelIdx).toBeGreaterThanOrEqual(0);
+        expect(tagIdx).toBeGreaterThan(levelIdx);
+
+        const levelBlock = homeSrc.slice(levelIdx, tagIdx);
+        expect(levelBlock).toMatch(/window\.assignGameList/);
+        expect(levelBlock).toMatch(/_reviewList/);
+
+        const tagBlock = homeSrc.slice(tagIdx, tagIdx + 1200);
+        expect(tagBlock).toMatch(/window\.assignGameList/);
+        expect(tagBlock).toMatch(/_reviewList/);
+    });
+
+    it('Match clears matchState only under _reviewList and miss() on fail', () => {
+        // clearMatch must sit inside a _reviewList guard (bounded window)
+        expect(matchSrc).toMatch(
+            /_reviewList[\s\S]{0,160}clearMatch\s*\(/
+        );
         expect(matchSrc).toMatch(/this\.miss\s*\(\s*parseInt\s*\(\s*match\s*\)\s*\)/);
         // Fail path must not use bare recordAttempt
-        expect(matchSrc).not.toMatch(/recordAttempt\s*\(\s*parseInt\s*\(\s*match\s*\)\s*,\s*['"]match['"]\s*,\s*false\s*\)/);
+        expect(matchSrc).not.toMatch(
+            /recordAttempt\s*\(\s*parseInt\s*\(\s*match\s*\)\s*,\s*['"]match['"]\s*,\s*false\s*\)/
+        );
     });
 });

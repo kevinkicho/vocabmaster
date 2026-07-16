@@ -67,11 +67,19 @@ UIManager.prototype.toggleLevel = function(level) {
         if (typeof window.assignGameList === 'function') {
             window.assignGameList(app.game);
             if (!app.data._reviewList && app.game.list.length === 0) {
-                app.game.list = app.data.activeList; p.levelFilter = ['all'];
+                app.game.list = app.data.activeList || [];
+                p.levelFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
             }
+        } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+            app.game.list = app.data._reviewList;
         } else {
             app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.levelFilter = ['all']; }
+            if (!app.game.list || app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.levelFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
         }
         if (app.game.i >= app.game.list.length) app.game.i = 0;
         if (app.game.update) app.game.update(); else app.game.render();
@@ -179,11 +187,19 @@ UIManager.prototype.toggleTag = function(tag) {
         if (typeof window.assignGameList === 'function') {
             window.assignGameList(app.game);
             if (!app.data._reviewList && app.game.list.length === 0) {
-                app.game.list = app.data.activeList; p.tagFilter = ['all'];
+                app.game.list = app.data.activeList || [];
+                p.tagFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
             }
+        } else if (app.data && app.data._reviewList && app.data._reviewList.length) {
+            app.game.list = app.data._reviewList;
         } else {
             app.game.list = app.data.getFilteredList();
-            if (app.game.list.length === 0) { app.game.list = app.data.activeList; p.tagFilter = ['all']; }
+            if (!app.game.list || app.game.list.length === 0) {
+                app.game.list = app.data.activeList || [];
+                p.tagFilter = ['all'];
+                localStorage.setItem(this.store.STORAGE_KEY, JSON.stringify(p));
+            }
         }
         if (app.game.i >= app.game.list.length) app.game.i = 0;
         if (app.game.update) app.game.update(); else app.game.render();

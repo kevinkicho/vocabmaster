@@ -2,7 +2,11 @@
 class Match extends GameMode {
     constructor(k) { 
         super(k); 
-        this.sel = null; 
+        this.sel = null;
+        // Review/session Match must not restore free-play board (stale cards/word set)
+        if (app.data && app.data._reviewList && app.data._reviewList.length) {
+            app.store.clearMatch();
+        }
         this.state = app.store.matchState || { cards: [], pairs: 0, matched: [] };
         
         if(this.state.cards.length > 0) {
@@ -219,7 +223,10 @@ class Match extends GameMode {
             } else {
                 setFailStyle(el);
                 setFailStyle(prevEl);
-                if(app.analytics) app.analytics.recordAttempt(parseInt(match), 'match', false);
+                // Route through miss() so session controllers / analytics stay consistent.
+                // Intentional parity: only the second card's wordId is recorded (pre-PR
+                // bare recordAttempt behavior). First selection (this.sel.match) is not dual-missed.
+                this.miss(parseInt(match));
                 if(app.store.prefs.matchHint) {
                     const m = this.state.cards.find(c => String(c.match) === String(this.sel.match) && c.id !== this.sel.id)?.id;
                     const h = document.getElementById(m); 

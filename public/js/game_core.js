@@ -183,7 +183,7 @@ class GameMode {
     }
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
-    score(pts=10, wordId=null) {
+    score(pts=10, wordId=null, meta) {
         app.score = Math.max(0, Number(app.score) || 0);
         const numPts = Math.max(0, Number(pts) || 0);
         app.score += numPts;
@@ -200,12 +200,14 @@ class GameMode {
         }
         if(app.data) app.data.recordScore(numPts, this.key);
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
-        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true);
+        // Optional meta (e.g. { rating }) forwarded to analytics → memory (PR3b/PR9)
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true, meta);
     }
 
-    miss(wordId=null) {
+    miss(wordId=null, meta) {
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
-        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false);
+        // Optional meta forwarded to analytics; miss defaults to Again via binary map
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false, meta);
     }
 
     async waitAndNav(audioPromise, fallbackDelay = 1500) {

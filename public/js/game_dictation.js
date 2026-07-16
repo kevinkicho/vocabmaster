@@ -146,6 +146,8 @@ class Dictation extends GameMode {
         this.attempts++;
         var expected = this.currentText;
         var similarity = this._calculateSimilarity(userText, expected);
+        // Pass bar unchanged: >= 0.8 is correct. Richer FSRS rating when correct:
+        // s >= 0.95 → Easy (4); 0.8 <= s < 0.95 → Good (3). Below bar → miss → Again.
         var isCorrect = similarity >= 0.8;
 
         if (this.dom.attempts) this.dom.attempts.textContent = 'Attempt ' + this.attempts + '/' + this.maxAttempts;
@@ -153,7 +155,8 @@ class Dictation extends GameMode {
         if (isCorrect) {
             this.answered = true;
             this._showResult(userText, expected, true);
-            this.score(Math.max(5, 15 - (this.attempts - 1) * 5));
+            var rating = similarity >= 0.95 ? 4 : 3; // Easy : Good
+            this.score(Math.max(5, 15 - (this.attempts - 1) * 5), null, { rating: rating });
             this.dom.input.disabled = true;
             if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
             if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
@@ -165,7 +168,7 @@ class Dictation extends GameMode {
             this.dom.input.disabled = true;
             if (this.dom.checkBtn) this.dom.checkBtn.disabled = true;
             if (this.dom.revealBtn) this.dom.revealBtn.disabled = true;
-            this.miss();
+            this.miss(); // Again via binary map (rating 1)
         } else {
             this._showResult(userText, expected, false);
             if (this.dom.input) { this.dom.input.value = ''; this.dom.input.focus(); }

@@ -436,31 +436,61 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         expect(reviews5[0].rating).toBe(1);
     });
 
-    it('waitAndNav after reinsert is cancelled (no auto-skip)', async () => {
+    it('waitAndNav after reinsert-triggering score does not skip (Quiz call order)', async () => {
+        // Real Quiz: score() then waitAndNav(). Reinsert runs inside score();
+        // the waitAndNav that follows must be suppressed (not just gen-cancelled).
         const svc = new DailySessionService();
         const game = bootSession(svc, [10, 20, 30]);
 
-        // Recover 10 (Again+reinsert), good 20, good 30 → reinsert pass
         game.miss(10);
-        game.score(10, 10);
-        // Simulate Quiz scheduling waitAndNav after score (controller-wrapped)
-        const p1 = game.waitAndNav(null, 30);
-
+        game.score(10, 10); // queues reinsert; does not apply pass yet
         game.score(10, 20);
-        game.score(10, 30);
 
-        // Reinsert should have cancelled the earlier waitAndNav
+        // Last original grade → reinsert pass inside score, then Quiz calls waitAndNav
+        game.score(10, 30);
         expect(svc.status).toBe('active');
         expect(game.list.map((w) => w.id)).toEqual([10]);
         expect(game.i).toBe(0);
+        expect(svc._suppressNextWaitAndNav).toBe(true);
 
-        await p1;
-        // Cancelled waitAndNav must not advance off reinsert card
+        // Mirrors game_quiz.js check(): waitAndNav immediately after score
+        await game.waitAndNav(null, 20);
+
         expect(game.navCalls).toBe(0);
         expect(game.i).toBe(0);
+        expect(game.list.map((w) => w.id)).toEqual([10]);
+        expect(svc._suppressNextWaitAndNav).toBe(false);
         expect(svc.status).toBe('active');
 
+        // Subsequent waitAndNav after a normal grade still works (not stuck suppressed)
         game.score(10, 10);
+        expect(svc.status).toBe('completed');
+    });
+
+    it('waitAndNav after multi-id reinsert stays on first reinsert word', async () => {
+        const svc = new DailySessionService();
+        const game = bootSession(svc, [1, 2]);
+
+        // Both miss-recover → reinsert [1,2]
+        game.miss(1);
+        game.score(10, 1);
+        game.miss(2);
+        game.score(10, 2); // triggers reinsert pass with [1,2]
+
+        expect(game.list.map((w) => w.id)).toEqual([1, 2]);
+        expect(game.i).toBe(0);
+
+        await game.waitAndNav(null, 15); // post-score auto-nav must not run
+        expect(game.navCalls).toBe(0);
+        expect(game.i).toBe(0);
+
+        // Grade first reinsert; legitimate waitAndNav may advance
+        game.score(10, 1);
+        await game.waitAndNav(null, 15);
+        expect(game.navCalls).toBe(1);
+        expect(game.i).toBe(1);
+
+        game.score(10, 2);
         expect(svc.status).toBe('completed');
     });
 

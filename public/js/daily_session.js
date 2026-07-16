@@ -238,6 +238,11 @@ class DailySessionService {
         this._updatedAt = null;
         /** Bumped to cancel in-flight waitAndNav after reinsert / step end. */
         this._navGen = 0;
+        /**
+         * One-shot: next waitAndNav no-ops (Quiz calls score() then waitAndNav;
+         * reinsert inside score must suppress that post-score auto-nav).
+         */
+        this._suppressNextWaitAndNav = false;
     }
 
     /** @returns {boolean} true while plan is live (including UI-paused). */
@@ -449,6 +454,7 @@ class DailySessionService {
         this._step = null;
         this._ownsMemoryReviews = false;
         this._navGen = 0;
+        this._suppressNextWaitAndNav = false;
 
         await this._persistPlan();
         L('[DailySession] start', this.plan.steps.length, 'steps', 'intensity=', this.intensity);
@@ -778,7 +784,11 @@ class DailySessionService {
     }
 
     /**
-     * Reinsert Again words once: cancel in-flight waitAndNav, repoint list index.
+     * Reinsert Again words once: suppress post-score waitAndNav, repoint list index.
+     *
+     * Quiz order is score() then waitAndNav(). Reinsert runs *inside* score(), so
+     * canceling by gen alone fails — check() still schedules a *new* waitAndNav with
+     * the post-reinstall gen. One-shot _suppressNextWaitAndNav covers that call.
      */
     _applyReinsertPass() {
         var step = this._step;
@@ -792,8 +802,10 @@ class DailySessionService {
             ids.forEach(function (id) { step.hadMiss.delete(id); });
         }
 
-        // Issue 1: cancel any waitAndNav scheduled by the grade that triggered reinsert
+        // Issue 1: cancel any prior in-flight waitAndNav + suppress the one Quiz
+        // will call immediately after this score() returns.
         this._cancelPendingNav();
+        this._suppressNextWaitAndNav = true;
 
         var words = wordsFromIds(ids);
         try {
@@ -809,7 +821,7 @@ class DailySessionService {
             game.answered = false;
             game.busy = false;
             game.hasMissed = false;
-            // Re-install cancelable waitAndNav bound to new nav gen
+            // Keep cancelable waitAndNav (same gen after cancel bump)
             this._installCancelableWaitAndNav(game, this._navGen);
             try {
                 if (typeof game.update === 'function') game.update();
@@ -821,7 +833,7 @@ class DailySessionService {
         } else {
             this._restartCurrentStepWithWords(ids);
         }
-        L('[DailySession] reinsert pass', ids);
+        L('[DailySession] reinsert pass', ids, 'suppressNextWaitAndNav=true');
         this._persistPlanDebounced();
     }
 
@@ -842,7 +854,9 @@ class DailySessionService {
     }
 
     /**
-     * Install waitAndNav that respects _navGen so reinsert/finish cannot race auto-nav.
+     * Install waitAndNav that:
+     * 1) one-shot suppresses post-reinsert auto-nav (Quiz score→waitAndNav order)
+     * 2) respects _navGen so earlier in-flight waits no-op after cancel
      */
     _installCancelableWaitAndNav(game, genAtInstall) {
         if (!game) return;
@@ -850,6 +864,16 @@ class DailySessionService {
         var gen = genAtInstall != null ? genAtInstall : this._navGen;
         game._sessionNavGen = gen;
         game.waitAndNav = async function (audioPromise, fallbackDelay) {
+            // One-shot after reinsert-triggering score: Quiz always calls waitAndNav
+            // after score(); that must not advance off the first reinsert card.
+            if (self._suppressNextWaitAndNav) {
+                self._suppressNextWaitAndNav = false;
+                game.busy = false;
+                game.answered = false;
+                L('[DailySession] waitAndNav suppressed (post-reinsert)');
+                return;
+            }
+
             var myGen = game._sessionNavGen;
             var wait = false;
             try {
@@ -870,10 +894,12 @@ class DailySessionService {
             } catch (e) {
                 L('[DailySession] waitAndNav audio error', e);
             }
-            // Cancelled by reinsert / finishStep / destroy
+            // Cancelled by reinsert / finishStep / destroy (in-flight only)
             if (self._navGen !== myGen || game._sessionNavGen !== myGen) return;
             if (self._finishing || !self._step || self._uiPaused) return;
             if (self.status !== 'active') return;
+            // Defense: if reinsert pending list is showing and we somehow still
+            // have suppress... already cleared. Stay put if list was just reset.
             game.busy = false;
             if (typeof game.nav === 'function') game.nav(1);
         };
@@ -899,6 +925,7 @@ class DailySessionService {
         this._finishing = true;
         this.stats.stepsDone++;
 
+        this._suppressNextWaitAndNav = true;
         this._cancelPendingNav();
         this._destroyGameSoft();
         this._ownsMemoryReviews = false;

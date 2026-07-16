@@ -125,6 +125,7 @@ class Context extends GameMode {
     _generateAnew() {
         this.currentLevel = 0;
         this._completedLevels = 0;
+        this._levelResults = [];
         this.answered = false;
         this.sentences = [];
         this._genId = (this._genId || 0) + 1;
@@ -168,6 +169,7 @@ class Context extends GameMode {
     update() {
         this.currentLevel = 0;
         this._completedLevels = 0;
+        this._levelResults = [];
         this._genId = (this._genId || 0) + 1;
         this.answered = false;
         this.sentences = [];
@@ -294,7 +296,9 @@ class Context extends GameMode {
         var dots = this.dom.progress ? this.dom.progress.querySelectorAll('.ctx-dot') : [];
         for (var i = 0; i < dots.length; i++) {
             if (i < this.currentLevel) {
-                dots[i].className = 'ctx-dot flex-1 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 transition-colors';
+                // Completed level — green if correct, red if wrong
+                var wasCorrect = this._levelResults[i] === true;
+                dots[i].className = 'ctx-dot flex-1 h-1.5 rounded-full ' + (wasCorrect ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-rose-400 dark:bg-rose-500') + ' transition-colors';
             } else if (i === this.currentLevel) {
                 dots[i].className = 'ctx-dot flex-1 h-1.5 rounded-full bg-indigo-500 transition-colors';
             } else {
@@ -405,6 +409,7 @@ class Context extends GameMode {
             this.score(points);
             app.celebration.play();
             this._completedLevels++;
+            this._levelResults[this.currentLevel] = true;
 
             // Apply correct effect to question box — insert answer after blank, don't replace
             var sentenceEl = this.dom.sentence;
@@ -435,6 +440,7 @@ class Context extends GameMode {
             btn.classList.remove('opacity-50');
             btn.classList.add('border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30', 'text-rose-600', 'dark:text-rose-400');
             this.miss();
+            this._levelResults[this.currentLevel] = false;
 
             // Apply wrong effect to question box — rose/red border
             var sentenceEl2 = this.dom.sentence;
@@ -444,6 +450,12 @@ class Context extends GameMode {
                     card2.classList.add('border-rose-500', 'dark:border-rose-500', 'bg-rose-50', 'dark:bg-rose-900/30');
                     card2.classList.remove('border-slate-100', 'dark:border-neutral-800', 'bg-white', 'dark:bg-neutral-900');
                 }
+            }
+
+            // Mark dot red immediately
+            var dots2 = this.dom.progress ? this.dom.progress.querySelectorAll('.ctx-dot') : [];
+            if (dots2[this.currentLevel]) {
+                dots2[this.currentLevel].className = 'ctx-dot flex-1 h-1.5 rounded-full bg-rose-400 dark:bg-rose-500 transition-colors';
             }
         }
 
@@ -498,8 +510,8 @@ class Context extends GameMode {
         var qKey = p.sentencesQ || p.presetTarget || 'ja';
         var conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(qKey) : null;
         var audioLang = (conf && conf.audioSrc) ? conf.audioSrc : qKey;
-        // Replace blank placeholder with "..." for TTS pause
-        var ttsText = this._currentSentenceText.replace(/______/g, '...').replace(/_{3,}/g, '...');
+        // Replace all blank placeholders with "..." for TTS pause
+        var ttsText = this._currentSentenceText.replace(/\{\{BLANK\}\}/g, '...').replace(/______/g, '...').replace(/_{3,}/g, '...');
         app.audio.play(ttsText, audioLang, 'context', 0);
     }
 

@@ -21,31 +21,46 @@ class DataService {
 
         const result = [];
         const usedIds = new Set();
+        // Normalize ids to Number so string vocab ids match MemoryService wordId (Number).
+        const filteredIds = new Set();
+        const byId = new Map();
+        for (const w of baseList) {
+            if (!w || w.id == null) continue;
+            const id = Number(w.id);
+            if (!Number.isFinite(id)) continue;
+            filteredIds.add(id);
+            byId.set(id, w);
+        }
 
         // 1) Prefer FSRS due cards (filtered to current list universe)
-        const mem = (typeof app !== 'undefined' && app) ? app.memory : null;
-        if (mem && typeof mem.isEnabled === 'function' && mem.isEnabled()
-            && typeof mem.getDueCards === 'function') {
-            const filteredIds = new Set();
-            const byId = new Map();
-            for (const w of baseList) {
-                if (w && w.id != null) {
-                    filteredIds.add(w.id);
-                    byId.set(w.id, w);
+        try {
+            const mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+            if (mem && typeof mem.isEnabled === 'function' && mem.isEnabled()
+                && typeof mem.getDueCards === 'function') {
+                const due = mem.getDueCards(Date.now(), {
+                    limit: count,
+                    // MemoryService passes card objects to filterFn
+                    filterFn: (card) => {
+                        if (!card) return false;
+                        const id = Number(card.wordId);
+                        return Number.isFinite(id) && filteredIds.has(id);
+                    }
+                });
+                if (Array.isArray(due)) {
+                    for (const card of due) {
+                        if (!card) continue;
+                        const id = Number(card.wordId);
+                        if (!Number.isFinite(id) || usedIds.has(id)) continue;
+                        const vocab = byId.get(id);
+                        if (!vocab) continue;
+                        result.push(vocab);
+                        usedIds.add(id);
+                        if (result.length >= count) return result;
+                    }
                 }
             }
-            const due = mem.getDueCards(Date.now(), {
-                limit: count,
-                // MemoryService passes card objects to filterFn
-                filterFn: (card) => card && filteredIds.has(card.wordId)
-            });
-            for (const card of due) {
-                const vocab = byId.get(card.wordId);
-                if (!vocab) continue;
-                result.push(vocab);
-                usedIds.add(card.wordId);
-                if (result.length >= count) return result;
-            }
+        } catch (e) {
+            // Memory unusable → fall through to most-missed / adaptive
         }
 
         const remaining = count - result.length;
@@ -57,34 +72,45 @@ class DataService {
             try {
                 const missed = await app.analytics.getMostMissedWords(count * 3);
                 missed.forEach(m => {
-                    if (m.id && m.vocab) {
+                    if (m.id != null && m.vocab) {
+                        const hid = Number(m.id);
+                        if (!Number.isFinite(hid)) return;
                         const total = (m.c || 0) + (m.w || 0);
-                        userHistory[m.id] = { correct: m.c || 0, total };
+                        userHistory[hid] = { correct: m.c || 0, total };
                     }
                 });
             } catch (e) {}
         }
 
         if (typeof selectWordsForReview === 'function') {
-            const pool = baseList.filter(w => w && !usedIds.has(w.id));
+            const pool = baseList.filter(w => {
+                if (!w || w.id == null) return false;
+                const id = Number(w.id);
+                return Number.isFinite(id) && !usedIds.has(id);
+            });
             const reviewItems = selectWordsForReview(pool, userHistory, remaining);
             for (const w of reviewItems) {
-                if (!w || usedIds.has(w.id)) continue;
+                if (!w || w.id == null) continue;
+                const id = Number(w.id);
+                if (!Number.isFinite(id) || usedIds.has(id)) continue;
                 result.push(w);
-                usedIds.add(w.id);
+                usedIds.add(id);
             }
             return result.slice(0, count);
         }
 
-        // Fallback: most missed first
+        // Fallback: most missed first (still scoped to filtered universe)
         const missed = await (app.analytics ? app.analytics.getMostMissedWords(count) : []);
         for (const m of missed) {
             if (result.length >= count) break;
             const vocab = m.vocab;
             if (!vocab) continue;
-            const id = vocab.id != null ? vocab.id : m.id;
-            if (usedIds.has(id)) continue;
-            result.push(vocab);
+            const raw = vocab.id != null ? vocab.id : m.id;
+            const id = Number(raw);
+            if (!Number.isFinite(id) || usedIds.has(id)) continue;
+            if (!filteredIds.has(id)) continue;
+            // Prefer in-universe vocab object from baseList when available
+            result.push(byId.get(id) || vocab);
             usedIds.add(id);
         }
         return result.slice(0, count);

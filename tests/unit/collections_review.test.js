@@ -4,13 +4,28 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const dataSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'data.js'), 'utf8');
-const adaptiveSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'adaptive.js'), 'utf8');
-const mainSrc = readFileSync(join(__dirname, '..', '..', 'public', 'js', 'main.js'), 'utf8');
+const root = join(__dirname, '..', '..');
+const dataSrc = readFileSync(join(root, 'public', 'js', 'data.js'), 'utf8');
+const adaptiveSrc = readFileSync(join(root, 'public', 'js', 'adaptive.js'), 'utf8');
+const mainSrc = readFileSync(join(root, 'public', 'js', 'main.js'), 'utf8');
+const fsrsSrc = readFileSync(join(root, 'public', 'js', 'fsrs.js'), 'utf8');
+const memorySrc = readFileSync(join(root, 'public', 'js', 'memory.js'), 'utf8');
 
 let DataService;
 let selectWordsForReview;
+let MemoryService;
 let mockAppForData;
+const NOW = 1_700_000_000_000;
+
+function makeLocalStorage() {
+    const store = new Map();
+    return {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => { store.set(k, String(v)); },
+        removeItem: (k) => { store.delete(k); },
+        clear: () => { store.clear(); }
+    };
+}
 
 beforeAll(() => {
     // Eval adaptive for review tests
@@ -20,6 +35,24 @@ beforeAll(() => {
 
     // Make available for global lookup inside DataService.getReviewWords
     globalThis.selectWordsForReview = selectWordsForReview;
+
+    // Load FSRS + MemoryService for integration-style tests
+    globalThis.localStorage = makeLocalStorage();
+    globalThis.L = () => {};
+    globalThis.document = { addEventListener: () => {}, visibilityState: 'visible' };
+    const win = {
+        MEMORY_ENGINE_ENABLED: false,
+        addEventListener: () => {}
+    };
+    const memFn = new Function(
+        'window',
+        fsrsSrc + '\n' + memorySrc + '\nreturn { MemoryService, FSRS };'
+    );
+    const memResult = memFn(win);
+    MemoryService = memResult.MemoryService;
+    win.FSRS = memResult.FSRS;
+    win.MemoryService = MemoryService;
+    globalThis.window = win;
 
     // Create a mutable app object that will be closed over by DataService methods
     mockAppForData = {
@@ -35,14 +68,15 @@ beforeAll(() => {
     DataService = dataResult.DataService;
 });
 
-function makeDueCard(wordId, due) {
+function makeDueCard(wordId, due, extra = {}) {
     return {
         wordId,
         due,
         state: 'review',
         stability: 1,
         difficulty: 5,
-        introducedAt: due - 86400000
+        introducedAt: due - 86400000,
+        ...extra
     };
 }
 
@@ -55,6 +89,7 @@ describe('DataService filtering (level / tag)', () => {
         mockAppForData.memory = null;
         globalThis.window = globalThis.window || {};
         globalThis.window.MEMORY_ENGINE_ENABLED = false;
+        globalThis.selectWordsForReview = selectWordsForReview;
 
         data = new DataService();
         mockAppForData.data = data;
@@ -91,6 +126,7 @@ describe('DataService getReviewWords — adaptive / most-missed fallback', () =>
         mockAppForData.memory = null;
         globalThis.window = globalThis.window || {};
         globalThis.window.MEMORY_ENGINE_ENABLED = false;
+        globalThis.selectWordsForReview = selectWordsForReview;
 
         data = new DataService();
         mockAppForData.data = data;
@@ -128,11 +164,38 @@ describe('DataService getReviewWords — adaptive / most-missed fallback', () =>
         expect(data.activeList[0].en).toBe('storyword');
         data.endReviewSession();
     });
+
+    it('most-missed fallback without adaptive stays in filtered universe', async () => {
+        // Simulate adaptive.js not loaded
+        const saved = globalThis.selectWordsForReview;
+        delete globalThis.selectWordsForReview;
+
+        mockAppForData.store.prefs.levelFilter = ['N3'];
+        mockAppForData.analytics = {
+            getMostMissedWords: async () => [
+                // Out of universe (N5) — must not appear
+                { id: 2, c: 0, w: 9, vocab: { id: 2, tags: ['N5'], en: 'dog' } },
+                // In universe
+                { id: 99, c: 0, w: 5, vocab: { id: 99, tags: ['N3'], en: 'weak' } },
+                { id: 1, c: 1, w: 3, vocab: { id: 1, tags: ['N3'], en: 'cat' } }
+            ]
+        };
+
+        try {
+            const review = await data.getReviewWords(5);
+            const ids = review.map(w => Number(w.id));
+            expect(ids).toContain(99);
+            expect(ids).toContain(1);
+            expect(ids).not.toContain(2);
+            expect(new Set(ids).size).toBe(ids.length);
+        } finally {
+            globalThis.selectWordsForReview = saved;
+        }
+    });
 });
 
 describe('DataService getReviewWords — memory due-first (PR4)', () => {
     let data;
-    const NOW = 1_700_000_000_000;
 
     beforeEach(() => {
         mockAppForData.store = { prefs: { levelFilter: ['all'] } };
@@ -144,6 +207,7 @@ describe('DataService getReviewWords — memory due-first (PR4)', () => {
         };
         globalThis.window = globalThis.window || {};
         globalThis.window.MEMORY_ENGINE_ENABLED = true;
+        globalThis.selectWordsForReview = selectWordsForReview;
 
         data = new DataService();
         mockAppForData.data = data;
@@ -160,10 +224,16 @@ describe('DataService getReviewWords — memory due-first (PR4)', () => {
             makeDueCard(3, NOW - 1000),
             makeDueCard(1, NOW - 500)
         ];
+        let filterFnSeen = null;
         mockAppForData.memory = {
             isEnabled: () => true,
             getDueCards: (now, opts) => {
                 expect(opts.limit).toBe(5);
+                expect(typeof opts.filterFn).toBe('function');
+                filterFnSeen = opts.filterFn;
+                // filterFn receives card objects (wordId), not bare ids
+                expect(opts.filterFn(makeDueCard(3, NOW))).toBe(true);
+                expect(opts.filterFn(3)).toBe(false);
                 let cards = dueCards;
                 if (opts.filterFn) cards = cards.filter(opts.filterFn);
                 return cards.slice(0, opts.limit);
@@ -171,6 +241,7 @@ describe('DataService getReviewWords — memory due-first (PR4)', () => {
         };
 
         const review = await data.getReviewWords(5);
+        expect(filterFnSeen).toBeTypeOf('function');
         // Due cards first (order preserved from getDueCards), then fill with adaptive
         expect(review[0].id).toBe(3);
         expect(review[1].id).toBe(1);
@@ -237,6 +308,104 @@ describe('DataService getReviewWords — memory due-first (PR4)', () => {
 
         const review = await data.getReviewWords(5);
         expect(review.some(w => w.id === 99)).toBe(true);
+    });
+
+    it('falls back when memory throws', async () => {
+        mockAppForData.memory = {
+            isEnabled: () => true,
+            getDueCards: () => {
+                throw new Error('memory boom');
+            }
+        };
+        const review = await data.getReviewWords(5);
+        expect(review.some(w => w.id === 99)).toBe(true);
+    });
+
+    it('falls back when getDueCards returns non-array', async () => {
+        mockAppForData.memory = {
+            isEnabled: () => true,
+            getDueCards: () => undefined
+        };
+        const review = await data.getReviewWords(5);
+        expect(review.some(w => w.id === 99)).toBe(true);
+    });
+
+    it('normalizes string vocab ids against numeric wordId (no duplicates)', async () => {
+        data.list = [
+            { id: '1', tags: ['N3'], en: 'cat' },
+            { id: '2', tags: ['N5'], en: 'dog' },
+            { id: '99', tags: ['N3'], en: 'weak' }
+        ];
+        mockAppForData.memory = {
+            isEnabled: () => true,
+            getDueCards: (now, opts) => {
+                const cards = [makeDueCard(1, NOW - 1000)]; // numeric wordId
+                return (opts.filterFn ? cards.filter(opts.filterFn) : cards);
+            }
+        };
+        mockAppForData.analytics = {
+            getMostMissedWords: async () => [
+                { id: '1', c: 0, w: 9, vocab: { id: '1', tags: ['N3'], en: 'cat' } },
+                { id: '99', c: 0, w: 5, vocab: { id: '99', tags: ['N3'], en: 'weak' } }
+            ]
+        };
+
+        const review = await data.getReviewWords(5);
+        // First is due card (string-id vocab row matched via Number)
+        expect(Number(review[0].id)).toBe(1);
+        // No duplicate of id 1 from fill path
+        expect(review.filter(w => Number(w.id) === 1)).toHaveLength(1);
+        expect(review.some(w => Number(w.id) === 99)).toBe(true);
+    });
+
+    it('uses real MemoryService: due sort, sessionHold exclude, filter-before-limit', async () => {
+        globalThis.localStorage = makeLocalStorage();
+        const mem = new MemoryService();
+        // Force enabled regardless of window flag path
+        mem.isEnabled = () => true;
+
+        // Overdue held card — must be excluded
+        const held = mem.ensureCard(2);
+        held.due = NOW - 5000;
+        held.state = 'review';
+        held.introducedAt = NOW - 86400000;
+        held.sessionHold = true;
+        mem.cards.set(2, held);
+
+        // Two due cards: later due first in insertion, sort should put older due first
+        const late = mem.ensureCard(3);
+        late.due = NOW - 100;
+        late.state = 'review';
+        late.introducedAt = NOW - 86400000;
+        mem.cards.set(3, late);
+
+        const early = mem.ensureCard(1);
+        early.due = NOW - 9000;
+        early.state = 'review';
+        early.introducedAt = NOW - 86400000;
+        mem.cards.set(1, early);
+
+        // Not yet due
+        const future = mem.ensureCard(99);
+        future.due = NOW + 86400000;
+        future.state = 'review';
+        future.introducedAt = NOW - 86400000;
+        mem.cards.set(99, future);
+
+        mockAppForData.memory = mem;
+        mockAppForData.store.prefs.levelFilter = ['N3']; // excludes id 2 even if not held
+        mockAppForData.analytics = {
+            getMostMissedWords: async () => [
+                { id: 99, c: 0, w: 5, vocab: { id: 99, tags: ['N3'], en: 'weak' } }
+            ]
+        };
+
+        const review = await data.getReviewWords(2);
+        // Only 1 and 3 are due+in-universe; held 2 excluded; 99 not due
+        expect(review.map(w => w.id)).toEqual([1, 3]);
+        // Real service sort: earlier due first
+        expect(review[0].id).toBe(1);
+        expect(review[1].id).toBe(3);
     });
 });
 

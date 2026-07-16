@@ -64,6 +64,7 @@ class App {
         initService('fitter', () => new TextFitter(), false);
         initService('celebration', () => new CelebrationService(), false);
         initService('analytics', () => new AnalyticsService(), false);
+        initService('memory', () => new MemoryService(), false);
         initService('llm', () => new LLMService(), true);
         initService('presets', () => new PresetManager(), false);
 
@@ -119,6 +120,11 @@ class App {
             // analytics
             'startSession', 'endSession', 'recordAttempt', 'getAnalytics',
             'getMostMissedWords', 'getAccuracyByMode', 'getDailyAccuracy',
+            // memory (PR3a)
+            'load', 'maybeMigrate', 'review', 'introduce', 'ensureCard', 'getCard',
+            'finalizeSessionHolds', 'finalizeSessionRating',
+            'getDueCards', 'getNewCandidates', 'countDue', 'countNew',
+            'bootstrapFromWordStats', 'flush', 'resetAllKeepAnalytics', 'isEnabled',
             // presets
             'apply',
             // store
@@ -295,6 +301,16 @@ class App {
             const count = await this.data.load();
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
+
+            // 2a. Memory engine (PR3a): load cards + staggered migrate (offline no-op)
+            if (this.memory && !this.memory._isStub) {
+                try {
+                    if (this.memory.load) await this.memory.load();
+                    if (this.memory.maybeMigrate) await this.memory.maybeMigrate();
+                } catch (memErr) {
+                    L('[Memory] init load/migrate failed', memErr);
+                }
+            }
 
             // 2b. Init LLM — F9: block up to 3s on autoDetect so the home screen
             // can show an accurate AI status immediately. If the probe is slow

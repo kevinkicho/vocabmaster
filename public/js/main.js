@@ -125,6 +125,7 @@ class App {
             'finalizeSessionHolds', 'finalizeSessionRating',
             'getDueCards', 'getNewCandidates', 'countDue', 'countNew',
             'bootstrapFromWordStats', 'flush', 'resetAllKeepAnalytics', 'isEnabled',
+            'forceMigrate', 'getDebugSnapshot',
             // presets
             'apply',
             // store
@@ -139,6 +140,8 @@ class App {
             'updateLLMStatus', 'updateLLMCacheCount', '_updateAIStatus', 'runAIAnalysis',
             'approveAIAdjustment', 'dismissAIAdjustment', 'resetAITemplates',
             'showTooltip', 'hideTooltip', 'copyLogs', 'dumpVoices',
+            'refreshMemoryDebugPanel', 'adminFlushMemoryDirty',
+            'adminForceMemoryMigrate', 'adminResetMemoryKeepAnalytics',
             'validateSettingsBindings', '_syncRadioVisual', 'modal',
         ];
         for (const m of methods) stub[m] = noop;

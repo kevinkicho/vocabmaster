@@ -659,6 +659,66 @@ class MemoryService {
         L('[Memory] Reset complete (analytics preserved)');
     }
 
+    /**
+     * Admin/dev: re-run migration even if status is already 'done'.
+     * Resets migrationStatus to pending, then calls maybeMigrate().
+     * Does not wipe existing FSRS cards (bootstrapFromWordStats skips source:'fsrs').
+     * @returns {Promise<{status:string,migrated:number,reason?:string,error?:string}>}
+     */
+    async forceMigrate() {
+        this.meta.migrationStatus = 'pending';
+        this.meta.lastError = null;
+        this._markMetaDirty();
+        this._persistLocalCache();
+        L('[Memory] forceMigrate: status reset to pending');
+        return await this.maybeMigrate();
+    }
+
+    /**
+     * Admin/dev snapshot for Settings → Developer Memory panel.
+     * Pure read of in-memory state + FSRS.REFERENCE; no I/O.
+     * @returns {object}
+     */
+    getDebugSnapshot() {
+        var now = Date.now();
+        var byState = { new: 0, learning: 0, relearning: 0, review: 0, other: 0 };
+        var bySource = { fsrs: 0, migrated: 0, bootstrap: 0, other: 0 };
+        var sessionHold = 0;
+        this.cards.forEach(function (c) {
+            if (!c) return;
+            if (c.sessionHold) sessionHold++;
+            if (Object.prototype.hasOwnProperty.call(byState, c.state)) byState[c.state]++;
+            else byState.other++;
+            var src = c.source || 'other';
+            if (Object.prototype.hasOwnProperty.call(bySource, src)) bySource[src]++;
+            else bySource.other++;
+        });
+        var ref = null;
+        try {
+            if (typeof window !== 'undefined' && window.FSRS && window.FSRS.REFERENCE) {
+                ref = window.FSRS.REFERENCE;
+            }
+        } catch (_) { /* ignore */ }
+        return {
+            fsrs: ref,
+            engineEnabled: this.isEnabled(),
+            schemaVersion: this.meta.schemaVersion || MEMORY_SCHEMA_VERSION,
+            migrationStatus: this.meta.migrationStatus || 'pending',
+            migratedAt: this.meta.migratedAt || null,
+            migratedCards: this.meta.migratedCards || 0,
+            lastSync: this.meta.lastSync || null,
+            lastError: this.meta.lastError || null,
+            cardCount: this.cards.size,
+            byState: byState,
+            bySource: bySource,
+            sessionHoldCount: sessionHold,
+            dirtyCount: this.dirty.size,
+            metaDirty: !!this._metaDirty,
+            dueCount: this.countDue(now),
+            loaded: !!this._loaded
+        };
+    }
+
     // --- Internals ---
 
     _resolveUid() {

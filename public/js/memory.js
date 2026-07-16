@@ -597,15 +597,40 @@ class MemoryService {
 
     /**
      * Push dirty cards + meta to RTDB; always refresh localStorage.
+     * @returns {Promise<{status:string, dirtyRemaining:number, metaDirty:boolean, error?:string}>}
+     *   status: 'flushed' | 'empty' | 'offline' | 'no-auth' | 'busy' | 'error'
      */
     async flush() {
-        if (this._flushing) return;
+        if (this._flushing) {
+            return {
+                status: 'busy',
+                dirtyRemaining: this.dirty.size,
+                metaDirty: !!this._metaDirty
+            };
+        }
         this._persistLocalCache();
-        if (this.dirty.size === 0 && !this._metaDirty) return;
+        if (this.dirty.size === 0 && !this._metaDirty) {
+            return {
+                status: 'empty',
+                dirtyRemaining: 0,
+                metaDirty: false
+            };
+        }
 
         var uid = this._resolveUid();
-        if (!uid || typeof db === 'undefined' || !db || !this._isOnline()) {
-            return; // stay dirty for later
+        if (!uid || typeof db === 'undefined' || !db) {
+            return {
+                status: 'no-auth',
+                dirtyRemaining: this.dirty.size,
+                metaDirty: !!this._metaDirty
+            };
+        }
+        if (!this._isOnline()) {
+            return {
+                status: 'offline',
+                dirtyRemaining: this.dirty.size,
+                metaDirty: !!this._metaDirty
+            };
         }
 
         this._flushing = true;
@@ -617,10 +642,21 @@ class MemoryService {
             }
             this.meta.lastSync = Date.now();
             this._persistLocalCache();
+            return {
+                status: 'flushed',
+                dirtyRemaining: this.dirty.size,
+                metaDirty: !!this._metaDirty
+            };
         } catch (e) {
             L('[Memory] Flush failed', e);
             this.meta.lastError = String(e && e.message ? e.message : e);
             this._persistLocalCache();
+            return {
+                status: 'error',
+                dirtyRemaining: this.dirty.size,
+                metaDirty: !!this._metaDirty,
+                error: this.meta.lastError
+            };
         } finally {
             this._flushing = false;
         }
@@ -628,6 +664,8 @@ class MemoryService {
 
     /**
      * Admin/dev: wipe all memory cards; keep analytics c/w.
+     * Clears local Map + localStorage first, then best-effort RTDB wipe.
+     * @returns {Promise<{ok:boolean, localCleared:boolean, remoteCleared:boolean, error?:string}>}
      */
     async resetAllKeepAnalytics() {
         var uid = this._resolveUid();
@@ -647,16 +685,33 @@ class MemoryService {
             localStorage.removeItem(MEMORY_DIRTY_KEY);
         } catch (_) { /* ignore */ }
 
+        var remoteCleared = false;
+        var error = null;
+
         if (uid && typeof db !== 'undefined' && db) {
             try {
                 await db.ref('users/' + uid + '/memory').remove();
                 await db.ref('users/' + uid + '/memoryMeta').set(this._metaForWrite());
+                remoteCleared = true;
+                this._metaDirty = false;
             } catch (e) {
                 L('[Memory] resetAllKeepAnalytics RTDB failed', e);
+                error = String(e && e.message ? e.message : e);
+                this.meta.lastError = error;
             }
+        } else {
+            // Offline / no auth: local cleared, remote not touched
+            error = uid ? 'offline-or-no-db' : 'no-auth';
         }
+
         this._persistLocalCache();
-        L('[Memory] Reset complete (analytics preserved)');
+        L('[Memory] Reset complete (analytics preserved)', 'remoteCleared=', remoteCleared);
+        return {
+            ok: remoteCleared || !uid, // ok if no uid (nothing remote to clear) after local wipe
+            localCleared: true,
+            remoteCleared: remoteCleared,
+            error: error || undefined
+        };
     }
 
     /**

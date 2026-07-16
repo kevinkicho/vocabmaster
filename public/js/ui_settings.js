@@ -467,8 +467,23 @@ Object.assign(UIManager.prototype, {
             return;
         }
         try {
-            await mem.flush();
-            app.ui.showToast('Memory dirty queue flushed', 'success');
+            var result = await mem.flush();
+            var status = result && result.status ? result.status : 'flushed';
+            if (status === 'flushed') {
+                app.ui.showToast('Memory dirty queue flushed', 'success');
+            } else if (status === 'empty') {
+                app.ui.showToast('Nothing dirty to flush', 'info');
+            } else if (status === 'offline') {
+                app.ui.showToast('Flush deferred (offline) — dirty kept local', 'warning');
+            } else if (status === 'no-auth') {
+                app.ui.showToast('Flush deferred (no auth/db)', 'warning');
+            } else if (status === 'busy') {
+                app.ui.showToast('Flush already in progress', 'warning');
+            } else if (status === 'error') {
+                app.ui.showToast('Flush failed: ' + (result.error || 'unknown'), 'error');
+            } else {
+                app.ui.showToast('Flush: ' + status, 'warning');
+            }
         } catch (e) {
             app.ui.showToast('Flush failed: ' + (e && e.message ? e.message : e), 'error');
         }
@@ -480,6 +495,9 @@ Object.assign(UIManager.prototype, {
         var mem = window.app && window.app.memory;
         if (!mem || typeof mem.forceMigrate !== 'function') {
             app.ui.showToast('MemoryService unavailable', 'warning');
+            return;
+        }
+        if (!window.confirm('Re-run migration from analytics c/w?\n\nExisting FSRS-sourced cards are kept. Migrated/bootstrap cards may be rewritten. Use Reset first for a full wipe.')) {
             return;
         }
         try {
@@ -507,12 +525,24 @@ Object.assign(UIManager.prototype, {
             app.ui.showToast('MemoryService unavailable', 'warning');
             return;
         }
-        if (!window.confirm('Reset all FSRS memory cards?\n\nAnalytics c/w history is kept. Migration will re-run on next load.')) {
+        if (!window.confirm('Reset all FSRS memory cards?\n\nAnalytics c/w history is kept. RTDB memory will be wiped if online. Migration will re-run on next load (or use Force migrate).')) {
             return;
         }
         try {
-            await mem.resetAllKeepAnalytics();
-            app.ui.showToast('Memory reset (c/w preserved)', 'success');
+            var result = await mem.resetAllKeepAnalytics();
+            if (result && result.remoteCleared) {
+                app.ui.showToast('Memory reset (c/w preserved, RTDB cleared)', 'success');
+            } else if (result && result.localCleared && result.error === 'no-auth') {
+                app.ui.showToast('Local memory cleared (no auth — RTDB not touched)', 'warning');
+            } else if (result && result.localCleared && !result.remoteCleared) {
+                app.ui.showToast(
+                    'Local memory cleared; RTDB wipe failed — reload may restore cards. ' +
+                    (result.error || ''),
+                    'error'
+                );
+            } else {
+                app.ui.showToast('Memory reset (c/w preserved)', 'success');
+            }
         } catch (e) {
             app.ui.showToast('Reset failed: ' + (e && e.message ? e.message : e), 'error');
         }

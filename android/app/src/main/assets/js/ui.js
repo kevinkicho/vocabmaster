@@ -127,6 +127,8 @@ class UIManager {
             this.applyFontSettings();
             this.renderSettingsUI(); 
             setRad('global-click-mode', p.globalClickMode || 'double');
+            setRad('session-intensity', p.sessionIntensity === 'cram' ? 'cram' : 'casual');
+            if (typeof this._updateSessionIntensityHint === 'function') this._updateSessionIntensityHint();
             setVal('flash-speed', p.flashSpeed); setChk('flash-random', p.flashRandom); setChk('flash-auto', p.flashAuto); 
             setChk('hanzi-enable-tooltip', p.hanziEnableTooltip !== false); setVal('hanzi-tooltip-timer', p.hanziAutoClose || "0"); 
             setChk('hanzi-show-trad', p.hanziShowTrad !== false); setChk('hanzi-show-simp', p.hanziShowSimp !== false); 

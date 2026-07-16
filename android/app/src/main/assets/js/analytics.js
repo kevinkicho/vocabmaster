@@ -1,4 +1,10 @@
 /* js/analytics.js */
+
+/** Modes that auto-update FSRS memory via recordAttempt (free-play hook). */
+const MEMORY_AUTO_MODES = new Set([
+    'quiz', 'tf', 'match', 'sentences', 'dictation', 'voice'
+]);
+
 class AnalyticsService {
     constructor() {
         this.buffer = [];
@@ -14,13 +20,56 @@ class AnalyticsService {
     }
 
     // --- Event Recording ---
-    recordAttempt(wordId, mode, isCorrect) {
+    /**
+     * Buffer an attempt for analytics flush. Optionally updates FSRS memory
+     * for allowlisted modes when MEMORY_ENGINE is enabled (free-play path).
+     * @param {number|string} wordId
+     * @param {string} mode
+     * @param {boolean} isCorrect
+     * @param {{ rating?: number|string, skipMemory?: boolean, applyMemory?: boolean }} [meta]
+     *        Optional 4th arg — backward compatible; existing 3-arg callers unchanged.
+     *        meta.rating: explicit FSRS rating (1–4); skips binary map
+     *        meta.skipMemory: force-skip memory.review
+     *        meta.applyMemory: true forces memory even if mode not allowlisted;
+     *                          false forces skip
+     */
+    recordAttempt(wordId, mode, isCorrect, meta) {
         this.buffer.push({ wordId, mode, correct: isCorrect, ts: Date.now() });
         if (this.session) {
             if (isCorrect) this.session.correct++;
             else this.session.incorrect++;
         }
         if (this.buffer.length >= this.FLUSH_THRESHOLD) this.flush();
+
+        // Memory side-effect only — analytics c/w always runs above for all modes.
+        // Free-play uses this hook; Daily Session skips when it owns reviews.
+        var memOn = (typeof window.isMemoryEngineEnabled === 'function')
+            ? window.isMemoryEngineEnabled()
+            : !!window.MEMORY_ENGINE_ENABLED;
+        if (!memOn) return;
+        if (typeof app === 'undefined' || !app.memory || typeof app.memory.review !== 'function') return;
+        if (wordId == null) return;
+        if (meta && meta.skipMemory) return;
+        if (meta && meta.applyMemory === false) return;
+        if (app.dailySession && app.dailySession._ownsMemoryReviews) return;
+
+        var explicit = meta && (meta.applyMemory === true || meta.rating != null);
+        if (!explicit && !MEMORY_AUTO_MODES.has(mode)) return;
+
+        var rating;
+        if (meta && meta.rating != null) {
+            rating = meta.rating;
+        } else if (window.FSRS && typeof window.FSRS.ratingFromBinary === 'function') {
+            rating = window.FSRS.ratingFromBinary(!!isCorrect);
+        } else {
+            rating = isCorrect ? 3 : 1; // Good / Again
+        }
+
+        try {
+            app.memory.review(wordId, rating, mode, Date.now());
+        } catch (e) {
+            if (typeof L === 'function') L('[Analytics] memory.review failed', e);
+        }
     }
 
     // --- Session Management ---

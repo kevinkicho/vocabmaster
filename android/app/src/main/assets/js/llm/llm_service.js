@@ -24,23 +24,12 @@
  * See docs/architecture.md §1 for full pipeline description.
  */
 class LLMService {
-    static MODEL = 'gemma4:31b-cloud';
+    static MODEL = (typeof window !== 'undefined' && window.OLLAMA_MODEL) || 'gemma4:31b-cloud';
+    static DEFAULT_PROXY = 'https://ollama-proxy-1020976660084.us-central1.run.app';
 
     constructor() {
-        var isBrowser = !window.Capacitor && !window.NativeTTS;
-        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
-            this.useProxy = true;
-            this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
-            this.endpoint = this.proxyUrl;
-            this.useCloud = true;
-            this.apiKey = null;
-        } else {
-            this.useProxy = false;
-            this.proxyUrl = '';
-            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
-            this.useCloud = false; // APK / non-browser always uses local Ollama
-            this.apiKey = window.OLLAMA_API_KEY || null;
-        }
+        this.proxyUrl = window.OLLAMA_PROXY_URL || LLMService.DEFAULT_PROXY;
+        this._configureTransport();
         this.available = false;
         this.hasModel = false;
         this.cache = new Map();
@@ -50,12 +39,40 @@ class LLMService {
         this._queue = [];
         this._initDB();
         if (typeof this.initValidator === 'function') this.initValidator();
-        L('[LLM] Endpoint:', this.endpoint, '| Model:', LLMService.MODEL);
+        L('[LLM] Endpoint:', this.endpoint, '| Proxy:', this.proxyUrl, '| Model:', LLMService.MODEL);
 
         // Re-check connection when app returns to foreground
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') this._ping();
         });
+    }
+
+    /** Web+cloud → proxy; APK/local → local endpoint (proxy as fallback on transport fail). Never store client API keys for proxy. */
+    _configureTransport() {
+        var isBrowser = !window.Capacitor && !window.NativeTTS;
+        this.proxyUrl = window.OLLAMA_PROXY_URL || LLMService.DEFAULT_PROXY;
+        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
+            this.useProxy = true;
+            this.endpoint = this.proxyUrl;
+            this.useCloud = true;
+            this.apiKey = null; // key stays server-side
+        } else {
+            this.useProxy = false;
+            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
+            this.useCloud = false;
+            // Local Ollama only — never use client-held cloud keys
+            this.apiKey = null;
+        }
+    }
+
+    async _firebaseIdToken(forceRefresh) {
+        try {
+            if (typeof auth === 'undefined' || !auth || !auth.currentUser) return null;
+            return await auth.currentUser.getIdToken(!!forceRefresh);
+        } catch (e) {
+            L('[LLM] getIdToken failed:', e && e.message);
+            return null;
+        }
     }
 
     async _ping() {
@@ -128,6 +145,35 @@ class LLMService {
         var timeout = opts.timeout || 45000;
         var method = opts.method || null;
         var signal = opts.signal || null;
+        var forceProxy = !!opts.forceProxy;
+        var skipLocalFallback = !!opts.skipLocalFallback;
+
+        try {
+            return await this._ollamaRequestOnce(path, payload, {
+                stream: stream, timeout: timeout, method: method, signal: signal, forceProxy: forceProxy
+            });
+        } catch (e) {
+            // APK/local: on transport failure, retry once via cloud proxy (key stays server-side)
+            var isBrowser = !window.Capacitor && !window.NativeTTS;
+            var canFallback = !this.useProxy && !forceProxy && !skipLocalFallback && !isBrowser;
+            var msg = (e && e.message) ? e.message : String(e);
+            var transportFail = /HTTP 0|timed out|Failed to fetch|NetworkError|status 0|ECONNREFUSED|HTTP 502|HTTP 503/i.test(msg);
+            if (canFallback && transportFail && this.proxyUrl) {
+                L('[LLM] Local failed — cloud proxy fallback:', msg);
+                return await this._ollamaRequestOnce(path, payload, {
+                    stream: stream, timeout: timeout, method: method, signal: signal, forceProxy: true
+                });
+            }
+            throw e;
+        }
+    }
+
+    async _ollamaRequestOnce(path, payload, opts) {
+        var stream = opts.stream || false;
+        var timeout = opts.timeout || 45000;
+        var method = opts.method || null;
+        var signal = opts.signal || null;
+        var useProxy = opts.forceProxy || this.useProxy;
 
         var isTags = path === '/api/tags' || path.endsWith('/tags');
         var reqMethod = method || (isTags ? 'GET' : 'POST');
@@ -136,23 +182,23 @@ class LLMService {
         var url, headers = { 'Content-Type': 'application/json' };
         var fetchOptions;
 
-        if (this.useProxy) {
-            // Route through Firebase Cloud Function proxy (key lives server-side)
-            url = this.proxyUrl;
+        if (useProxy) {
+            url = this.proxyUrl || LLMService.DEFAULT_PROXY;
+            var token = await this._firebaseIdToken(false);
+            var proxyHeaders = { 'Content-Type': 'application/json' };
+            if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
             fetchOptions = {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: proxyHeaders,
                 body: JSON.stringify({
                     path: path,
                     method: reqMethod,
-                    headers: headers,
                     body: payload
                 }),
                 timeout: timeout
             };
         } else {
             url = this.endpoint + path;
-            if (this.apiKey) headers['Authorization'] = 'Bearer ' + this.apiKey;
             fetchOptions = {
                 method: reqMethod,
                 headers: headers,
@@ -183,9 +229,21 @@ class LLMService {
             clearTimeout(timeoutId);
         }
 
+        // One token refresh on 401 when using proxy
+        if (useProxy && resp && resp.status === 401) {
+            var token2 = await this._firebaseIdToken(true);
+            if (token2) {
+                fetchOptions.headers['Authorization'] = 'Bearer ' + token2;
+                resp = await this._fetch(url, Object.assign({}, fetchOptions));
+            }
+        }
+
         if (!resp.ok) {
             const errText = await resp.text().catch(() => '');
             L('[LLM] HTTP error', resp.status, 'for', url, 'body:', errText.slice(0, 300));
+            if (resp.status === 429) {
+                throw new Error('Too many AI requests — please wait a moment');
+            }
             throw new Error('Ollama HTTP ' + resp.status + ' ' + errText.slice(0, 200));
         }
 
@@ -196,20 +254,7 @@ class LLMService {
     }
 
     loadPrefs() {
-        var isBrowser = !window.Capacitor && !window.NativeTTS;
-        if (isBrowser && window.OLLAMA_USE_CLOUD === true) {
-            this.useProxy = true;
-            this.proxyUrl = 'https://ollama-proxy-1020976660084.us-central1.run.app';
-            this.endpoint = this.proxyUrl;
-            this.useCloud = true;
-            this.apiKey = null;
-        } else {
-            this.useProxy = false;
-            this.proxyUrl = '';
-            this.endpoint = window.OLLAMA_ENDPOINT || 'http://127.0.0.1:11434';
-            this.useCloud = false;
-            this.apiKey = window.OLLAMA_API_KEY || null;
-        }
+        this._configureTransport();
     }
 
     async autoDetect() {

@@ -1,4 +1,5 @@
-function L(...args) { console.log(...args); }  // always buffer via console override; console output only visible in debug or adb logcat
+var _debugMode = new URLSearchParams(window.location.search).has('debug');
+function L(...args) { if (_debugMode) console.log(...args); }
 function escapeHtml(str) {
     if (str == null) return '';
     return String(str)

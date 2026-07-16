@@ -1,7 +1,7 @@
 /* js/daily_session.js
  *
  * DailySessionService — compose a finite Today plan and run steps with
- * score/miss wrapping for step completion.
+ * score/miss wrapping for step completion (Quiz-first v1).
  *
  * Depends on: app.data, app.memory, game constructors (Quiz, TF, …), L().
  * Multi-script: window.DailySessionService + pure helpers for unit tests.
@@ -10,9 +10,9 @@
  * _ownsMemoryReviews so PR3b analytics hook skips; Again reinsert once;
  * complete/abandon → finalizeSessionHolds + endReviewSession.
  *
- * PR8: multi-mode plan (Flash present / Quiz / TF / optional Dictation / AI
- * Story); launch AI steps with sessionSeedWordIds; AI ends on questions
- * complete or Skip; no Story auto-memory.
+ * PR7: In-session progress chrome (Today · n/N + mode chip) and completion
+ * summary screen (correct/incorrect, new introduced, due cleared). User-facing
+ * copy only — never FSRS / schedule internals.
  */
 
 var DAILY_SESSION_LS_KEY = 'vm_daily_session_v1';
@@ -47,6 +47,56 @@ var SESSION_INTENSITY_PRESETS = Object.freeze({
 
 /** Back-compat alias: SESSION_DEFAULTS === casual preset */
 var SESSION_DEFAULTS = SESSION_INTENSITY_PRESETS.casual;
+
+/** User-facing mode labels for progress chrome (no jargon). */
+var SESSION_MODE_LABELS = Object.freeze({
+    quiz: 'Quiz',
+    flash: 'Flashcards',
+    tf: 'True / False',
+    match: 'Match',
+    voice: 'Voice',
+    dictation: 'Dictation',
+    sentences: 'Sentences',
+    story: 'Story',
+    grammar: 'Grammar',
+    context: 'Context',
+    present: 'Learn',
+    ai: 'Story'
+});
+
+/** Empty session stats shape (persisted on dailySessions/{date}.stats). */
+function emptySessionStats() {
+    return {
+        correct: 0,
+        incorrect: 0,
+        againCount: 0,
+        stepsDone: 0,
+        newIntroduced: 0,
+        dueCleared: 0,
+        dueAtStart: 0
+    };
+}
+
+function sessionModeLabel(mode) {
+    if (!mode) return 'Practice';
+    return SESSION_MODE_LABELS[mode] || String(mode);
+}
+
+/**
+ * Count work units (words) across plan steps for progress n/N.
+ * Skips terminal `complete` steps; AI steps count their seed wordIds if present.
+ * @param {Array<object>|null} steps
+ * @returns {number}
+ */
+function countPlanWordUnits(steps) {
+    var total = 0;
+    (steps || []).forEach(function (s) {
+        if (!s || s.type === 'complete') return;
+        var ids = s.wordIds || [];
+        total += ids.length;
+    });
+    return total;
+}
 
 /**
  * Runtime defaults for compose/buildPlan from prefs.sessionIntensity.
@@ -96,7 +146,6 @@ function buildPlan(newItems, due, d) {
     }
 
     // --- Due segment: Quiz 70% then TF 30% (by count, ceil quiz) ---
-    // Multi-mode when not quizOnly (compose uses buildQuizOnlyPlan for quizOnly).
     if (dueIds.length > 0) {
         var nQuiz = Math.ceil(dueIds.length * 0.7);
         var quizDue = dueIds.slice(0, nQuiz);
@@ -106,21 +155,6 @@ function buildPlan(newItems, due, d) {
         }
         if (tfDue.length) {
             steps.push({ type: 'drill', mode: 'tf', wordIds: tfDue, purpose: 'review' });
-        }
-    }
-
-    // --- Listening spice (default OFF; enable only if d.includeDictation) ---
-    // Up to 2 ids from end of due (prefer), else new — not a separate pool.
-    if (d.includeDictation) {
-        var dictSource = dueIds.length ? dueIds : newIds;
-        var dictIds = dictSource.slice(Math.max(0, dictSource.length - 2));
-        if (dictIds.length) {
-            steps.push({
-                type: 'drill',
-                mode: 'dictation',
-                wordIds: dictIds.slice(),
-                purpose: 'review'
-            });
         }
     }
 
@@ -249,13 +283,14 @@ class DailySessionService {
         this.defaults = null;
         this.intensity = 'casual';
         this.dateKey = null;
-        this.stats = { correct: 0, incorrect: 0, againCount: 0, stepsDone: 0 };
+        this.stats = emptySessionStats();
         /** @type {object|null} live step runner state */
         this._step = null;
         this._game = null;
         this._finishing = false;
         this._startedAt = null;
         this._updatedAt = null;
+        this._completedAt = null;
         /** Bumped to cancel in-flight waitAndNav after reinsert / step end. */
         this._navGen = 0;
         /**
@@ -263,6 +298,18 @@ class DailySessionService {
          * reinsert inside score must suppress that post-score auto-nav).
          */
         this._suppressNextWaitAndNav = false;
+        /** Session-wide unique wordIds introduced / cleared (for summary stats). */
+        this._introducedIds = new Set();
+        this._dueClearedIds = new Set();
+        /** Word units completed in finished steps (for progress n/N). */
+        this._wordsDoneBeforeStep = 0;
+        /**
+         * True while completion owns the view (set at start of complete(), before awaits).
+         * Prevents goHome from racing and being repainted by showCompleteSummary.
+         */
+        this._showingSummary = false;
+        /** User left via Home during/after complete — do not repaint summary over home. */
+        this._summaryDismissed = false;
     }
 
     /** @returns {boolean} true while plan is live (including UI-paused). */
@@ -296,25 +343,16 @@ class DailySessionService {
             : getSessionDefaults(prefs);
 
         if (options.includeAiBlock != null) d.includeAiBlock = !!options.includeAiBlock;
-        if (options.includeDictation != null) d.includeDictation = !!options.includeDictation;
+        if (options.quizOnly) {
+            d.includeAiBlock = false;
+        }
 
         var intensity = (prefs && prefs.sessionIntensity) === 'cram' ? 'cram' : 'casual';
         if (options.intensity === 'cram' || options.intensity === 'casual') {
             intensity = options.intensity;
             d = Object.assign({}, getSessionDefaults({ sessionIntensity: intensity }), options.defaults || {});
-            // Re-apply explicit overrides after intensity rebuild (quizOnly applied last below)
+            if (options.quizOnly) d.includeAiBlock = false;
             if (options.includeAiBlock != null) d.includeAiBlock = !!options.includeAiBlock;
-            if (options.includeDictation != null) d.includeDictation = !!options.includeDictation;
-            if (options.defaults) {
-                if (options.defaults.includeAiBlock != null) d.includeAiBlock = !!options.defaults.includeAiBlock;
-                if (options.defaults.includeDictation != null) d.includeDictation = !!options.defaults.includeDictation;
-            }
-        }
-
-        // quizOnly always wins last — cannot re-enable AI/dictation via intensity or flags
-        if (options.quizOnly) {
-            d.includeAiBlock = false;
-            d.includeDictation = false;
         }
 
         // Prebuilt steps win
@@ -343,51 +381,70 @@ class DailySessionService {
             };
         }
 
-        var pool = [];
-        try {
-            if (typeof app !== 'undefined' && app && app.data) {
-                pool = app.data.getFilteredList ? app.data.getFilteredList() : (app.data.list || []);
-                if (!pool || !pool.length) pool = app.data.list || [];
-            }
-        } catch (_) {
-            pool = [];
-        }
-
         var now = options.now != null ? options.now : Date.now();
         var dueCards = options.due || null;
         var newItems = options.newItems || null;
-        var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+        var pathMeta = null;
 
-        if (!dueCards && mem && typeof mem.getDueCards === 'function') {
-            var filteredIds = new Set();
-            for (var i = 0; i < pool.length; i++) {
-                if (pool[i] && pool[i].id != null) filteredIds.add(Number(pool[i].id));
-            }
-            var cards = mem.getDueCards(now, {
-                limit: d.maxDue,
-                filterFn: function (card) {
-                    if (!card) return false;
-                    return filteredIds.has(Number(card.wordId));
+        // Dual-universe path compose (unit new + multi-pass due) when LearningPath available
+        var path = (typeof app !== 'undefined' && app) ? app.learningPath : null;
+        if ((!dueCards || !newItems) && path && typeof path.selectTodayItems === 'function' && path.getProfile) {
+            try {
+                var prof = path.getProfile();
+                if (prof && prof.pathMode === 'guided') {
+                    var sel = path.selectTodayItems(d, now);
+                    if (!newItems) newItems = sel.newItems || [];
+                    if (!dueCards) dueCards = sel.due || [];
+                    pathMeta = sel.meta || null;
                 }
-            });
-            // Map cards → vocab
-            dueCards = [];
-            var byId = new Map();
-            for (var p = 0; p < pool.length; p++) {
-                if (pool[p] && pool[p].id != null) byId.set(Number(pool[p].id), pool[p]);
+            } catch (e) {
+                if (typeof L === 'function') L('[Session] path selectTodayItems failed', e);
             }
-            for (var c = 0; c < (cards || []).length; c++) {
-                var card = cards[c];
-                var vocab = byId.get(Number(card.wordId));
-                if (vocab) dueCards.push(vocab);
-                else dueCards.push({ id: Number(card.wordId) });
+        }
+
+        // Free-path / fallback: filtered list universe (legacy single-pool)
+        if (!dueCards || !newItems) {
+            var pool = [];
+            try {
+                if (typeof app !== 'undefined' && app && app.data) {
+                    if (app.data.getFilteredListStrict) pool = app.data.getFilteredListStrict();
+                    else if (app.data.getFilteredList) pool = app.data.getFilteredList();
+                    else pool = app.data.list || [];
+                    if ((!pool || !pool.length) && app.data.list) pool = app.data.list;
+                }
+            } catch (_) {
+                pool = [];
+            }
+            var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+            if (!dueCards && mem && typeof mem.getDueCards === 'function') {
+                var filteredIds = new Set();
+                for (var i = 0; i < pool.length; i++) {
+                    if (pool[i] && pool[i].id != null) filteredIds.add(Number(pool[i].id));
+                }
+                var cards = mem.getDueCards(now, {
+                    limit: d.maxDue,
+                    filterFn: function (card) {
+                        if (!card) return false;
+                        return filteredIds.has(Number(card.wordId));
+                    }
+                });
+                dueCards = [];
+                var byId = new Map();
+                for (var p = 0; p < pool.length; p++) {
+                    if (pool[p] && pool[p].id != null) byId.set(Number(pool[p].id), pool[p]);
+                }
+                for (var c = 0; c < (cards || []).length; c++) {
+                    var card = cards[c];
+                    var vocab = byId.get(Number(card.wordId));
+                    if (vocab) dueCards.push(vocab);
+                    else dueCards.push({ id: Number(card.wordId) });
+                }
+            }
+            if (!newItems && mem && typeof mem.getNewCandidates === 'function') {
+                newItems = mem.getNewCandidates(pool, { limit: d.maxNew }) || [];
             }
         }
         if (!dueCards) dueCards = [];
-
-        if (!newItems && mem && typeof mem.getNewCandidates === 'function') {
-            newItems = mem.getNewCandidates(pool, { limit: d.maxNew }) || [];
-        }
         if (!newItems) newItems = [];
 
         // Cap new so total preference is soft (due already limited by maxDue)
@@ -399,7 +456,8 @@ class DailySessionService {
             newItems: newItems,
             due: dueCards,
             defaults: d,
-            intensity: intensity
+            intensity: intensity,
+            meta: pathMeta
         };
     }
 
@@ -472,22 +530,30 @@ class DailySessionService {
         this.defaults = composed.defaults;
         this.intensity = composed.intensity;
         this.cursor = 0;
-        this.stats = { correct: 0, incorrect: 0, againCount: 0, stepsDone: 0 };
+        this.stats = emptySessionStats();
+        this.stats.dueAtStart = (this.plan.dueIds || []).length;
         this.status = 'active';
         this._uiPaused = false;
         this.pausedAt = null;
         this.dateKey = _dailySessionTodayKey();
         this._startedAt = Date.now();
         this._updatedAt = this._startedAt;
+        this._completedAt = null;
         this._finishing = false;
         this._step = null;
         this._ownsMemoryReviews = false;
         this._navGen = 0;
         this._suppressNextWaitAndNav = false;
+        this._introducedIds = new Set();
+        this._dueClearedIds = new Set();
+        this._wordsDoneBeforeStep = 0;
+        this._showingSummary = false;
+        this._summaryDismissed = false;
 
         await this._persistPlan();
         L('[DailySession] start', this.plan.steps.length, 'steps', 'intensity=', this.intensity);
 
+        this.updateProgressChrome();
         await this._launchStepAtCursor();
         return { ok: true, plan: this.plan };
     }
@@ -525,17 +591,77 @@ class DailySessionService {
             (typeof app !== 'undefined' && app && app.store) ? app.store.prefs : {}
         );
         this.intensity = loaded.plan.intensity || 'casual';
-        this.stats = loaded.stats || this.stats;
+        this.stats = Object.assign(emptySessionStats(), loaded.stats || {});
+        if (!this.stats.dueAtStart && this.plan && this.plan.dueIds) {
+            this.stats.dueAtStart = this.plan.dueIds.length;
+        }
         this.dateKey = loaded.dateKey || _dailySessionTodayKey();
         this.status = 'active';
         this._uiPaused = false;
         this.pausedAt = null;
         this._finishing = false;
+        this._showingSummary = false;
+        this._summaryDismissed = false;
+        // F1: rehydrate unique-id sets so complete() does not wipe pre-pause counts
+        this._introducedIds = this._rehydrateIdSet(
+            loaded.introducedIds,
+            this.stats.newIntroduced
+        );
+        this._dueClearedIds = this._rehydrateIdSet(
+            loaded.dueClearedIds,
+            this.stats.dueCleared
+        );
+        // Keep stats floors aligned with rehydrated sets (never shrink on resume)
+        this.stats.newIntroduced = Math.max(
+            this.stats.newIntroduced || 0,
+            this._introducedIds.size
+        );
+        this.stats.dueCleared = Math.max(
+            this.stats.dueCleared || 0,
+            this._dueClearedIds.size
+        );
+        // Rebuild words-done baseline from finished steps (cursor = next to run)
+        this._wordsDoneBeforeStep = 0;
+        var steps = (this.plan && this.plan.steps) || [];
+        for (var si = 0; si < this.cursor && si < steps.length; si++) {
+            var st = steps[si];
+            if (st && st.type !== 'complete' && st.wordIds) {
+                this._wordsDoneBeforeStep += st.wordIds.length;
+            }
+        }
 
         // Restore step meta for partial step if present
         var savedStep = loaded.stepMeta || null;
+        this.updateProgressChrome();
         await this._launchStepAtCursor(savedStep);
         return { ok: true, plan: this.plan };
+    }
+
+    /**
+     * Rebuild a session Set from persisted id arrays.
+     * When only a count floor is available (legacy payloads), seed opaque placeholders
+     * so size-based stats never drop on resume until real ids re-accumulate.
+     * @param {Array|null|undefined} ids
+     * @param {number} countFloor
+     * @returns {Set<number>}
+     */
+    _rehydrateIdSet(ids, countFloor) {
+        var set = new Set();
+        if (ids && ids.length) {
+            for (var i = 0; i < ids.length; i++) {
+                var n = Number(ids[i]);
+                if (Number.isFinite(n)) set.add(n);
+            }
+        }
+        var floor = Number(countFloor) || 0;
+        // Legacy: stats had counts but ids were not persisted — preserve size only.
+        // Negative sentinel ids never collide with real vocab wordIds (>= 0).
+        var pad = 0;
+        while (set.size < floor) {
+            pad++;
+            set.add(-pad);
+        }
+        return set;
     }
 
     /**
@@ -547,21 +673,65 @@ class DailySessionService {
         var workSteps = steps.filter(function (s) { return s && s.type !== 'complete'; });
         var resolvedInStep = 0;
         var pendingInStep = 0;
+        var stepMode = null;
+        var stepType = null;
         if (this._step) {
             resolvedInStep = this._step.resolvedWordIds ? this._step.resolvedWordIds.size : 0;
             pendingInStep = this._step.pendingWordIds ? this._step.pendingWordIds.size : 0;
+            stepMode = this._step.mode || null;
+            stepType = this._step.type || null;
+        } else if (steps[this.cursor] && steps[this.cursor].type !== 'complete') {
+            stepMode = steps[this.cursor].mode || null;
+            stepType = steps[this.cursor].type || null;
         }
+
+        var wordsTotal = countPlanWordUnits(steps);
+        var wordsDone = (this._wordsDoneBeforeStep || 0) + resolvedInStep;
+        if (wordsDone > wordsTotal) wordsDone = wordsTotal;
+
+        // 1-based step display; clamp when on terminal complete step
+        var stepDisplay = workSteps.length === 0
+            ? 0
+            : Math.min(this.cursor + 1, workSteps.length);
+
         return {
             status: this.status,
             paused: this.isPaused,
             pausedAt: this.pausedAt,
             stepIndex: this.cursor,
+            stepDisplay: stepDisplay,
             stepsTotal: workSteps.length,
             resolvedInStep: resolvedInStep,
             pendingInStep: pendingInStep,
+            wordsDone: wordsDone,
+            wordsTotal: wordsTotal,
+            mode: stepMode,
+            modeLabel: sessionModeLabel(stepMode || stepType),
             plan: this.plan,
             stats: Object.assign({}, this.stats),
             intensity: this.intensity
+        };
+    }
+
+    /**
+     * User-facing completion summary (from dailySessions stats).
+     * @returns {object}
+     */
+    getSummary() {
+        var s = Object.assign(emptySessionStats(), this.stats || {});
+        var graded = (s.correct || 0) + (s.incorrect || 0);
+        var accuracy = graded > 0 ? Math.round((s.correct / graded) * 100) : 0;
+        return {
+            correct: s.correct || 0,
+            incorrect: s.incorrect || 0,
+            accuracy: accuracy,
+            newIntroduced: s.newIntroduced || 0,
+            dueCleared: s.dueCleared || 0,
+            dueAtStart: s.dueAtStart || 0,
+            stepsDone: s.stepsDone || 0,
+            againCount: s.againCount || 0,
+            intensity: this.intensity || 'casual',
+            completedAt: this._completedAt || null
         };
     }
 
@@ -573,6 +743,7 @@ class DailySessionService {
     attachController(game, stepMeta) {
         if (!game) return;
         var self = this;
+        this._ownsMemoryReviews = true;
         this._game = game;
         this._uiPaused = false;
         // Never carry suppress across step boundaries (Issue 7)
@@ -582,9 +753,6 @@ class DailySessionService {
         var purpose = (stepMeta && stepMeta.purpose) || 'review';
         var mode = (stepMeta && stepMeta.mode) || game.key || 'quiz';
         var type = (stepMeta && stepMeta.type) || 'drill';
-
-        // AI steps: no auto-memory (Story/Grammar not on allowlist path via controller)
-        this._ownsMemoryReviews = type !== 'ai';
 
         // Restore or init step state
         var resolved = new Set();
@@ -646,16 +814,6 @@ class DailySessionService {
         var attachedGen = this._navGen;
         game._sessionNavGen = attachedGen;
 
-        // AI steps: no grade→memory; completion = questions done or Skip
-        if (type === 'ai') {
-            game.skipDailySessionStep = function () {
-                self.finishStep();
-            };
-            self._attachAiStepHooks(game, mode, wordIds);
-            L('[DailySession] attachController AI', mode, 'seed=', wordIds.length);
-            return;
-        }
-
         var origScore = game.score.bind(game);
         game.score = function (pts, wordId) {
             origScore(pts, wordId);
@@ -677,6 +835,13 @@ class DailySessionService {
             self._attachPresentHooks(game);
         }
 
+        // AI steps: provide skip helper on game
+        if (type === 'ai') {
+            game.skipDailySessionStep = function () {
+                self.finishStep();
+            };
+        }
+
         L('[DailySession] attachController', mode, 'words=', wordIds.length, 'pending=', pending.size);
     }
 
@@ -689,8 +854,6 @@ class DailySessionService {
      */
     onGraded(wordId, correct) {
         if (!this._step || this._finishing) return;
-        // AI steps never auto-FSRS; completion is questions/Skip only
-        if (this._step.type === 'ai') return;
         var id = Number(wordId);
         if (!Number.isFinite(id)) return;
 
@@ -706,6 +869,7 @@ class DailySessionService {
             this.stats.incorrect++;
             this._updatedAt = Date.now();
             this._persistPlanDebounced();
+            this.updateProgressChrome();
             // Stay on card; no maybeFinishStep
             return;
         }
@@ -717,6 +881,7 @@ class DailySessionService {
             this._queueReinsert(step, id);
             this._updatedAt = Date.now();
             this._persistPlanDebounced();
+            this.updateProgressChrome();
             // do not resolve; do not maybeFinishStep from miss alone
             return;
         }
@@ -748,6 +913,9 @@ class DailySessionService {
         step.pendingWordIds.delete(id);
         if (step.hadMiss) step.hadMiss.delete(id);
 
+        // Due cleared: unique due words that received a terminal resolve this session
+        this._markDueCleared(id);
+
         // Again / recovered-as-Again: reinsert once max
         if (treatAsAgain && step.reinsertLapses) {
             this._queueReinsert(step, id);
@@ -755,11 +923,33 @@ class DailySessionService {
 
         this._updatedAt = Date.now();
         this._persistPlanDebounced();
+        this.updateProgressChrome();
         this.maybeFinishStep();
     }
 
+    /** Count unique due word as cleared when it is first resolved this session. */
+    _markDueCleared(wordId) {
+        var id = Number(wordId);
+        if (!Number.isFinite(id)) return;
+        var dueIds = (this.plan && this.plan.dueIds) || [];
+        var isDue = false;
+        for (var i = 0; i < dueIds.length; i++) {
+            if (Number(dueIds[i]) === id) { isDue = true; break; }
+        }
+        if (!isDue) return;
+        if (!this._dueClearedIds) this._dueClearedIds = new Set();
+        if (this._dueClearedIds.has(id)) return;
+        this._dueClearedIds.add(id);
+        // Never shrink below a restored/persisted floor (Home → Continue safety)
+        this.stats.dueCleared = Math.max(this.stats.dueCleared || 0, this._dueClearedIds.size);
+    }
+
     _applyMemoryReview(wordId, rating, mode) {
-        if (typeof window === 'undefined' || !window.MEMORY_ENGINE_ENABLED) return;
+        if (typeof window === 'undefined') return;
+        var memOn = (typeof window.isMemoryEngineEnabled === 'function')
+            ? window.isMemoryEngineEnabled()
+            : !!window.MEMORY_ENGINE_ENABLED;
+        if (!memOn) return;
         try {
             var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
             if (mem && typeof mem.review === 'function' && !mem._isStub) {
@@ -957,11 +1147,26 @@ class DailySessionService {
 
     /**
      * Finish current step; advance cursor or complete().
+     * Async so complete() is awaited (F3: avoids fire-and-forget race with goHome).
+     * Callers may still fire-and-forget finishStep(); complete() still sets
+     * _showingSummary synchronously before its first await.
      */
-    finishStep() {
+    async finishStep() {
         if (this._finishing) return;
         this._finishing = true;
         this.stats.stepsDone++;
+
+        // Credit finished-step word units toward session progress
+        if (this._step && this._step.wordIds && this._step.wordIds.length) {
+            this._wordsDoneBeforeStep = (this._wordsDoneBeforeStep || 0) + this._step.wordIds.length;
+            // Present/flash resolve all words here — mark due cleared if any due
+            var self = this;
+            this._step.wordIds.forEach(function (wid) {
+                if (self._step.resolvedWordIds && self._step.resolvedWordIds.has(Number(wid))) {
+                    self._markDueCleared(wid);
+                }
+            });
+        }
 
         // Do NOT set _suppressNextWaitAndNav here — destroy() noops waitAndNav on
         // the finishing game; a leftover suppress would leak into the next step
@@ -971,37 +1176,24 @@ class DailySessionService {
         this._suppressNextWaitAndNav = false;
         this._ownsMemoryReviews = false;
         this._step = null;
-        // Clear Story seed so free-play Story does not inherit session seeds
-        // (also cleared on pause/abandon/complete — see _clearSessionStorySeeds)
-        this._clearSessionStorySeeds();
         this.cursor++;
         this._updatedAt = Date.now();
         this._persistPlan(); // fire-and-forget ok
+        this.updateProgressChrome();
 
         var steps = (this.plan && this.plan.steps) || [];
         if (this.cursor >= steps.length) {
-            this.complete();
+            await this.complete();
             return;
         }
         var next = steps[this.cursor];
         if (!next || next.type === 'complete') {
-            this.complete();
+            await this.complete();
             return;
         }
 
         this._finishing = false;
-        this._launchStepAtCursor();
-    }
-
-    /**
-     * Drop global Story seeds so free-play Story cannot inherit Daily Session seeds
-     * after leave mid-AI (pause), abandon, complete, or normal step finish.
-     * Continue of a paused AI step re-sets seeds in _startAiStep.
-     */
-    _clearSessionStorySeeds() {
-        try {
-            if (typeof app !== 'undefined' && app) app._sessionStorySeedWordIds = null;
-        } catch (_) { /* ignore */ }
+        await this._launchStepAtCursor();
     }
 
     /**
@@ -1023,8 +1215,6 @@ class DailySessionService {
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
-        // Mid-AI Home: do not leave global seeds for free-play Story (continue re-seeds)
-        this._clearSessionStorySeeds();
         try {
             if (typeof app !== 'undefined' && app && app.data) {
                 app.data.endReviewSession();
@@ -1043,21 +1233,30 @@ class DailySessionService {
 
         this._updatedAt = Date.now();
         await this._persistPlan();
+        this.hideProgressChrome();
         L('[DailySession] paused (status=active) at cursor', this.cursor);
     }
 
     /**
-     * Complete session: finalizeSessionHolds, endReviewSession, persist stats.
+     * Complete session: finalizeSessionHolds, endReviewSession, persist stats,
+     * show completion summary (PR7).
+     *
+     * Sets _showingSummary synchronously before any await so goHome can see that
+     * completion owns the view (F3 race). If user already dismissed via Home,
+     * skips painting the summary over home.
      */
     async complete() {
         this._finishing = true;
         this.status = 'completed';
         this._uiPaused = false;
         this.pausedAt = null;
+        this._completedAt = Date.now();
+        // F3: claim the view before first await (goHome will not pause; may dismiss)
+        this._showingSummary = true;
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
-        this._clearSessionStorySeeds();
+        this.hideProgressChrome();
 
         try {
             if (typeof app !== 'undefined' && app && app.data) {
@@ -1075,26 +1274,64 @@ class DailySessionService {
             L('[DailySession] complete finalize failed', e);
         }
 
+        // F1: sync from sets without shrinking restored floors
+        if (this._introducedIds) {
+            this.stats.newIntroduced = Math.max(
+                this.stats.newIntroduced || 0,
+                this._introducedIds.size
+            );
+        }
+        if (this._dueClearedIds) {
+            this.stats.dueCleared = Math.max(
+                this.stats.dueCleared || 0,
+                this._dueClearedIds.size
+            );
+        }
+
         this._updatedAt = Date.now();
         await this._persistPlan();
 
         L('[DailySession] completed', this.stats);
+
+        // User already left via Home during finalize/persist — do not repaint summary
+        if (this._summaryDismissed) {
+            this._showingSummary = false;
+            return;
+        }
+
+        // PR7: full summary screen (user-facing only). Optional confetti.
         try {
-            if (typeof app !== 'undefined' && app && app.ui && app.ui.showToast) {
-                var s = this.stats;
-                app.ui.showToast(
-                    'Session complete · ' + (s.correct || 0) + ' correct · ' + (s.incorrect || 0) + ' miss',
-                    'success'
-                );
+            if (typeof app !== 'undefined' && app && app.celebration &&
+                typeof app.celebration.play === 'function') {
+                app.celebration.play();
             }
         } catch (_) { /* ignore */ }
 
-        // Return home so UI is not stuck on destroyed game view
+        this.showCompleteSummary();
+    }
+
+    /**
+     * Leave completion UI via header Home (or Done). Restores status-bar; marks
+     * summary dismissed so in-flight complete() will not repaint over home (F2/F3).
+     */
+    dismissSummaryUi() {
+        this._summaryDismissed = true;
+        this._showingSummary = false;
+        this.hideProgressChrome();
+        this._restoreStatusBarAfterSummary();
+    }
+
+    _restoreStatusBarAfterSummary() {
+        if (typeof document === 'undefined') return;
         try {
-            if (typeof app !== 'undefined' && app && typeof app.goHome === 'function') {
-                // Avoid re-entrant pause: status already completed
-                app.goHome(false);
+            var bar = document.getElementById('status-bar');
+            if (!bar) return;
+            if (bar.dataset.origText) {
+                bar.innerText = bar.dataset.origText;
+            } else {
+                bar.innerText = 'Ready';
             }
+            bar.classList.remove('text-rose-500', 'text-emerald-500', 'text-indigo-500', 'font-bold');
         } catch (_) { /* ignore */ }
     }
 
@@ -1109,7 +1346,8 @@ class DailySessionService {
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
-        this._clearSessionStorySeeds();
+        this.hideProgressChrome();
+        this._showingSummary = false;
 
         try {
             if (typeof app !== 'undefined' && app && app.data) {
@@ -1192,185 +1430,31 @@ class DailySessionService {
         if ((!wordIds || !wordIds.length) && step.type !== 'complete') {
             // Skip empty step
             this.cursor++;
+            this.updateProgressChrome();
             return this._launchStepAtCursor();
         }
 
         this._finishing = false;
 
         if (step.type === 'ai') {
-            await this._startAiStep(step.mode, wordIds, savedStepMeta);
-            return;
-        }
-
-        await this._startDrillOrPresent(step.type, step.mode, step.purpose, wordIds, savedStepMeta);
-    }
-
-    /**
-     * Launch AI step (Story v1). Seeds via sessionSeedWordIds; no auto-memory.
-     * Ends on comprehension questions complete or Skip.
-     */
-    async _startAiStep(mode, wordIds, savedStepMeta) {
-        // Clear review list so Story free-pick uses filtered list + seeds (not quiz list)
-        try {
-            if (typeof app !== 'undefined' && app && app.data && typeof app.data.endReviewSession === 'function') {
-                app.data.endReviewSession();
+            // v1: best-effort skip AI block so Quiz-first plans never block.
+            // Multi-mode AI launch can be enabled later (PR8).
+            if (typeof step.skip === 'boolean' && step.skip === false) {
+                // reserved
             }
-        } catch (_) { /* ignore */ }
-
-        try {
-            if (typeof app !== 'undefined' && app && app.game) {
-                try { app.game.destroy(); } catch (_) { /* ignore */ }
-                app.game = null;
+            L('[DailySession] AI step auto-skip (v1 Quiz-first)');
+            // Credit seed words toward progress so bar does not stall on auto-skip
+            if (wordIds && wordIds.length) {
+                this._wordsDoneBeforeStep = (this._wordsDoneBeforeStep || 0) + wordIds.length;
             }
-        } catch (_) { /* ignore */ }
-
-        // Seed before construct — Story render starts async load immediately
-        var seedIds = (wordIds || []).map(Number).filter(function (id) {
-            return Number.isFinite(id);
-        });
-        try {
-            if (typeof app !== 'undefined' && app) {
-                app._sessionStorySeedWordIds = seedIds.slice();
-            }
-        } catch (_) { /* ignore */ }
-
-        var game = this._constructMode(mode || 'story');
-        if (!game) {
-            L('[DailySession] AI mode unavailable — skipping step', mode);
-            try {
-                if (typeof app !== 'undefined' && app) app._sessionStorySeedWordIds = null;
-            } catch (_) { /* ignore */ }
             this.cursor++;
             this.stats.stepsDone++;
             await this._persistPlan();
+            this.updateProgressChrome();
             return this._launchStepAtCursor();
         }
 
-        // Also on instance (constructor may have already copied from app)
-        game.sessionSeedWordIds = seedIds.slice();
-        game.storiesPerSession = 1; // one story then session advances via finishStep
-
-        try {
-            if (typeof app !== 'undefined' && app) app.game = game;
-        } catch (_) { /* ignore */ }
-
-        var meta = savedStepMeta || {
-            wordIds: wordIds,
-            purpose: 'ai',
-            mode: mode || 'story',
-            type: 'ai'
-        };
-        meta.wordIds = meta.wordIds || wordIds;
-        meta.mode = meta.mode || mode || 'story';
-        meta.type = 'ai';
-
-        this.attachController(game, meta);
-
-        try {
-            history.pushState({ view: 'game', mode: mode || 'story', index: 0, dailySession: true }, '');
-        } catch (_) { /* ignore */ }
-
-        this._updatedAt = Date.now();
-        await this._persistPlan();
-        L('[DailySession] AI step launched', mode, 'seed=', game.sessionSeedWordIds);
-    }
-
-    /**
-     * Story (AI) completion hooks: finish when all questions answered; Skip button.
-     * No memory.review for story comprehension grades.
-     */
-    _attachAiStepHooks(game, mode, wordIds) {
-        var self = this;
-        if (!game) return;
-
-        // Prefer seeds on the instance (also set in _startAiStep before attach)
-        if (wordIds && wordIds.length && !game.sessionSeedWordIds) {
-            game.sessionSeedWordIds = wordIds.map(Number);
-        }
-        game.storiesPerSession = 1;
-
-        if (mode === 'story' || game.key === 'story') {
-            // When last comprehension question is answered, Story calls _showStoryNavFooter.
-            // In session, that means the AI step is done — do not start another story.
-            if (typeof game._showStoryNavFooter === 'function') {
-                var origNavFooter = game._showStoryNavFooter.bind(game);
-                game._showStoryNavFooter = function () {
-                    if (self._finishing || !self._step || self._step.type !== 'ai') {
-                        return origNavFooter();
-                    }
-                    L('[DailySession] Story questions complete → finish AI step');
-                    // Brief "done" footer then advance
-                    try {
-                        if (game.dom && game.dom.footer) {
-                            game.dom.footer.innerHTML =
-                                '<div class="text-center text-sm font-bold text-emerald-600 dark:text-emerald-400 py-3">' +
-                                '<i class="ph-bold ph-check-circle mr-1"></i> Story complete</div>';
-                        }
-                    } catch (_) { /* ignore */ }
-                    self.finishStep();
-                };
-            }
-
-            // Block infinite next-story while session AI step is active
-            if (typeof game._loadNext === 'function') {
-                var origLoadNext = game._loadNext.bind(game);
-                game._loadNext = function () {
-                    if (self._step && self._step.type === 'ai' && !self._finishing) {
-                        L('[DailySession] Story _loadNext during AI step → finish');
-                        self.finishStep();
-                        return;
-                    }
-                    return origLoadNext();
-                };
-            }
-            if (typeof game._nextStory === 'function') {
-                game._nextStory = function () {
-                    if (self._step && self._step.type === 'ai' && !self._finishing) {
-                        self.finishStep();
-                        return;
-                    }
-                };
-            }
-        }
-
-        // Inject Skip AI control (header strip or body) after first paint
-        var injectSkip = function () {
-            try {
-                if (!game.root || self._finishing) return;
-                if (game.root.querySelector('[data-daily-session-skip-ai]')) return;
-                var bar = document.createElement('div');
-                bar.setAttribute('data-daily-session-skip-ai', '1');
-                bar.className = 'shrink-0 px-3 pt-1';
-                bar.innerHTML =
-                    '<button type="button" class="w-full py-2 rounded-xl text-xs font-bold ' +
-                    'text-slate-600 dark:text-neutral-300 bg-slate-100 dark:bg-neutral-800 ' +
-                    'border border-slate-200 dark:border-neutral-700 active:scale-95 transition-transform">' +
-                    '<i class="ph-bold ph-skip-forward mr-1"></i> Skip AI</button>';
-                var btn = bar.querySelector('button');
-                if (btn) {
-                    btn.onclick = function () {
-                        L('[DailySession] Skip AI tapped');
-                        if (typeof game.skipDailySessionStep === 'function') {
-                            game.skipDailySessionStep();
-                        } else {
-                            self.finishStep();
-                        }
-                    };
-                }
-                // Prefer top of story shell
-                if (game.root.firstChild) {
-                    game.root.insertBefore(bar, game.root.firstChild);
-                } else {
-                    game.root.appendChild(bar);
-                }
-            } catch (e) {
-                L('[DailySession] Skip AI inject failed', e);
-            }
-        };
-        // Constructor render is sync shell + async load — inject now and once more shortly
-        injectSkip();
-        setTimeout(injectSkip, 50);
-        setTimeout(injectSkip, 400);
+        await this._startDrillOrPresent(step.type, step.mode, step.purpose, wordIds, savedStepMeta);
     }
 
     async _startDrillOrPresent(type, mode, purpose, wordIds, savedStepMeta) {
@@ -1438,6 +1522,7 @@ class DailySessionService {
 
         this._updatedAt = Date.now();
         await this._persistPlan();
+        this.updateProgressChrome();
     }
 
     _constructMode(mode) {
@@ -1507,16 +1592,42 @@ class DailySessionService {
         var id = w && w.id != null ? Number(w.id) : null;
         if (id == null || !Number.isFinite(id)) return;
         if (this._step) this._step.shownWordIds.add(id);
+
+        // Track new words for completion summary (unique)
+        var isNewPurpose = this._step && this._step.purpose === 'new';
+        var newIds = (this.plan && this.plan.newIds) || [];
+        var inNewPlan = false;
+        for (var ni = 0; ni < newIds.length; ni++) {
+            if (Number(newIds[ni]) === id) { inNewPlan = true; break; }
+        }
+        if (isNewPurpose || inNewPlan) {
+            if (!this._introducedIds) this._introducedIds = new Set();
+            if (!this._introducedIds.has(id)) {
+                this._introducedIds.add(id);
+                // Never shrink below a restored/persisted floor (Home → Continue)
+                this.stats.newIntroduced = Math.max(
+                    this.stats.newIntroduced || 0,
+                    this._introducedIds.size
+                );
+            }
+        }
+
         try {
             var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
             if (mem && typeof mem.introduce === 'function' && !mem._isStub) {
-                if (typeof window !== 'undefined' && window.MEMORY_ENGINE_ENABLED) {
+                var engOn = (typeof window !== 'undefined') && (
+                    (typeof window.isMemoryEngineEnabled === 'function')
+                        ? window.isMemoryEngineEnabled()
+                        : !!window.MEMORY_ENGINE_ENABLED
+                );
+                if (engOn) {
                     mem.introduce(id, Date.now());
                 }
             }
         } catch (e) {
             L('[DailySession] introduce failed', e);
         }
+        this.updateProgressChrome();
     }
 
     _destroyGameSoft() {
@@ -1581,8 +1692,236 @@ class DailySessionService {
             stepMeta: this._serializeStepMeta(),
             intensity: this.intensity,
             updatedAt: this._updatedAt || Date.now(),
-            startedAt: this._startedAt || null
+            startedAt: this._startedAt || null,
+            completedAt: this._completedAt || null,
+            // F1: persist unique id lists so Continue rehydrates sets (not empty wipe)
+            introducedIds: Array.from(this._introducedIds || []).filter(function (id) {
+                return Number(id) >= 0; // drop legacy placeholder sentinels
+            }),
+            dueClearedIds: Array.from(this._dueClearedIds || []).filter(function (id) {
+                return Number(id) >= 0;
+            })
         };
+    }
+
+    // --- PR7: Progress chrome + completion summary (user-facing UI only) ---
+
+    /**
+     * Ensure #session-progress-chrome exists between app header and #app-view.
+     * @returns {HTMLElement|null}
+     */
+    _ensureProgressChromeEl() {
+        if (typeof document === 'undefined') return null;
+        var el = document.getElementById('session-progress-chrome');
+        if (el) return el;
+        el = document.createElement('div');
+        el.id = 'session-progress-chrome';
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+        el.className = 'shrink-0 px-3 py-2 border-b border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900';
+        el.style.display = 'none';
+        var header = document.querySelector('body > header') || document.querySelector('header');
+        var main = document.getElementById('app-view');
+        if (main && main.parentNode) {
+            main.parentNode.insertBefore(el, main);
+        } else if (header && header.parentNode) {
+            if (header.nextSibling) header.parentNode.insertBefore(el, header.nextSibling);
+            else header.parentNode.appendChild(el);
+        } else if (document.body) {
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    /**
+     * Show / refresh in-session progress: "Today · 7/15" + mode chip + bar.
+     * Safe no-op when not active or in non-DOM (unit test) contexts.
+     */
+    updateProgressChrome() {
+        if (typeof document === 'undefined') return;
+        if (this.status !== 'active' || this._uiPaused || this._showingSummary) {
+            this.hideProgressChrome();
+            return;
+        }
+        var el = this._ensureProgressChromeEl();
+        if (!el) return;
+
+        var p = this.getProgress();
+        var wordsTotal = p.wordsTotal || 0;
+        var wordsDone = p.wordsDone || 0;
+        // Prefer word units; fall back to steps when plan has no wordIds yet
+        var n, N, unitLabel;
+        if (wordsTotal > 0) {
+            n = wordsDone;
+            N = wordsTotal;
+            unitLabel = 'words';
+        } else {
+            n = p.stepDisplay || 0;
+            N = p.stepsTotal || 0;
+            unitLabel = 'steps';
+        }
+        var pct = N > 0 ? Math.min(100, Math.round((n / N) * 100)) : 0;
+        var modeLabel = p.modeLabel || 'Practice';
+        var stepHint = '';
+        if (p.stepsTotal > 0) {
+            stepHint = 'Step ' + (p.stepDisplay || 1) + ' of ' + p.stepsTotal;
+        }
+
+        el.style.display = '';
+        el.innerHTML =
+            '<div class="flex items-center justify-between gap-2 mb-1.5">' +
+                '<div class="flex items-center gap-2 min-w-0">' +
+                    '<span class="text-[11px] font-black text-slate-700 dark:text-neutral-200 tracking-tight whitespace-nowrap">' +
+                        'Today · ' + n + '/' + N +
+                    '</span>' +
+                    '<span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 whitespace-nowrap">' +
+                        this._escapeHtml(modeLabel) +
+                    '</span>' +
+                '</div>' +
+                (stepHint
+                    ? '<span class="text-[9px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider whitespace-nowrap">' +
+                        this._escapeHtml(stepHint) +
+                      '</span>'
+                    : '') +
+            '</div>' +
+            '<div class="w-full h-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden" aria-hidden="true">' +
+                '<div class="h-full rounded-full bg-indigo-600 transition-all duration-300" style="width:' + pct + '%"></div>' +
+            '</div>' +
+            '<p class="sr-only">Session progress: ' + n + ' of ' + N + ' ' + unitLabel + ', ' + this._escapeHtml(modeLabel) + '</p>';
+    }
+
+    /** Hide and clear the progress chrome (pause / complete / abandon / home). */
+    hideProgressChrome() {
+        if (typeof document === 'undefined') return;
+        var el = document.getElementById('session-progress-chrome');
+        if (!el) return;
+        el.style.display = 'none';
+        el.innerHTML = '';
+    }
+
+    /**
+     * Render session complete summary into #app-view (user-facing stats only).
+     * Uses dailySessions stats: correct/incorrect, new introduced, due cleared.
+     */
+    showCompleteSummary() {
+        if (typeof document === 'undefined') return;
+        this._showingSummary = true;
+        this.hideProgressChrome();
+
+        var summary = this.getSummary();
+        var view = document.getElementById('app-view');
+        if (!view) {
+            // Fallback toast if no view
+            try {
+                if (typeof app !== 'undefined' && app && app.ui && app.ui.showToast) {
+                    app.ui.showToast(
+                        'Session complete · ' + summary.correct + ' correct · ' + summary.incorrect + ' miss',
+                        'success'
+                    );
+                }
+            } catch (_) { /* ignore */ }
+            return;
+        }
+
+        try {
+            if (typeof app !== 'undefined' && app) {
+                app.game = null;
+            }
+        } catch (_) { /* ignore */ }
+
+        var dueLine = '';
+        if (summary.dueAtStart > 0) {
+            dueLine =
+                '<div class="flex justify-between items-center py-2 border-b border-slate-100 dark:border-neutral-800">' +
+                    '<span class="text-sm font-bold text-slate-500 dark:text-neutral-400">Reviews done</span>' +
+                    '<span class="text-sm font-black text-slate-800 dark:text-neutral-100">' +
+                        summary.dueCleared + ' of ' + summary.dueAtStart +
+                    '</span>' +
+                '</div>';
+        } else {
+            dueLine =
+                '<div class="flex justify-between items-center py-2 border-b border-slate-100 dark:border-neutral-800">' +
+                    '<span class="text-sm font-bold text-slate-500 dark:text-neutral-400">Reviews done</span>' +
+                    '<span class="text-sm font-black text-slate-800 dark:text-neutral-100">' +
+                        summary.dueCleared +
+                    '</span>' +
+                '</div>';
+        }
+
+        view.classList.remove('visible');
+        view.innerHTML =
+            '<div class="flex flex-col items-center justify-center w-full h-full pb-8 overflow-y-auto pt-4 px-3">' +
+                '<div class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 dark:border-neutral-800">' +
+                    '<div class="text-center mb-6">' +
+                        '<div class="text-5xl mb-3" aria-hidden="true">✓</div>' +
+                        '<h2 class="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Session complete</h2>' +
+                        '<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-widest mt-2">Today\'s practice</p>' +
+                    '</div>' +
+                    '<div class="grid grid-cols-2 gap-3 mb-4">' +
+                        '<div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950 p-4 text-center border border-emerald-100 dark:border-emerald-900">' +
+                            '<p class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Correct</p>' +
+                            '<p class="text-3xl font-black text-emerald-700 dark:text-emerald-300">' + summary.correct + '</p>' +
+                        '</div>' +
+                        '<div class="rounded-2xl bg-rose-50 dark:bg-rose-950 p-4 text-center border border-rose-100 dark:border-rose-900">' +
+                            '<p class="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-1">Missed</p>' +
+                            '<p class="text-3xl font-black text-rose-700 dark:text-rose-300">' + summary.incorrect + '</p>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="rounded-2xl bg-slate-50 dark:bg-neutral-800 p-4 mb-4 text-center">' +
+                        '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Accuracy</p>' +
+                        '<p class="text-4xl font-black text-indigo-600 dark:text-indigo-400">' + summary.accuracy + '%</p>' +
+                    '</div>' +
+                    '<div class="flex flex-col gap-0 mb-6">' +
+                        '<div class="flex justify-between items-center py-2 border-b border-slate-100 dark:border-neutral-800">' +
+                            '<span class="text-sm font-bold text-slate-500 dark:text-neutral-400">New words</span>' +
+                            '<span class="text-sm font-black text-slate-800 dark:text-neutral-100">' + summary.newIntroduced + '</span>' +
+                        '</div>' +
+                        dueLine +
+                    '</div>' +
+                    '<button type="button" onclick="app.dailySession && app.dailySession.dismissSummary && app.dailySession.dismissSummary()" ' +
+                        'class="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm tracking-wide shadow-md active:scale-95 transition-all">' +
+                        'Done' +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+
+        requestAnimationFrame(function () {
+            view.classList.add('visible');
+        });
+
+        try {
+            history.pushState({ view: 'session-complete' }, '');
+        } catch (_) { /* ignore */ }
+
+        // Keep status-bar friendly
+        try {
+            var bar = document.getElementById('status-bar');
+            if (bar) {
+                bar.dataset.origText = bar.dataset.origText || bar.innerText;
+                bar.innerText = 'Session complete';
+            }
+        } catch (_) { /* ignore */ }
+    }
+
+    /**
+     * Dismiss completion summary and return home.
+     * Bound from the Done button on the summary screen.
+     */
+    dismissSummary() {
+        this.dismissSummaryUi();
+        try {
+            if (typeof app !== 'undefined' && app && typeof app.goHome === 'function') {
+                app.goHome(false);
+            }
+        } catch (_) { /* ignore */ }
+    }
+
+    _escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     async _persistPlan() {
@@ -1607,7 +1946,10 @@ class DailySessionService {
                 stepMeta: payload.stepMeta,
                 intensity: payload.intensity,
                 updatedAt: payload.updatedAt,
-                startedAt: payload.startedAt
+                startedAt: payload.startedAt,
+                completedAt: payload.completedAt,
+                introducedIds: payload.introducedIds,
+                dueClearedIds: payload.dueClearedIds
             });
         } catch (e) {
             L('[DailySession] RTDB persist failed', e);
@@ -1666,9 +2008,13 @@ if (typeof window !== 'undefined') {
     window.DailySessionService = DailySessionService;
     window.SESSION_INTENSITY_PRESETS = SESSION_INTENSITY_PRESETS;
     window.SESSION_DEFAULTS = SESSION_DEFAULTS;
+    window.SESSION_MODE_LABELS = SESSION_MODE_LABELS;
     window.getSessionDefaults = getSessionDefaults;
     window.buildPlan = buildPlan;
     window.buildQuizOnlyPlan = buildQuizOnlyPlan;
     window.wordsFromIds = wordsFromIds;
+    window.countPlanWordUnits = countPlanWordUnits;
+    window.emptySessionStats = emptySessionStats;
+    window.sessionModeLabel = sessionModeLabel;
     window.DAILY_SESSION_LS_KEY = DAILY_SESSION_LS_KEY;
 }

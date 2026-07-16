@@ -1,7 +1,7 @@
 /* js/game_core.js */
 
 // Shared list assignment for GameMode ctor + settings/filter handlers.
-// When _reviewList is set (Smart Review / Daily Session), keep that scope —
+// When _reviewList is set (Daily Session / startReviewSession), keep that scope —
 // do not expand to the full filtered list.
 function assignGameList(game) {
     if (!game || !app || !app.data) return;
@@ -183,7 +183,7 @@ class GameMode {
     }
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
-    score(pts=10, wordId=null) {
+    score(pts=10, wordId=null, meta) {
         app.score = Math.max(0, Number(app.score) || 0);
         const numPts = Math.max(0, Number(pts) || 0);
         app.score += numPts;
@@ -200,12 +200,24 @@ class GameMode {
         }
         if(app.data) app.data.recordScore(numPts, this.key);
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
-        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true);
+        // Optional meta (e.g. { rating }) forwarded to analytics → memory (PR3b/PR9)
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, true, meta);
     }
 
-    miss(wordId=null) {
+    miss(wordId=null, meta) {
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
-        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false);
+        // Optional meta forwarded to analytics; miss defaults to Again via binary map
+        if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false, meta);
+        try {
+            if (window.TutorMoments && typeof TutorMoments.maybeExplainMiss === 'function' && !(meta && meta.skipTutor)) {
+                var item = this.list && this.list[this.i];
+                var tLang = (app.store && app.store.prefs && app.store.prefs.presetTarget) || 'ja';
+                TutorMoments.maybeExplainMiss({
+                    word: item ? (item[tLang] || item.ja || item.en) : null,
+                    mode: this.key
+                });
+            }
+        } catch (_) {}
     }
 
     async waitAndNav(audioPromise, fallbackDelay = 1500) {

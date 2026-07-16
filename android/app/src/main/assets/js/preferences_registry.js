@@ -14,6 +14,10 @@ const PREFERENCE_SCHEMA = [
   { key: 'fontWeight',        type: 'select', default: 'normal',domId: 'app-font-weight',          section: 'global', label: 'Font Weight' },
   { key: 'globalClickMode',   type: 'radio',  default: 'double',domId: 'global-click-mode',        section: 'global', label: 'Click Mode' },
 
+  // ===== DAILY SESSION PACE (plain labels; compose uses getSessionDefaults) =====
+  // 'casual' ≈ 15 total / 5 new / 12 due · 'cram' ≈ 25 / 8 new / 20 due
+  { key: 'sessionIntensity',  type: 'radio',  default: 'casual',domId: 'session-intensity',        section: 'global', label: 'Session Pace' },
+
   // ===== FLASHCARDS =====
   { key: 'flashSpeed',        type: 'select', default: '700',   domId: 'flash-speed',              section: 'flash', label: 'Flip Speed' },
   { key: 'flashAuto',         type: 'bool',   default: true,    domId: 'flash-auto',               section: 'flash', label: 'Auto Advance', presetBehavior: 'always' },
@@ -92,6 +96,8 @@ const PREFERENCE_SCHEMA = [
   { key: 'chatLevel',         type: 'select', default: 'B1',     domId: null,                       section: 'chat', label: 'Chat Level' },
   { key: 'chatAutoPlay',      type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Chat Auto-play TTS' },
   { key: 'chatLang',          type: 'select', default: 'ja',     domId: null,                       section: 'chat', label: 'Chat Language' },
+  { key: 'chatFabEnabled',    type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Show AI tutor FAB' },
+  { key: 'chatFabBilingual',  type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'FAB tutor bilingual' },
 
   // ===== LEVEL FILTER (no DOM binding) =====
   { key: 'levelFilter',       type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Level Filter' },
@@ -170,15 +176,17 @@ function buildDefaultsFromSchema(LANG_CONFIG) {
 // Read a single pref from its DOM element
 function readPrefFromDom(entry) {
   if (!entry.domId) return null;
+  // For radios, domId is the radio group name — there is no element with
+  // that id (name-only inputs). Mirror writePrefToDom: query by name.
+  if (entry.type === 'radio') {
+    const rad = document.querySelector('input[name="' + entry.domId + '"]:checked');
+    return rad ? rad.value : null;
+  }
   const el = document.getElementById(entry.domId);
   if (!el) return null;
   switch (entry.type) {
     case 'bool':
       return el.checked;
-    case 'radio': {
-      const rad = document.querySelector('input[name="' + entry.domId + '"]:checked');
-      return rad ? rad.value : null;
-    }
     case 'select':
     default:
       return el.value;

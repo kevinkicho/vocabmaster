@@ -18,17 +18,31 @@ class NoteService {
                 if (idTokenResult.claims.admin) {
                     this.isAdmin = true;
                     this.render();
+                    this._syncAdminDeveloperUi();
                 }
             }).catch(e => console.warn('[Notes] Claims check failed:', e));
         }
+
+        this._syncAdminDeveloperUi();
         
+        if(this.currentWordId !== null) this.check(this.currentWordId);
+    }
+
+    /**
+     * Show/hide Developer + refresh admin Memory panel when admin status flips
+     * (including mid-session claim upgrade while Settings may already be open).
+     */
+    _syncAdminDeveloperUi() {
         const devTab = document.getElementById('details-developer');
         if (devTab) {
             if (this.isAdmin) devTab.classList.remove('hidden');
             else devTab.classList.add('hidden');
         }
-        
-        if(this.currentWordId !== null) this.check(this.currentWordId);
+        try {
+            if (window.app && window.app.ui && typeof window.app.ui.refreshMemoryDebugPanel === 'function') {
+                window.app.ui.refreshMemoryDebugPanel();
+            }
+        } catch (_) { /* ui not ready */ }
     }
 
     check(wordId) {

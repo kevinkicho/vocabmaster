@@ -64,6 +64,9 @@ class App {
         initService('fitter', () => new TextFitter(), false);
         initService('celebration', () => new CelebrationService(), false);
         initService('analytics', () => new AnalyticsService(), false);
+        initService('memory', () => new window.MemoryService(), false);
+        initService('dailySession', () => new window.DailySessionService(), false);
+        initService('learningPath', () => new window.LearningPathService(), false);
         initService('llm', () => new LLMService(), true);
         initService('presets', () => new PresetManager(), false);
 
@@ -119,6 +122,20 @@ class App {
             // analytics
             'startSession', 'endSession', 'recordAttempt', 'getAnalytics',
             'getMostMissedWords', 'getAccuracyByMode', 'getDailyAccuracy',
+            // memory (PR3a)
+            'load', 'maybeMigrate', 'review', 'introduce', 'ensureCard', 'getCard',
+            'finalizeSessionHolds', 'finalizeSessionRating',
+            'getDueCards', 'getNewCandidates', 'countDue', 'countNew',
+            'bootstrapFromWordStats', 'flush', 'resetAllKeepAnalytics', 'isEnabled',
+            // dailySession (PR5 + PR7 progress chrome / complete summary)
+            'compose', 'buildPlan', 'start', 'continue', 'pause', 'complete', 'abandon',
+            'getProgress', 'getSummary', 'attachController', 'onGraded', 'maybeFinishStep', 'finishStep',
+            'updateProgressChrome', 'hideProgressChrome', 'showCompleteSummary',
+            'dismissSummary', 'dismissSummaryUi',
+            // learningPath
+            'load', 'flush', 'getProfile', 'setPathMode', 'setFreePlayScope', 'setTier',
+            'getActiveUnit', 'ensureUnit', 'getComposePool', 'getPracticeList',
+            'selectTodayItems', 'pathProgressLabel',
             // presets
             'apply',
             // store
@@ -160,6 +177,15 @@ class App {
         } else if (name === 'notes') {
             stub.isAdmin = false;
             stub.currentWordId = null;
+        } else if (name === 'dailySession') {
+            stub._ownsMemoryReviews = false;
+            stub._uiPaused = false;
+            stub.status = 'idle';
+            stub.plan = null;
+            Object.defineProperty(stub, 'isActive', { get: function () { return false; } });
+            Object.defineProperty(stub, 'isPaused', { get: function () { return false; } });
+        } else if (name === 'learningPath') {
+            stub.profile = null;
         }
         // llm: available/hasModel/useCloud/endpoint — all stay undefined (falsy).
         // all stay undefined (falsy) — callers already guard with `if (app.llm && ...)`.
@@ -295,6 +321,25 @@ class App {
             const count = await this.data.load();
             await this.celebration.preloadShapes();
             if (this.ui) this.ui.loadSettings();
+
+            // 2a. Memory engine (PR3a): load cards + staggered migrate (offline no-op)
+            if (this.memory && !this.memory._isStub) {
+                try {
+                    if (this.memory.load) await this.memory.load();
+                    if (this.memory.maybeMigrate) await this.memory.maybeMigrate();
+                } catch (memErr) {
+                    L('[Memory] init load/migrate failed', memErr);
+                }
+            }
+
+            // 2a2. Learning path (tiered curriculum)
+            if (this.learningPath && !this.learningPath._isStub) {
+                try {
+                    if (this.learningPath.load) await this.learningPath.load();
+                } catch (pathErr) {
+                    L('[Path] init load failed', pathErr);
+                }
+            }
 
             // 2b. Init LLM — F9: block up to 3s on autoDetect so the home screen
             // can show an accurate AI status immediately. If the probe is slow
@@ -442,6 +487,38 @@ class App {
     }
 
     async goHome(pushState = true) {
+        // Daily Session: pause mid-step (status stays active + pausedAt; do not finalize holds)
+        // Skip pause when the completion summary is showing (status already completed).
+        try {
+            if (this.dailySession && !this.dailySession._isStub &&
+                this.dailySession.status === 'active' &&
+                !this.dailySession._uiPaused &&
+                !this.dailySession._showingSummary &&
+                typeof this.dailySession.pause === 'function') {
+                await this.dailySession.pause();
+            }
+        } catch (e) {
+            L('[DailySession] pause on goHome failed', e);
+        }
+        // PR7: clear progress chrome; if completion summary (or in-flight complete)
+        // owns the view, restore status-bar and mark dismissed so complete() will not
+        // repaint summary over home (F2 status-bar, F3 race).
+        try {
+            if (this.dailySession && !this.dailySession._isStub) {
+                var ds = this.dailySession;
+                if (ds._showingSummary || ds.status === 'completed') {
+                    if (typeof ds.dismissSummaryUi === 'function') {
+                        ds.dismissSummaryUi();
+                    } else {
+                        ds._summaryDismissed = true;
+                        ds._showingSummary = false;
+                        if (typeof ds.hideProgressChrome === 'function') ds.hideProgressChrome();
+                    }
+                } else if (typeof ds.hideProgressChrome === 'function') {
+                    ds.hideProgressChrome();
+                }
+            }
+        } catch (_) { /* ignore */ }
         if(this.game) this.game.destroy();
         this.game = null;
         if(app.audio) app.audio.cancel(); 
@@ -481,6 +558,9 @@ class App {
                         <span id="ai-status-label" class="text-[9px] font-bold text-slate-400 uppercase">AI detecting...</span>
                     </div>
 
+                    ${this._homePathAndTodayHtml()}
+
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Practice freely</h3>
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Reading</h3>
                     <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
                         ${this.btn('Flashcards', 'ph-cards', 'indigo', ()=>new Flashcard('flash'))}
@@ -518,18 +598,89 @@ class App {
                         ${this.btn('Word Context', 'ph-flowers', 'emerald', ()=>new Context('context'))}
                     </div>
 
-                    <!-- Medium-term: Smart Review (Phase 2) -->
-                    <div class="mt-1 px-2">
-                        <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
-                    </div>
-
                     <!-- Tag Filter -->
                     <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } }).catch(()=>{ view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } });
-            else { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } }
+            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); }).catch(()=>{ view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); });
+            else { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); }
         });
+    }
+
+    /** Today CTA + path card HTML for home. */
+    _homePathAndTodayHtml() {
+        var pathHtml = '';
+        try {
+            if (this.learningPath && !this.learningPath._isStub) {
+                var prof = this.learningPath.getProfile ? this.learningPath.getProfile() : null;
+                if (prof) {
+                    var label = this.learningPath.pathProgressLabel ? this.learningPath.pathProgressLabel() : (prof.currentTier || '');
+                    var modeLabel = prof.pathMode === 'guided' ? 'Guided path' : 'Free practice';
+                    pathHtml = '<div class="px-1">'
+                        + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
+                        + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
+                        + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
+                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
+                        + '<div class="flex gap-2 mt-3">'
+                        + (prof.pathMode === 'guided'
+                            ? '<button type="button" onclick="app.learningPath.setPathMode(\'free\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">Switch to free</button>'
+                            : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Start guided path</button>')
+                        + '</div></div></div>';
+                }
+            }
+        } catch (_) { pathHtml = ''; }
+
+        var todayHtml = '';
+        try {
+            var memOn = (typeof window.isMemoryEngineEnabled === 'function')
+                ? window.isMemoryEngineEnabled()
+                : !!window.MEMORY_ENGINE_ENABLED;
+            if (memOn && this.dailySession && !this.dailySession._isStub) {
+                var dueN = 0, newN = 0;
+                if (this.memory && this.memory.countDue) {
+                    try { dueN = this.memory.countDue(Date.now()) || 0; } catch (_) {}
+                }
+                var resumable = this.dailySession.hasResumableSession && this.dailySession.hasResumableSession();
+                var empty = dueN === 0 && newN === 0 && !resumable;
+                // Prefer path-aware counts when guided
+                try {
+                    if (this.learningPath && this.learningPath.selectTodayItems) {
+                        var d = (typeof getSessionDefaults === 'function')
+                            ? getSessionDefaults(this.store && this.store.prefs)
+                            : { maxNew: 5, maxDue: 12 };
+                        var sel = this.learningPath.selectTodayItems(d, Date.now());
+                        dueN = (sel.due || []).length;
+                        newN = (sel.newItems || []).length;
+                        empty = dueN === 0 && newN === 0 && !resumable;
+                    }
+                } catch (_) {}
+
+                var est = (typeof getSessionDefaults === 'function' && this.store)
+                    ? (getSessionDefaults(this.store.prefs).estimatedMinutes || 8)
+                    : 8;
+                todayHtml = '<div class="px-1">'
+                    + '<div class="rounded-[1.5rem] p-5 bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">'
+                    + '<p class="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">Today</p>';
+                if (empty) {
+                    todayHtml += '<p class="text-sm font-bold">All caught up — practice freely below, or check back later.</p>';
+                } else {
+                    todayHtml += '<p class="text-lg font-black tracking-tight">' + dueN + ' due · ' + newN + ' new · ~' + est + ' min</p>'
+                        + '<p class="text-[11px] opacity-80 mt-1">Spaced repetition + path words</p>'
+                        + '<div class="flex flex-wrap gap-2 mt-4">';
+                    if (resumable) {
+                        todayHtml += '<button type="button" onclick="app.dailySession.continue()" class="px-4 py-2 rounded-full bg-white text-indigo-700 text-xs font-black active:scale-95">Continue</button>'
+                            + '<button type="button" onclick="app.dailySession.start({force:true})" class="px-4 py-2 rounded-full bg-white/20 text-white text-xs font-bold active:scale-95">Start new</button>';
+                    } else {
+                        todayHtml += '<button type="button" onclick="app.dailySession.start()" class="px-4 py-2 rounded-full bg-white text-indigo-700 text-xs font-black active:scale-95">Start session</button>';
+                    }
+                    todayHtml += '</div>';
+                }
+                todayHtml += '</div></div>';
+            }
+        } catch (e) {
+            L('[Home] Today card failed', e);
+        }
+        return pathHtml + todayHtml;
     }
 
     btn(t, i, c, fn) {
@@ -553,10 +704,12 @@ class App {
 
     launch(fn) { 
         try {
+            if (window.ChatFAB && ChatFAB.isOpen && ChatFAB.isOpen()) ChatFAB.close();
             if(this.audio) this.audio.cancel();
             if(this.game) this.game.destroy(); 
             this.game = fn(); 
             history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
+            if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'game', mode: this.game && this.game.key });
         } catch(e) {
             L("Launch Error:", e.stack || e);
             if (app.ui && app.ui.showToast) app.ui.showToast("Failed to start game: " + e.message, 'error');
@@ -587,25 +740,6 @@ class App {
         }
     }
 
-    // Medium-term: Smart Review queue (Phase 2) - uses analytics + adaptive + current collection
-    async launchSmartReview() {
-        if (!this.data) return;
-        const started = await this.data.startReviewSession(12);
-        if (started) {
-            // Launch a mixed or preferred mode with review list, e.g. Quiz for good feedback
-            this.game = new Quiz('quiz');
-            history.pushState({ view: 'game', mode: 'review', index: this.game.i }, '');
-            // End review session when game ends (in game destroy or nav end)
-            const origDestroy = this.game.destroy.bind(this.game);
-            this.game.destroy = () => {
-                if (this.data) this.data.endReviewSession();
-                origDestroy();
-            };
-        } else {
-            if (app.ui && app.ui.showToast) app.ui.showToast("Not enough data for review yet. Play some games first!", 'warning');
-            this.goHome(false);
-        }
-    }
     toggleFull() { !document.fullscreenElement ? document.documentElement.requestFullscreen().catch(()=>{}) : document.exitFullscreen(); }
     modal(show) { 
         if(this.ui) this.ui.hideTooltip();
@@ -614,9 +748,11 @@ class App {
         if (show) { 
             el.classList.remove('hidden'); 
             if(this.ui) this.ui.loadSettings(); 
+            if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'modal-open' });
         } else { 
             if(this.store) this.store.saveSettings(); 
             el.classList.add('hidden'); 
+            if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' });
         }
     }
 }

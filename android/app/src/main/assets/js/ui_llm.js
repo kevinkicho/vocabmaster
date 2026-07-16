@@ -39,7 +39,7 @@ Object.assign(UIManager.prototype, {
             <ol class="list-decimal ml-4 space-y-1 text-[9px]">
                 <li>Create free account at <a href="https://ollama.com/cloud" target="_blank" class="underline text-cyan-500">ollama.com/cloud</a></li>
                 <li>Get API key</li>
-                <li>Set in ollama_config.js: <code class="bg-slate-200 dark:bg-neutral-600 px-1 rounded text-[8px]">window.OLLAMA_USE_CLOUD = true; window.OLLAMA_API_KEY = "...";</code></li>
+                <li>Cloud AI uses the secure proxy (<code class="bg-slate-200 dark:bg-neutral-600 px-1 rounded text-[8px]">OLLAMA_USE_CLOUD=true</code> + <code class="bg-slate-200 dark:bg-neutral-600 px-1 rounded text-[8px]">OLLAMA_PROXY_URL</code>). API keys stay server-side only.</li>
             </ol>
             <p class="mt-1 text-[8px] text-slate-400">Config is gitignored. For local on-device, http://127.0.0.1:11434 works from the APK WebView.</p>`;
     },

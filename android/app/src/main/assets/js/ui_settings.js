@@ -50,7 +50,44 @@ Object.assign(UIManager.prototype, {
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
+            // Session pace radio visual + plain-language size hint (no FSRS jargon)
+            if (typeof this._syncRadioVisual === 'function') {
+                this._syncRadioVisual('session-intensity');
+            }
+            if (typeof this._updateSessionIntensityHint === 'function') {
+                this._updateSessionIntensityHint();
+            }
         } catch(e) { L("Error loading settings UI:", e); }
+    },
+
+    /**
+     * Plain-language size/time hint for Session Pace (Casual vs Exam prep).
+     * Reads current radio or prefs; uses getSessionDefaults when available.
+     */
+    _updateSessionIntensityHint() {
+        const el = document.getElementById('session-intensity-hint');
+        if (!el) return;
+        let intensity = 'casual';
+        const checked = document.querySelector('input[name="session-intensity"]:checked');
+        if (checked && (checked.value === 'casual' || checked.value === 'cram')) {
+            intensity = checked.value;
+        } else if (this.store && this.store.prefs && this.store.prefs.sessionIntensity === 'cram') {
+            intensity = 'cram';
+        }
+        let d = null;
+        if (typeof getSessionDefaults === 'function') {
+            d = getSessionDefaults({ sessionIntensity: intensity });
+        } else if (typeof window.getSessionDefaults === 'function') {
+            d = window.getSessionDefaults({ sessionIntensity: intensity });
+        } else if (window.SESSION_INTENSITY_PRESETS && window.SESSION_INTENSITY_PRESETS[intensity]) {
+            d = window.SESSION_INTENSITY_PRESETS[intensity];
+        }
+        if (!d) {
+            d = intensity === 'cram'
+                ? { estimatedMinutes: 15, maxNew: 8, maxDue: 20 }
+                : { estimatedMinutes: 8, maxNew: 5, maxDue: 12 };
+        }
+        el.textContent = '~' + d.estimatedMinutes + ' min · up to ' + d.maxNew + ' new · ' + d.maxDue + ' review';
     },
 
     // Dev / robustness helper (call from console: app.ui.validateSettingsBindings())
@@ -349,13 +386,206 @@ Object.assign(UIManager.prototype, {
 
         const devDetails = document.getElementById('details-developer');
         if (devDetails) {
-            const isAdmin = window.app && window.app.auth && window.app.auth.userRole === 'admin';
-            if (isAdmin) devDetails.classList.remove('hidden');
+            if (this._isAdminUser()) devDetails.classList.remove('hidden');
+            else devDetails.classList.add('hidden');
         }
+
+        // Admin-only Memory / FSRS debug (inside Developer; no controls for non-admin)
+        this.refreshMemoryDebugPanel();
 
         const logArea = document.getElementById('debug-log-area');
         if (logArea) logArea.value = '';
     },
+
+    /**
+     * Same gate as Developer tab / notes.isAdmin: custom claim or admin email.
+     * @returns {boolean}
+     */
+    _isAdminUser() {
+        try {
+            if (window.app && window.app.auth && window.app.auth.userRole === 'admin') return true;
+            if (window.app && window.app.notes && window.app.notes.isAdmin === true) return true;
+            var user = (typeof auth !== 'undefined' && auth && auth.currentUser) ? auth.currentUser : null;
+            if (user && !user.isAnonymous && user.email === 'kevinkicho@gmail.com') return true;
+        } catch (_) { /* ignore */ }
+        return false;
+    },
+
+    /**
+     * Populate admin Memory / FSRS panel. No-op for non-admin (panel lives under hidden Developer).
+     */
+    refreshMemoryDebugPanel() {
+        var panel = document.getElementById('admin-memory-panel');
+        var el = document.getElementById('admin-memory-status');
+        if (!panel || !el) return;
+
+        if (!this._isAdminUser()) {
+            panel.classList.add('hidden');
+            el.textContent = '';
+            return;
+        }
+        panel.classList.remove('hidden');
+
+        var mem = window.app && window.app.memory;
+        if (!mem || mem._isStub || typeof mem.getDebugSnapshot !== 'function') {
+            // Fallback: read FSRS.REFERENCE even if MemoryService missing
+            var refOnly = (typeof window !== 'undefined' && window.FSRS && window.FSRS.REFERENCE)
+                ? window.FSRS.REFERENCE
+                : null;
+            var refLine = refOnly
+                ? (refOnly.family || 'FSRS') + ' · ' + (refOnly.name || '?') + '@' + (refOnly.version || '?')
+                : 'FSRS module not loaded';
+            el.innerHTML =
+                '<div><span class="text-slate-400">FSRS</span> ' + this._escDebug(refLine) + '</div>' +
+                '<div class="text-amber-600 dark:text-amber-400">MemoryService unavailable (stub or not init)</div>';
+            return;
+        }
+
+        var s;
+        try {
+            s = mem.getDebugSnapshot();
+        } catch (e) {
+            el.textContent = 'getDebugSnapshot failed: ' + (e && e.message ? e.message : e);
+            return;
+        }
+
+        var fsrs = s.fsrs;
+        var fsrsLine = fsrs
+            ? ((fsrs.family || 'FSRS-4.5') + ' · ' + (fsrs.name || 'ts-fsrs') + '@' + (fsrs.version || '?') +
+                (fsrs.url ? ' · ' + fsrs.url : ''))
+            : 'FSRS.REFERENCE missing';
+        var byState = s.byState || {};
+        var bySource = s.bySource || {};
+        var stateLine = 'new=' + (byState.new || 0) +
+            ' learning=' + (byState.learning || 0) +
+            ' relearning=' + (byState.relearning || 0) +
+            ' review=' + (byState.review || 0);
+        var srcLine = 'fsrs=' + (bySource.fsrs || 0) +
+            ' migrated=' + (bySource.migrated || 0) +
+            ' bootstrap=' + (bySource.bootstrap || 0);
+        var migAt = s.migratedAt ? new Date(s.migratedAt).toISOString() : '—';
+        var syncAt = s.lastSync ? new Date(s.lastSync).toISOString() : '—';
+        var err = s.lastError ? String(s.lastError) : '—';
+
+        el.innerHTML =
+            '<div><span class="text-slate-400">FSRS</span> ' + this._escDebug(fsrsLine) + '</div>' +
+            '<div><span class="text-slate-400">engine</span> ' + (s.engineEnabled ? 'ENABLED' : 'disabled') +
+            ' · schema v' + this._escDebug(String(s.schemaVersion)) +
+            ' · loaded=' + (s.loaded ? 'yes' : 'no') + '</div>' +
+            '<div><span class="text-slate-400">migrationStatus</span> <b>' + this._escDebug(String(s.migrationStatus)) + '</b>' +
+            ' · migratedCards=' + this._escDebug(String(s.migratedCards)) +
+            ' · migratedAt=' + this._escDebug(migAt) + '</div>' +
+            '<div><span class="text-slate-400">cards</span> ' + this._escDebug(String(s.cardCount)) +
+            ' · due=' + this._escDebug(String(s.dueCount)) +
+            ' · sessionHold=' + this._escDebug(String(s.sessionHoldCount)) + '</div>' +
+            '<div><span class="text-slate-400">byState</span> ' + this._escDebug(stateLine) + '</div>' +
+            '<div><span class="text-slate-400">bySource</span> ' + this._escDebug(srcLine) + '</div>' +
+            '<div><span class="text-slate-400">dirty queue</span> ' + this._escDebug(String(s.dirtyCount)) +
+            (s.metaDirty ? ' · metaDirty' : '') +
+            ' · lastSync=' + this._escDebug(syncAt) + '</div>' +
+            '<div><span class="text-slate-400">lastError</span> ' + this._escDebug(err) + '</div>';
+    },
+
+    _escDebug(str) {
+        if (str == null) return '';
+        if (typeof escapeHtml === 'function') return escapeHtml(String(str));
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    },
+
+    async adminFlushMemoryDirty() {
+        if (!this._isAdminUser()) return;
+        var mem = window.app && window.app.memory;
+        if (!mem || typeof mem.flush !== 'function') {
+            app.ui.showToast('MemoryService unavailable', 'warning');
+            return;
+        }
+        try {
+            var result = await mem.flush();
+            var status = result && result.status ? result.status : 'flushed';
+            if (status === 'flushed') {
+                app.ui.showToast('Memory dirty queue flushed', 'success');
+            } else if (status === 'empty') {
+                app.ui.showToast('Nothing dirty to flush', 'info');
+            } else if (status === 'offline') {
+                app.ui.showToast('Flush deferred (offline) — dirty kept local', 'warning');
+            } else if (status === 'no-auth') {
+                app.ui.showToast('Flush deferred (no auth/db)', 'warning');
+            } else if (status === 'busy') {
+                app.ui.showToast('Flush already in progress', 'warning');
+            } else if (status === 'error') {
+                app.ui.showToast('Flush failed: ' + (result.error || 'unknown'), 'error');
+            } else {
+                app.ui.showToast('Flush: ' + status, 'warning');
+            }
+        } catch (e) {
+            app.ui.showToast('Flush failed: ' + (e && e.message ? e.message : e), 'error');
+        }
+        this.refreshMemoryDebugPanel();
+    },
+
+    async adminForceMemoryMigrate() {
+        if (!this._isAdminUser()) return;
+        var mem = window.app && window.app.memory;
+        if (!mem || typeof mem.forceMigrate !== 'function') {
+            app.ui.showToast('MemoryService unavailable', 'warning');
+            return;
+        }
+        if (!window.confirm('Re-run migration from analytics c/w?\n\nExisting FSRS-sourced cards are kept. Migrated/bootstrap cards may be rewritten. Use Reset first for a full wipe.')) {
+            return;
+        }
+        try {
+            app.ui.showToast('Force migrate…', 'info');
+            var result = await mem.forceMigrate();
+            var status = result && result.status ? result.status : '?';
+            var n = result && result.migrated != null ? result.migrated : 0;
+            if (status === 'done') {
+                app.ui.showToast('Migrate done (' + n + ' cards)', 'success');
+            } else if (status === 'failed') {
+                app.ui.showToast('Migrate failed: ' + (result.error || 'unknown'), 'error');
+            } else {
+                app.ui.showToast('Migrate ' + status + (result.reason ? ' (' + result.reason + ')' : ''), 'warning');
+            }
+        } catch (e) {
+            app.ui.showToast('Force migrate error: ' + (e && e.message ? e.message : e), 'error');
+        }
+        this.refreshMemoryDebugPanel();
+    },
+
+    async adminResetMemoryKeepAnalytics() {
+        if (!this._isAdminUser()) return;
+        var mem = window.app && window.app.memory;
+        if (!mem || typeof mem.resetAllKeepAnalytics !== 'function') {
+            app.ui.showToast('MemoryService unavailable', 'warning');
+            return;
+        }
+        if (!window.confirm('Reset all FSRS memory cards?\n\nAnalytics c/w history is kept. RTDB memory will be wiped if online. Migration will re-run on next load (or use Force migrate).')) {
+            return;
+        }
+        try {
+            var result = await mem.resetAllKeepAnalytics();
+            if (result && result.remoteCleared) {
+                app.ui.showToast('Memory reset (c/w preserved, RTDB cleared)', 'success');
+            } else if (result && result.localCleared && result.error === 'no-auth') {
+                app.ui.showToast('Local memory cleared (no auth — RTDB not touched)', 'warning');
+            } else if (result && result.localCleared && !result.remoteCleared) {
+                app.ui.showToast(
+                    'Local memory cleared; RTDB wipe failed — reload may restore cards. ' +
+                    (result.error || ''),
+                    'error'
+                );
+            } else {
+                app.ui.showToast('Memory reset (c/w preserved)', 'success');
+            }
+        } catch (e) {
+            app.ui.showToast('Reset failed: ' + (e && e.message ? e.message : e), 'error');
+        }
+        this.refreshMemoryDebugPanel();
+    },
+
     copyLogs() { const el = document.getElementById('debug-log-area'); if(!el) return; navigator.clipboard.writeText(el.value); const btn = el.previousElementSibling.querySelector('button'); const origText = btn.innerHTML; btn.innerHTML = `<i class="ph-bold ph-check"></i> Copied`; setTimeout(() => btn.innerHTML = origText, 1500); },
     downloadLogs() {
         const area = document.getElementById('debug-log-area');

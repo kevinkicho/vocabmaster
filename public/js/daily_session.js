@@ -547,6 +547,8 @@ class DailySessionService {
         this._ownsMemoryReviews = true;
         this._game = game;
         this._uiPaused = false;
+        // Never carry suppress across step boundaries (Issue 7)
+        this._suppressNextWaitAndNav = false;
 
         var wordIds = (stepMeta && stepMeta.wordIds) || [];
         var purpose = (stepMeta && stepMeta.purpose) || 'review';
@@ -925,9 +927,12 @@ class DailySessionService {
         this._finishing = true;
         this.stats.stepsDone++;
 
-        this._suppressNextWaitAndNav = true;
+        // Do NOT set _suppressNextWaitAndNav here — destroy() noops waitAndNav on
+        // the finishing game; a leftover suppress would leak into the next step
+        // and eat its first auto-nav (Issue 7). Suppress is reinsert-only.
         this._cancelPendingNav();
         this._destroyGameSoft();
+        this._suppressNextWaitAndNav = false;
         this._ownsMemoryReviews = false;
         this._step = null;
         this.cursor++;

@@ -494,6 +494,78 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         expect(svc.status).toBe('completed');
     });
 
+    it('multi-step: finishStep does not suppress next step waitAndNav (Issue 7)', async () => {
+        // Plan: step0 quiz [1] → step1 quiz [2,3] → complete
+        // finishStep must not leave _suppressNextWaitAndNav true for step1.
+        const svc = new DailySessionService();
+        svc.plan = {
+            steps: [
+                { type: 'drill', mode: 'quiz', wordIds: [1], purpose: 'review' },
+                { type: 'drill', mode: 'quiz', wordIds: [2, 3], purpose: 'review' },
+                { type: 'complete' }
+            ],
+            intensity: 'casual',
+            defaults: getSessionDefaults({}),
+            createdAt: Date.now()
+        };
+        svc.defaults = svc.plan.defaults;
+        svc.status = 'active';
+        svc.cursor = 0;
+        svc.dateKey = '2024-01-15';
+
+        app.data = mockData([1, 2, 3]);
+        let game = mockGame([1]);
+        app.game = game;
+        app.data.startSpecificReview(game.list);
+        svc.attachController(game, {
+            wordIds: [1], purpose: 'review', mode: 'quiz', type: 'drill'
+        });
+
+        // Avoid real Quiz constructors when advancing steps
+        svc._launchStepAtCursor = async function () {
+            const steps = this.plan.steps;
+            if (this.cursor >= steps.length) {
+                await this.complete();
+                return;
+            }
+            const step = steps[this.cursor];
+            if (!step || step.type === 'complete') {
+                await this.complete();
+                return;
+            }
+            this._finishing = false;
+            const ids = step.wordIds.slice();
+            const words = ids.map((id) => ({ id }));
+            app.data.startSpecificReview(words);
+            game = mockGame(ids);
+            app.game = game;
+            this.attachController(game, {
+                wordIds: ids,
+                purpose: step.purpose || 'review',
+                mode: step.mode || 'quiz',
+                type: step.type || 'drill'
+            });
+        };
+
+        // Complete step 0
+        game.score(10, 1);
+        expect(svc.cursor).toBe(1);
+        expect(svc.status).toBe('active');
+        expect(svc._suppressNextWaitAndNav).toBe(false);
+        expect(game.list.map((w) => w.id)).toEqual([2, 3]);
+        expect(game.i).toBe(0);
+
+        // First grade of step 1 + Quiz-style waitAndNav must advance
+        game.score(10, 2);
+        expect(svc._suppressNextWaitAndNav).toBe(false);
+        await game.waitAndNav(null, 10);
+        expect(game.navCalls).toBe(1);
+        expect(game.i).toBe(1);
+
+        game.score(10, 3);
+        expect(svc.status).toBe('completed');
+    });
+
     it('pause keeps status active + pausedAt; does not finalize holds', async () => {
         const svc = new DailySessionService();
         const game = bootSession(svc, [1]);

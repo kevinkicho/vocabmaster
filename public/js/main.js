@@ -129,7 +129,8 @@ class App {
             // dailySession (PR5 + PR7 progress chrome / complete summary)
             'compose', 'buildPlan', 'start', 'continue', 'pause', 'complete', 'abandon',
             'getProgress', 'getSummary', 'attachController', 'onGraded', 'maybeFinishStep', 'finishStep',
-            'updateProgressChrome', 'hideProgressChrome', 'showCompleteSummary', 'dismissSummary',
+            'updateProgressChrome', 'hideProgressChrome', 'showCompleteSummary',
+            'dismissSummary', 'dismissSummaryUi',
             // presets
             'apply',
             // store
@@ -483,12 +484,24 @@ class App {
         } catch (e) {
             L('[DailySession] pause on goHome failed', e);
         }
-        // PR7: always clear progress chrome when leaving session UI
+        // PR7: clear progress chrome; if completion summary (or in-flight complete)
+        // owns the view, restore status-bar and mark dismissed so complete() will not
+        // repaint summary over home (F2 status-bar, F3 race).
         try {
-            if (this.dailySession && typeof this.dailySession.hideProgressChrome === 'function') {
-                this.dailySession.hideProgressChrome();
+            if (this.dailySession && !this.dailySession._isStub) {
+                var ds = this.dailySession;
+                if (ds._showingSummary || ds.status === 'completed') {
+                    if (typeof ds.dismissSummaryUi === 'function') {
+                        ds.dismissSummaryUi();
+                    } else {
+                        ds._summaryDismissed = true;
+                        ds._showingSummary = false;
+                        if (typeof ds.hideProgressChrome === 'function') ds.hideProgressChrome();
+                    }
+                } else if (typeof ds.hideProgressChrome === 'function') {
+                    ds.hideProgressChrome();
+                }
             }
-            if (this.dailySession) this.dailySession._showingSummary = false;
         } catch (_) { /* ignore */ }
         if(this.game) this.game.destroy();
         this.game = null;

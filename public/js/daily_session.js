@@ -303,8 +303,13 @@ class DailySessionService {
         this._dueClearedIds = new Set();
         /** Word units completed in finished steps (for progress n/N). */
         this._wordsDoneBeforeStep = 0;
-        /** True while completion summary is on screen (blocks re-entrant goHome wipe). */
+        /**
+         * True while completion owns the view (set at start of complete(), before awaits).
+         * Prevents goHome from racing and being repainted by showCompleteSummary.
+         */
         this._showingSummary = false;
+        /** User left via Home during/after complete — do not repaint summary over home. */
+        this._summaryDismissed = false;
     }
 
     /** @returns {boolean} true while plan is live (including UI-paused). */
@@ -523,6 +528,7 @@ class DailySessionService {
         this._dueClearedIds = new Set();
         this._wordsDoneBeforeStep = 0;
         this._showingSummary = false;
+        this._summaryDismissed = false;
 
         await this._persistPlan();
         L('[DailySession] start', this.plan.steps.length, 'steps', 'intensity=', this.intensity);
@@ -575,8 +581,25 @@ class DailySessionService {
         this.pausedAt = null;
         this._finishing = false;
         this._showingSummary = false;
-        this._introducedIds = new Set();
-        this._dueClearedIds = new Set();
+        this._summaryDismissed = false;
+        // F1: rehydrate unique-id sets so complete() does not wipe pre-pause counts
+        this._introducedIds = this._rehydrateIdSet(
+            loaded.introducedIds,
+            this.stats.newIntroduced
+        );
+        this._dueClearedIds = this._rehydrateIdSet(
+            loaded.dueClearedIds,
+            this.stats.dueCleared
+        );
+        // Keep stats floors aligned with rehydrated sets (never shrink on resume)
+        this.stats.newIntroduced = Math.max(
+            this.stats.newIntroduced || 0,
+            this._introducedIds.size
+        );
+        this.stats.dueCleared = Math.max(
+            this.stats.dueCleared || 0,
+            this._dueClearedIds.size
+        );
         // Rebuild words-done baseline from finished steps (cursor = next to run)
         this._wordsDoneBeforeStep = 0;
         var steps = (this.plan && this.plan.steps) || [];
@@ -592,6 +615,33 @@ class DailySessionService {
         this.updateProgressChrome();
         await this._launchStepAtCursor(savedStep);
         return { ok: true, plan: this.plan };
+    }
+
+    /**
+     * Rebuild a session Set from persisted id arrays.
+     * When only a count floor is available (legacy payloads), seed opaque placeholders
+     * so size-based stats never drop on resume until real ids re-accumulate.
+     * @param {Array|null|undefined} ids
+     * @param {number} countFloor
+     * @returns {Set<number>}
+     */
+    _rehydrateIdSet(ids, countFloor) {
+        var set = new Set();
+        if (ids && ids.length) {
+            for (var i = 0; i < ids.length; i++) {
+                var n = Number(ids[i]);
+                if (Number.isFinite(n)) set.add(n);
+            }
+        }
+        var floor = Number(countFloor) || 0;
+        // Legacy: stats had counts but ids were not persisted — preserve size only.
+        // Negative sentinel ids never collide with real vocab wordIds (>= 0).
+        var pad = 0;
+        while (set.size < floor) {
+            pad++;
+            set.add(-pad);
+        }
+        return set;
     }
 
     /**
@@ -870,7 +920,8 @@ class DailySessionService {
         if (!this._dueClearedIds) this._dueClearedIds = new Set();
         if (this._dueClearedIds.has(id)) return;
         this._dueClearedIds.add(id);
-        this.stats.dueCleared = this._dueClearedIds.size;
+        // Never shrink below a restored/persisted floor (Home → Continue safety)
+        this.stats.dueCleared = Math.max(this.stats.dueCleared || 0, this._dueClearedIds.size);
     }
 
     _applyMemoryReview(wordId, rating, mode) {
@@ -1072,8 +1123,11 @@ class DailySessionService {
 
     /**
      * Finish current step; advance cursor or complete().
+     * Async so complete() is awaited (F3: avoids fire-and-forget race with goHome).
+     * Callers may still fire-and-forget finishStep(); complete() still sets
+     * _showingSummary synchronously before its first await.
      */
-    finishStep() {
+    async finishStep() {
         if (this._finishing) return;
         this._finishing = true;
         this.stats.stepsDone++;
@@ -1105,17 +1159,17 @@ class DailySessionService {
 
         var steps = (this.plan && this.plan.steps) || [];
         if (this.cursor >= steps.length) {
-            this.complete();
+            await this.complete();
             return;
         }
         var next = steps[this.cursor];
         if (!next || next.type === 'complete') {
-            this.complete();
+            await this.complete();
             return;
         }
 
         this._finishing = false;
-        this._launchStepAtCursor();
+        await this._launchStepAtCursor();
     }
 
     /**
@@ -1162,6 +1216,10 @@ class DailySessionService {
     /**
      * Complete session: finalizeSessionHolds, endReviewSession, persist stats,
      * show completion summary (PR7).
+     *
+     * Sets _showingSummary synchronously before any await so goHome can see that
+     * completion owns the view (F3 race). If user already dismissed via Home,
+     * skips painting the summary over home.
      */
     async complete() {
         this._finishing = true;
@@ -1169,6 +1227,8 @@ class DailySessionService {
         this._uiPaused = false;
         this.pausedAt = null;
         this._completedAt = Date.now();
+        // F3: claim the view before first await (goHome will not pause; may dismiss)
+        this._showingSummary = true;
         this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
@@ -1190,14 +1250,30 @@ class DailySessionService {
             L('[DailySession] complete finalize failed', e);
         }
 
-        // Sync final counts from session sets
-        if (this._introducedIds) this.stats.newIntroduced = this._introducedIds.size;
-        if (this._dueClearedIds) this.stats.dueCleared = this._dueClearedIds.size;
+        // F1: sync from sets without shrinking restored floors
+        if (this._introducedIds) {
+            this.stats.newIntroduced = Math.max(
+                this.stats.newIntroduced || 0,
+                this._introducedIds.size
+            );
+        }
+        if (this._dueClearedIds) {
+            this.stats.dueCleared = Math.max(
+                this.stats.dueCleared || 0,
+                this._dueClearedIds.size
+            );
+        }
 
         this._updatedAt = Date.now();
         await this._persistPlan();
 
         L('[DailySession] completed', this.stats);
+
+        // User already left via Home during finalize/persist — do not repaint summary
+        if (this._summaryDismissed) {
+            this._showingSummary = false;
+            return;
+        }
 
         // PR7: full summary screen (user-facing only). Optional confetti.
         try {
@@ -1208,6 +1284,31 @@ class DailySessionService {
         } catch (_) { /* ignore */ }
 
         this.showCompleteSummary();
+    }
+
+    /**
+     * Leave completion UI via header Home (or Done). Restores status-bar; marks
+     * summary dismissed so in-flight complete() will not repaint over home (F2/F3).
+     */
+    dismissSummaryUi() {
+        this._summaryDismissed = true;
+        this._showingSummary = false;
+        this.hideProgressChrome();
+        this._restoreStatusBarAfterSummary();
+    }
+
+    _restoreStatusBarAfterSummary() {
+        if (typeof document === 'undefined') return;
+        try {
+            var bar = document.getElementById('status-bar');
+            if (!bar) return;
+            if (bar.dataset.origText) {
+                bar.innerText = bar.dataset.origText;
+            } else {
+                bar.innerText = 'Ready';
+            }
+            bar.classList.remove('text-rose-500', 'text-emerald-500', 'text-indigo-500', 'font-bold');
+        } catch (_) { /* ignore */ }
     }
 
     /**
@@ -1479,7 +1580,11 @@ class DailySessionService {
             if (!this._introducedIds) this._introducedIds = new Set();
             if (!this._introducedIds.has(id)) {
                 this._introducedIds.add(id);
-                this.stats.newIntroduced = this._introducedIds.size;
+                // Never shrink below a restored/persisted floor (Home → Continue)
+                this.stats.newIntroduced = Math.max(
+                    this.stats.newIntroduced || 0,
+                    this._introducedIds.size
+                );
             }
         }
 
@@ -1559,7 +1664,14 @@ class DailySessionService {
             intensity: this.intensity,
             updatedAt: this._updatedAt || Date.now(),
             startedAt: this._startedAt || null,
-            completedAt: this._completedAt || null
+            completedAt: this._completedAt || null,
+            // F1: persist unique id lists so Continue rehydrates sets (not empty wipe)
+            introducedIds: Array.from(this._introducedIds || []).filter(function (id) {
+                return Number(id) >= 0; // drop legacy placeholder sentinels
+            }),
+            dueClearedIds: Array.from(this._dueClearedIds || []).filter(function (id) {
+                return Number(id) >= 0;
+            })
         };
     }
 
@@ -1767,16 +1879,7 @@ class DailySessionService {
      * Bound from the Done button on the summary screen.
      */
     dismissSummary() {
-        this._showingSummary = false;
-        this.hideProgressChrome();
-        try {
-            var bar = document.getElementById('status-bar');
-            if (bar && bar.dataset.origText) {
-                bar.innerText = bar.dataset.origText;
-            } else if (bar) {
-                bar.innerText = 'Ready';
-            }
-        } catch (_) { /* ignore */ }
+        this.dismissSummaryUi();
         try {
             if (typeof app !== 'undefined' && app && typeof app.goHome === 'function') {
                 app.goHome(false);
@@ -1815,7 +1918,9 @@ class DailySessionService {
                 intensity: payload.intensity,
                 updatedAt: payload.updatedAt,
                 startedAt: payload.startedAt,
-                completedAt: payload.completedAt
+                completedAt: payload.completedAt,
+                introducedIds: payload.introducedIds,
+                dueClearedIds: payload.dueClearedIds
             });
         } catch (e) {
             L('[DailySession] RTDB persist failed', e);

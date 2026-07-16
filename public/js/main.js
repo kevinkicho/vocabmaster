@@ -128,7 +128,7 @@ class App {
             'bootstrapFromWordStats', 'flush', 'resetAllKeepAnalytics', 'isEnabled',
             // dailySession (PR5)
             'compose', 'buildPlan', 'start', 'continue', 'pause', 'complete', 'abandon',
-            'getProgress', 'attachController', 'onGraded', 'maybeFinishStep', 'finishStep',
+            'getProgress', 'hasResumableSession', 'attachController', 'onGraded', 'maybeFinishStep', 'finishStep',
             // presets
             'apply',
             // store
@@ -175,6 +175,10 @@ class App {
             stub._uiPaused = false;
             stub.status = 'idle';
             stub.plan = null;
+            // Async noops so await app.dailySession.hasResumableSession() is safe
+            stub.hasResumableSession = function () { return Promise.resolve(false); };
+            stub.start = function () { return Promise.resolve({ ok: false, reason: 'stub' }); };
+            stub.continue = function () { return Promise.resolve({ ok: false, reason: 'stub' }); };
             Object.defineProperty(stub, 'isActive', { get: function () { return false; } });
             Object.defineProperty(stub, 'isPaused', { get: function () { return false; } });
         }
@@ -468,6 +472,210 @@ class App {
         }
     }
 
+    /**
+     * Home Today card state when memory engine + daily session are live.
+     * Flag-off → { enabled: false } so goHome keeps the legacy mode-grid layout.
+     * @returns {Promise<object>}
+     */
+    async _getTodayHomeState() {
+        var enabled = (typeof window.isMemoryEngineEnabled === 'function')
+            ? window.isMemoryEngineEnabled()
+            : !!window.MEMORY_ENGINE_ENABLED;
+        var ds = this.dailySession;
+        if (!enabled || !ds || ds._isStub) {
+            return { enabled: false };
+        }
+
+        var pool = [];
+        try {
+            if (this.data) {
+                pool = this.data.getFilteredList ? this.data.getFilteredList() : (this.data.list || []);
+                if (!pool || !pool.length) pool = this.data.list || [];
+            }
+        } catch (_) {
+            pool = (this.data && this.data.list) || [];
+        }
+
+        var prefs = (this.store && this.store.prefs) || {};
+        var defaults = (typeof window.getSessionDefaults === 'function')
+            ? window.getSessionDefaults(prefs)
+            : { maxDue: 12, maxNew: 5, estimatedMinutes: 8 };
+
+        var dueCount = 0;
+        var newCount = 0;
+        var mem = this.memory;
+        if (mem && !mem._isStub && typeof mem.countDue === 'function') {
+            var filteredIds = new Set();
+            for (var i = 0; i < pool.length; i++) {
+                if (pool[i] && pool[i].id != null) filteredIds.add(Number(pool[i].id));
+            }
+            dueCount = mem.countDue(Date.now(), function (card) {
+                return card && filteredIds.has(Number(card.wordId));
+            });
+            newCount = (typeof mem.countNew === 'function') ? mem.countNew(pool) : 0;
+        }
+
+        var maxDue = defaults.maxDue != null ? defaults.maxDue : 12;
+        var maxNew = defaults.maxNew != null ? defaults.maxNew : 5;
+        var sessionDue = Math.min(dueCount, maxDue);
+        var sessionNew = Math.min(newCount, maxNew);
+        var backlog = Math.max(0, dueCount - maxDue);
+
+        var canContinue = false;
+        try {
+            if (typeof ds.hasResumableSession === 'function') {
+                canContinue = !!(await ds.hasResumableSession());
+            } else {
+                canContinue = ds.status === 'active' && !!ds.plan;
+            }
+        } catch (e) {
+            L('[Today] hasResumableSession failed', e);
+            canContinue = false;
+        }
+
+        var progress = null;
+        try {
+            if (canContinue && typeof ds.getProgress === 'function') {
+                progress = ds.getProgress();
+            }
+        } catch (_) { /* ignore */ }
+
+        return {
+            enabled: true,
+            dueCount: dueCount,
+            newCount: newCount,
+            sessionDue: sessionDue,
+            sessionNew: sessionNew,
+            backlog: backlog,
+            estimatedMinutes: defaults.estimatedMinutes || 8,
+            canContinue: canContinue,
+            progress: progress
+        };
+    }
+
+    /** Today primary CTA HTML (Start / Continue). Plain user copy only. */
+    _buildTodayCardHtml(state) {
+        if (!state || !state.enabled) return '';
+
+        var countsLine = state.sessionDue + ' due · ' + state.sessionNew + ' new · ~' +
+            state.estimatedMinutes + ' min';
+        var backlogLine = state.backlog > 0
+            ? '<p class="text-[11px] text-indigo-100 mt-1">+' + state.backlog + ' due later</p>'
+            : '';
+        var emptyHint = (state.sessionDue === 0 && state.sessionNew === 0 && !state.canContinue)
+            ? '<p class="text-[11px] text-indigo-100 mt-1">Nothing due right now — start to learn new words, or practice freely below.</p>'
+            : '';
+
+        var progressLine = '';
+        if (state.canContinue && state.progress && state.progress.stepsTotal > 0) {
+            var stepNum = Math.min((state.progress.stepIndex || 0) + 1, state.progress.stepsTotal);
+            progressLine = '<p class="text-[11px] font-bold text-white mt-2">In progress · step ' +
+                stepNum + ' of ' + state.progress.stepsTotal + '</p>';
+        }
+
+        var actions = state.canContinue
+            ? `<button type="button" onclick="app.continueTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Continue</button>
+               <button type="button" onclick="app.startTodaySession(true)" class="w-full py-2 rounded-2xl text-[11px] font-bold text-white border border-white/40 active:scale-95 transition-transform">Start new session</button>`
+            : `<button type="button" onclick="app.startTodaySession()" class="w-full py-3.5 rounded-2xl text-sm font-black bg-white text-indigo-700 shadow-lg active:scale-95 transition-transform">Start session</button>`;
+
+        return `
+            <div id="today-card" class="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] p-6 sm:p-8 shadow-lg border border-white/20 w-full shrink-0 relative overflow-hidden">
+                <div class="relative z-10 flex flex-col gap-3">
+                    <p class="text-[10px] font-black text-indigo-100 uppercase tracking-widest flex items-center gap-1.5">
+                        <i class="ph-bold ph-sun"></i> Today
+                    </p>
+                    <p class="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug">${countsLine}</p>
+                    ${backlogLine}
+                    ${emptyHint}
+                    ${progressLine}
+                    <p class="text-[10px] text-indigo-100 leading-relaxed">Your spaced repetition queue for this list — due reviews first, then new words.</p>
+                    <div class="flex flex-col gap-2 mt-1">
+                        ${actions}
+                    </div>
+                </div>
+                <div class="text-8xl opacity-10 absolute -right-4 -bottom-4 select-none pointer-events-none">📅</div>
+            </div>`;
+    }
+
+    /** Mode grid + Smart Review (shared by legacy home and Practice freely). */
+    _buildModeGridHtml() {
+        return `
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Reading</h3>
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
+                        ${this.btn('Flashcards', 'ph-cards', 'indigo', ()=>new Flashcard('flash'))}
+                        ${this.btn('True / False', 'ph-check-circle', 'emerald', ()=>new TF('tf'))}
+                        ${this.btn('Quiz', 'ph-question', 'pink', ()=>new Quiz('quiz'))}
+                        ${this.btn('Matching', 'ph-squares-four', 'slate', ()=>new Match('match'))}
+                    </div>
+
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Context</h3>
+                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
+                        ${this.btn('Sentences', 'ph-text-t', 'violet', ()=>new Sentences('sentences'))}
+                    </div>
+
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
+                        ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
+                        ${this.btn('Dictation', 'ph-headphones', 'rose', ()=>new Dictation('dictation'))}
+                    </div>
+
+                    <!-- AI section is always rendered (web/Android parity). -->
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
+                        ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
+                        ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
+                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'cyan', ()=>new Chat('chat'))}
+                        ${this.btn('Word Context', 'ph-flowers', 'emerald', ()=>new Context('context'))}
+                    </div>
+
+                    <!-- Smart Review: interim secondary until PR10 removes it -->
+                    <div class="mt-1 px-2">
+                        <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
+                    </div>`;
+    }
+
+    /** Start Today's daily session (optional force abandons a resumable plan). */
+    async startTodaySession(force) {
+        if (!this.dailySession || this.dailySession._isStub) {
+            if (this.ui) this.ui.showToast('Today session unavailable', 'error');
+            return;
+        }
+        try {
+            var result = await this.dailySession.start(force ? { force: true } : {});
+            if (result && result.ok === false) {
+                if (result.reason === 'paused-use-continue' || result.reason === 'existing-session' ||
+                    result.reason === 'already-active') {
+                    if (this.ui) this.ui.showToast('Session already in progress — use Continue', 'warning');
+                } else if (result.reason === 'empty-plan') {
+                    // dailySession.start already toasts empty-plan
+                } else if (this.ui) {
+                    this.ui.showToast('Could not start session', 'error');
+                }
+            }
+        } catch (e) {
+            L('[Today] start failed', e);
+            if (this.ui) this.ui.showToast('Could not start session', 'error');
+        }
+    }
+
+    /** Resume a paused / persisted Today session. */
+    async continueTodaySession() {
+        if (!this.dailySession || this.dailySession._isStub) {
+            if (this.ui) this.ui.showToast('Today session unavailable', 'error');
+            return;
+        }
+        try {
+            var result = await this.dailySession.continue();
+            if (result && result.ok === false) {
+                if (this.ui) this.ui.showToast('No session to continue — start a new one', 'warning');
+                // Fall back to fresh Start affordance on next home render
+            }
+        } catch (e) {
+            L('[Today] continue failed', e);
+            if (this.ui) this.ui.showToast('Could not continue session', 'error');
+        }
+    }
+
     async goHome(pushState = true) {
         // Daily Session: pause mid-step (status stays active + pausedAt; do not finalize holds)
         try {
@@ -495,7 +703,17 @@ class App {
         
         this.dailyScore = Math.max(0, Number(await this.data.getTodayTotal()) || 0);
 
+        // PR6: Today card when MEMORY_ENGINE_ENABLED + dailySession; else legacy layout
+        const todayState = await this._getTodayHomeState();
+
         requestAnimationFrame(() => {
+            const todayCardHtml = this._buildTodayCardHtml(todayState);
+            const modeGridHtml = this._buildModeGridHtml();
+            const practiceHeader = todayState.enabled
+                ? `<h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2 pl-2">Practice freely</h3>
+                   <p class="text-[10px] text-slate-400 dark:text-neutral-500 pl-2 -mt-2 mb-1">Pick any mode — reviews still update your schedule.</p>`
+                : '';
+
             view.innerHTML = `
                 <div class="flex flex-col gap-4 sm:gap-6 w-full h-full pb-8 overflow-y-auto pt-2 px-2">
                     <div onclick="app.ui.openStatsModal()" class="bg-gradient-to-r from-white to-slate-100 dark:from-neutral-900 dark:to-black rounded-[2rem] p-8 shadow-sm border border-slate-200 dark:border-neutral-800 flex justify-between relative overflow-hidden w-full shrink-0 group cursor-pointer active:scale-95 transition-transform">
@@ -519,47 +737,9 @@ class App {
                         <span id="ai-status-label" class="text-[9px] font-bold text-slate-400 uppercase">AI detecting...</span>
                     </div>
 
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Reading</h3>
-                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
-                        ${this.btn('Flashcards', 'ph-cards', 'indigo', ()=>new Flashcard('flash'))}
-                        ${this.btn('True / False', 'ph-check-circle', 'emerald', ()=>new TF('tf'))}
-                        ${this.btn('Quiz', 'ph-question', 'pink', ()=>new Quiz('quiz'))}
-                        ${this.btn('Matching', 'ph-squares-four', 'slate', ()=>new Match('match'))}
-                    </div>
-
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Context</h3>
-                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
-                        ${this.btn('Sentences', 'ph-text-t', 'violet', ()=>new Sentences('sentences'))}
-                    </div>
-
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
-                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
-                        ${this.btn('Voice Challenge', 'ph-microphone', 'sky', ()=>new Voice('voice'))}
-                        ${this.btn('Dictation', 'ph-headphones', 'rose', ()=>new Dictation('dictation'))}
-                    </div>
-
-                    <!-- AI section: 2x2 grid with Chat Practice, Story Mode, Grammar Gym.
-                         Chat Practice moved here from "Speaking" — it's AI-powered.
-                         Sentences (AI Cloze) stays under "Context" since it works
-                         without AI too (regex cloze fallback). -->
-                    <!-- AI section is *always* rendered (no app.llm guard) so that Story Mode and AI Cloze
-                         (the mandatory-AI no-fallback versions) are available identically whether the
-                         webapp is loaded from public/ in a browser or from the Android WebView assets.
-                         The games themselves enforce "AI required" + clean errors (see game_story.js
-                         and game_sentences.js). Web users configure their backend (local ollama or proxy+cloud)
-                         in Settings > AI. Keep this unconditional for web/Android parity. -->
-                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">AI</h3>
-                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
-                        ${this.btn('Story Mode', 'ph-book-open-text', 'violet', ()=>new Story('story'))}
-                        ${this.btn('Grammar Gym', 'ph-lightbulb', 'amber', ()=>new Grammar('grammar'))}
-                        ${this.btn('Chat Practice', 'ph-chat-circle-text', 'cyan', ()=>new Chat('chat'))}
-                        ${this.btn('Word Context', 'ph-flowers', 'emerald', ()=>new Context('context'))}
-                    </div>
-
-                    <!-- Medium-term: Smart Review (Phase 2) -->
-                    <div class="mt-1 px-2">
-                        <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
-                    </div>
+                    ${todayCardHtml}
+                    ${practiceHeader}
+                    ${modeGridHtml}
 
                     <!-- Tag Filter -->
                     <div id="tag-filter-section" class="mt-2 px-2"></div>

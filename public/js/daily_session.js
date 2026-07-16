@@ -537,6 +537,31 @@ class DailySessionService {
     }
 
     /**
+     * Whether Home should offer Continue (live plan or persisted plan for today).
+     * Completed/abandoned sessions are not resumable.
+     * @returns {Promise<boolean>}
+     */
+    async hasResumableSession() {
+        if (this.status === 'active' && this.plan && this.plan.steps && this.plan.steps.length) {
+            return true;
+        }
+        var loaded = null;
+        try {
+            loaded = await this._loadPersistedPlan();
+        } catch (_) {
+            loaded = null;
+        }
+        if (!loaded || !loaded.plan || !loaded.plan.steps || !loaded.plan.steps.length) {
+            return false;
+        }
+        if (loaded.status === 'completed' || loaded.status === 'abandoned') {
+            return false;
+        }
+        // active (incl. UI-paused), legacy 'paused', or missing status with a plan
+        return true;
+    }
+
+    /**
      * Wrap game.score / game.miss / waitAndNav → onGraded; set _ownsMemoryReviews.
      * @param {object} game GameMode instance
      * @param {object} stepMeta

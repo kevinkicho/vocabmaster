@@ -50,7 +50,44 @@ Object.assign(UIManager.prototype, {
             this.renderLLMSetupGuide();
             if (app.llm) { this.updateLLMStatus(app.llm.available && app.llm.hasModel); this.updateLLMCacheCount(); }
             this.renderVoiceSelector();
+            // Session pace radio visual + plain-language size hint (no FSRS jargon)
+            if (typeof this._syncRadioVisual === 'function') {
+                this._syncRadioVisual('session-intensity');
+            }
+            if (typeof this._updateSessionIntensityHint === 'function') {
+                this._updateSessionIntensityHint();
+            }
         } catch(e) { L("Error loading settings UI:", e); }
+    },
+
+    /**
+     * Plain-language size/time hint for Session Pace (Casual vs Exam prep).
+     * Reads current radio or prefs; uses getSessionDefaults when available.
+     */
+    _updateSessionIntensityHint() {
+        const el = document.getElementById('session-intensity-hint');
+        if (!el) return;
+        let intensity = 'casual';
+        const checked = document.querySelector('input[name="session-intensity"]:checked');
+        if (checked && (checked.value === 'casual' || checked.value === 'cram')) {
+            intensity = checked.value;
+        } else if (this.store && this.store.prefs && this.store.prefs.sessionIntensity === 'cram') {
+            intensity = 'cram';
+        }
+        let d = null;
+        if (typeof getSessionDefaults === 'function') {
+            d = getSessionDefaults({ sessionIntensity: intensity });
+        } else if (typeof window.getSessionDefaults === 'function') {
+            d = window.getSessionDefaults({ sessionIntensity: intensity });
+        } else if (window.SESSION_INTENSITY_PRESETS && window.SESSION_INTENSITY_PRESETS[intensity]) {
+            d = window.SESSION_INTENSITY_PRESETS[intensity];
+        }
+        if (!d) {
+            d = intensity === 'cram'
+                ? { estimatedMinutes: 15, maxNew: 8, maxDue: 20 }
+                : { estimatedMinutes: 8, maxNew: 5, maxDue: 12 };
+        }
+        el.textContent = '~' + d.estimatedMinutes + ' min · up to ' + d.maxNew + ' new · ' + d.maxDue + ' review';
     },
 
     // Dev / robustness helper (call from console: app.ui.validateSettingsBindings())

@@ -14,6 +14,10 @@ const PREFERENCE_SCHEMA = [
   { key: 'fontWeight',        type: 'select', default: 'normal',domId: 'app-font-weight',          section: 'global', label: 'Font Weight' },
   { key: 'globalClickMode',   type: 'radio',  default: 'double',domId: 'global-click-mode',        section: 'global', label: 'Click Mode' },
 
+  // ===== DAILY SESSION PACE (plain labels; compose uses getSessionDefaults) =====
+  // 'casual' ≈ 15 total / 5 new / 12 due · 'cram' ≈ 25 / 8 new / 20 due
+  { key: 'sessionIntensity',  type: 'radio',  default: 'casual',domId: 'session-intensity',        section: 'global', label: 'Session Pace' },
+
   // ===== FLASHCARDS =====
   { key: 'flashSpeed',        type: 'select', default: '700',   domId: 'flash-speed',              section: 'flash', label: 'Flip Speed' },
   { key: 'flashAuto',         type: 'bool',   default: true,    domId: 'flash-auto',               section: 'flash', label: 'Auto Advance', presetBehavior: 'always' },

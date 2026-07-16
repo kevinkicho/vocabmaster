@@ -46,9 +46,10 @@ var SESSION_DEFAULTS = SESSION_INTENSITY_PRESETS.casual;
 
 /**
  * Runtime defaults for compose/buildPlan from prefs.sessionIntensity.
+ * Pref is user-facing Settings radio (Casual pace / Exam prep); default = casual.
  * Default intensity = casual (15/5/12) when intensity not yet set.
- * @param {object|null|undefined} prefs
- * @returns {object}
+ * @param {object|null|undefined} prefs app.store.prefs (or { sessionIntensity })
+ * @returns {object} mutable copy of the active intensity preset
  */
 function getSessionDefaults(prefs) {
     var key = (prefs && prefs.sessionIntensity) === 'cram' ? 'cram' : 'casual';

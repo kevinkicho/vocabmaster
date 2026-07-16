@@ -174,15 +174,17 @@ function buildDefaultsFromSchema(LANG_CONFIG) {
 // Read a single pref from its DOM element
 function readPrefFromDom(entry) {
   if (!entry.domId) return null;
+  // For radios, domId is the radio group name — there is no element with
+  // that id (name-only inputs). Mirror writePrefToDom: query by name.
+  if (entry.type === 'radio') {
+    const rad = document.querySelector('input[name="' + entry.domId + '"]:checked');
+    return rad ? rad.value : null;
+  }
   const el = document.getElementById(entry.domId);
   if (!el) return null;
   switch (entry.type) {
     case 'bool':
       return el.checked;
-    case 'radio': {
-      const rad = document.querySelector('input[name="' + entry.domId + '"]:checked');
-      return rad ? rad.value : null;
-    }
     case 'select':
     default:
       return el.value;

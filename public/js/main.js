@@ -65,6 +65,7 @@ class App {
         initService('celebration', () => new CelebrationService(), false);
         initService('analytics', () => new AnalyticsService(), false);
         initService('memory', () => new window.MemoryService(), false);
+        initService('dailySession', () => new window.DailySessionService(), false);
         initService('llm', () => new LLMService(), true);
         initService('presets', () => new PresetManager(), false);
 
@@ -125,7 +126,9 @@ class App {
             'finalizeSessionHolds', 'finalizeSessionRating',
             'getDueCards', 'getNewCandidates', 'countDue', 'countNew',
             'bootstrapFromWordStats', 'flush', 'resetAllKeepAnalytics', 'isEnabled',
-            'forceMigrate', 'getDebugSnapshot',
+            // dailySession (PR5)
+            'compose', 'buildPlan', 'start', 'continue', 'pause', 'complete', 'abandon',
+            'getProgress', 'attachController', 'onGraded', 'maybeFinishStep', 'finishStep',
             // presets
             'apply',
             // store
@@ -140,8 +143,6 @@ class App {
             'updateLLMStatus', 'updateLLMCacheCount', '_updateAIStatus', 'runAIAnalysis',
             'approveAIAdjustment', 'dismissAIAdjustment', 'resetAITemplates',
             'showTooltip', 'hideTooltip', 'copyLogs', 'dumpVoices',
-            'refreshMemoryDebugPanel', 'adminFlushMemoryDirty',
-            'adminForceMemoryMigrate', 'adminResetMemoryKeepAnalytics',
             'validateSettingsBindings', '_syncRadioVisual', 'modal',
         ];
         for (const m of methods) stub[m] = noop;
@@ -169,6 +170,11 @@ class App {
         } else if (name === 'notes') {
             stub.isAdmin = false;
             stub.currentWordId = null;
+        } else if (name === 'dailySession') {
+            stub._ownsMemoryReviews = false;
+            stub.status = 'idle';
+            stub.plan = null;
+            Object.defineProperty(stub, 'isActive', { get: function () { return false; } });
         }
         // llm: available/hasModel/useCloud/endpoint — all stay undefined (falsy).
         // all stay undefined (falsy) — callers already guard with `if (app.llm && ...)`.
@@ -461,6 +467,16 @@ class App {
     }
 
     async goHome(pushState = true) {
+        // Daily Session: pause mid-step (persist holds, do not finalize)
+        try {
+            if (this.dailySession && !this.dailySession._isStub &&
+                this.dailySession.status === 'active' &&
+                typeof this.dailySession.pause === 'function') {
+                await this.dailySession.pause();
+            }
+        } catch (e) {
+            L('[DailySession] pause on goHome failed', e);
+        }
         if(this.game) this.game.destroy();
         this.game = null;
         if(app.audio) app.audio.cancel(); 

@@ -13,10 +13,45 @@ class DataService {
     }
 
     // Medium-term: Review queue support (combines analytics + adaptive + collections)
+    // PR4: Prefer FSRS due cards when memory engine is enabled; fill remaining with
+    // most-missed / selectWordsForReview. Scoped to getFilteredList universe.
     async getReviewWords(count = 10) {
         let baseList = this.getFilteredList(); // respects current collection/levels
         if (!baseList || baseList.length === 0) baseList = this.list;
 
+        const result = [];
+        const usedIds = new Set();
+
+        // 1) Prefer FSRS due cards (filtered to current list universe)
+        const mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+        if (mem && typeof mem.isEnabled === 'function' && mem.isEnabled()
+            && typeof mem.getDueCards === 'function') {
+            const filteredIds = new Set();
+            const byId = new Map();
+            for (const w of baseList) {
+                if (w && w.id != null) {
+                    filteredIds.add(w.id);
+                    byId.set(w.id, w);
+                }
+            }
+            const due = mem.getDueCards(Date.now(), {
+                limit: count,
+                // MemoryService passes card objects to filterFn
+                filterFn: (card) => card && filteredIds.has(card.wordId)
+            });
+            for (const card of due) {
+                const vocab = byId.get(card.wordId);
+                if (!vocab) continue;
+                result.push(vocab);
+                usedIds.add(card.wordId);
+                if (result.length >= count) return result;
+            }
+        }
+
+        const remaining = count - result.length;
+        if (remaining <= 0) return result;
+
+        // 2) Fill remaining slots with most-missed / adaptive fallback
         let userHistory = {};
         if (app.analytics) {
             try {
@@ -30,16 +65,29 @@ class DataService {
             } catch (e) {}
         }
 
-        // Use adaptive for scoring
         if (typeof selectWordsForReview === 'function') {
-            // Map to word objects for adaptive (it expects list of words)
-            const reviewItems = selectWordsForReview(baseList, userHistory, count);
-            return reviewItems;
+            const pool = baseList.filter(w => w && !usedIds.has(w.id));
+            const reviewItems = selectWordsForReview(pool, userHistory, remaining);
+            for (const w of reviewItems) {
+                if (!w || usedIds.has(w.id)) continue;
+                result.push(w);
+                usedIds.add(w.id);
+            }
+            return result.slice(0, count);
         }
 
         // Fallback: most missed first
         const missed = await (app.analytics ? app.analytics.getMostMissedWords(count) : []);
-        return missed.map(m => m.vocab).filter(Boolean).slice(0, count);
+        for (const m of missed) {
+            if (result.length >= count) break;
+            const vocab = m.vocab;
+            if (!vocab) continue;
+            const id = vocab.id != null ? vocab.id : m.id;
+            if (usedIds.has(id)) continue;
+            result.push(vocab);
+            usedIds.add(id);
+        }
+        return result.slice(0, count);
     }
 
     // Temporarily use review list for next game

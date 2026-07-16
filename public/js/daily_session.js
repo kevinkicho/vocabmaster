@@ -199,12 +199,31 @@ function wordsFromIds(wordIds) {
     return out;
 }
 
+/**
+ * Modes where miss is intermediate (user stays on card until correct).
+ * Terminal grade = eventual score. Defer resolve/reinsert/FSRS until then.
+ */
+var MULTI_ATTEMPT_MODES = { quiz: true, dictation: true };
+
+/**
+ * Modes where miss must not alone resolve the word for step completion
+ * (Match: success-only resolve per §2.4.3).
+ */
+var RESOLVE_ON_SUCCESS_ONLY = { match: true };
+
 class DailySessionService {
     constructor() {
         /** When true, PR3b analytics hook skips memory.review; controller onGraded calls it. */
         this._ownsMemoryReviews = false;
-        /** @type {'idle'|'active'|'paused'|'completed'|'abandoned'} */
+        /**
+         * Canonical plan status for RTDB / orphan-hold recovery.
+         * Pause keeps 'active' (with pausedAt) so MemoryService does not finalize holds.
+         * @type {'idle'|'active'|'completed'|'abandoned'}
+         */
         this.status = 'idle';
+        /** UI pause flag — true after Home mid-session; status remains 'active'. */
+        this._uiPaused = false;
+        this.pausedAt = null;
         this.plan = null;
         this.cursor = 0;
         this.defaults = null;
@@ -217,11 +236,18 @@ class DailySessionService {
         this._finishing = false;
         this._startedAt = null;
         this._updatedAt = null;
+        /** Bumped to cancel in-flight waitAndNav after reinsert / step end. */
+        this._navGen = 0;
     }
 
-    /** @returns {boolean} */
+    /** @returns {boolean} true while plan is live (including UI-paused). */
     get isActive() {
         return this.status === 'active';
+    }
+
+    /** @returns {boolean} true when user left mid-session but plan is still active. */
+    get isPaused() {
+        return this.status === 'active' && !!this._uiPaused;
     }
 
     /**
@@ -349,16 +375,40 @@ class DailySessionService {
     }
 
     /**
-     * Start a new Daily Session (or resume if options.continueActive).
+     * Start a new Daily Session.
      * Temporary debug: app.dailySession.start({ wordIds: [1,2,3], quizOnly: true })
+     * If a live/paused plan exists, refuses unless options.force (then abandon first).
      * @param {object} [options]
      * @returns {Promise<{ok:boolean, reason?:string, plan?:object}>}
      */
     async start(options) {
         options = options || {};
-        if (this.status === 'active' && !options.force) {
-            L('[DailySession] already active; use continue() or pass force:true');
-            return { ok: false, reason: 'already-active', plan: this.plan };
+
+        // In-memory live session (including UI-paused active plan)
+        if (this.status === 'active' && this.plan && !options.force) {
+            var why = this._uiPaused ? 'paused-use-continue' : 'already-active';
+            L('[DailySession] start blocked:', why, '— use continue() or force:true');
+            return { ok: false, reason: why, plan: this.plan };
+        }
+
+        // Persisted plan for today (process restart / second start without force)
+        if (!options.force) {
+            var existing = await this._loadPersistedPlan();
+            if (existing && existing.plan && existing.plan.steps &&
+                existing.status !== 'completed' && existing.status !== 'abandoned') {
+                L('[DailySession] start blocked: existing-session — use continue() or force:true');
+                return {
+                    ok: false,
+                    reason: 'existing-session',
+                    plan: existing.plan,
+                    suggest: 'continue'
+                };
+            }
+        }
+
+        // force: finalize prior holds so they are not orphaned across sessions
+        if (options.force) {
+            await this._finalizePreviousSessionBeforeStart();
         }
 
         var composed = this.compose(options);
@@ -390,12 +440,15 @@ class DailySessionService {
         this.cursor = 0;
         this.stats = { correct: 0, incorrect: 0, againCount: 0, stepsDone: 0 };
         this.status = 'active';
+        this._uiPaused = false;
+        this.pausedAt = null;
         this.dateKey = _dailySessionTodayKey();
         this._startedAt = Date.now();
         this._updatedAt = this._startedAt;
         this._finishing = false;
         this._step = null;
         this._ownsMemoryReviews = false;
+        this._navGen = 0;
 
         await this._persistPlan();
         L('[DailySession] start', this.plan.steps.length, 'steps', 'intensity=', this.intensity);
@@ -409,16 +462,25 @@ class DailySessionService {
      * Prefers RTDB plan when online; falls back to localStorage.
      */
     async continue() {
-        if (this.status === 'active' && this._game) {
+        if (this.status === 'active' && this._game && !this._uiPaused) {
             L('[DailySession] already running');
             return { ok: true, plan: this.plan };
         }
 
         var loaded = await this._loadPersistedPlan();
         if (!loaded || !loaded.plan || !loaded.plan.steps) {
-            return { ok: false, reason: 'no-saved-plan' };
+            // In-memory paused plan without reload
+            if (this.status === 'active' && this.plan && this._uiPaused) {
+                loaded = this._planPayload();
+            } else {
+                return { ok: false, reason: 'no-saved-plan' };
+            }
         }
         if (loaded.status === 'completed' || loaded.status === 'abandoned') {
+            return { ok: false, reason: 'session-' + loaded.status };
+        }
+        // Accept 'active' (canonical pause) and legacy 'paused' rows
+        if (loaded.status && loaded.status !== 'active' && loaded.status !== 'paused') {
             return { ok: false, reason: 'session-' + loaded.status };
         }
 
@@ -431,6 +493,8 @@ class DailySessionService {
         this.stats = loaded.stats || this.stats;
         this.dateKey = loaded.dateKey || _dailySessionTodayKey();
         this.status = 'active';
+        this._uiPaused = false;
+        this.pausedAt = null;
         this._finishing = false;
 
         // Restore step meta for partial step if present
@@ -454,6 +518,8 @@ class DailySessionService {
         }
         return {
             status: this.status,
+            paused: this.isPaused,
+            pausedAt: this.pausedAt,
             stepIndex: this.cursor,
             stepsTotal: workSteps.length,
             resolvedInStep: resolvedInStep,
@@ -465,7 +531,7 @@ class DailySessionService {
     }
 
     /**
-     * Wrap game.score / game.miss → onGraded; set _ownsMemoryReviews.
+     * Wrap game.score / game.miss / waitAndNav → onGraded; set _ownsMemoryReviews.
      * @param {object} game GameMode instance
      * @param {object} stepMeta
      */
@@ -474,6 +540,7 @@ class DailySessionService {
         var self = this;
         this._ownsMemoryReviews = true;
         this._game = game;
+        this._uiPaused = false;
 
         var wordIds = (stepMeta && stepMeta.wordIds) || [];
         var purpose = (stepMeta && stepMeta.purpose) || 'review';
@@ -493,6 +560,10 @@ class DailySessionService {
             Object.keys(stepMeta.reinsertCount).forEach(function (k) {
                 reinsertCount.set(Number(k), Number(stepMeta.reinsertCount[k]) || 0);
             });
+        }
+        var hadMiss = new Set();
+        if (stepMeta && stepMeta.hadMiss) {
+            (stepMeta.hadMiss || []).forEach(function (id) { hadMiss.add(Number(id)); });
         }
 
         var pending = new Set();
@@ -514,6 +585,7 @@ class DailySessionService {
             reinsertQueue: reinsertQueue,
             reinsertCount: reinsertCount,
             pendingWordIds: pending,
+            hadMiss: hadMiss,
             shownWordIds: new Set(
                 (stepMeta && stepMeta.shownWordIds) ? stepMeta.shownWordIds.map(Number) : []
             ),
@@ -530,6 +602,11 @@ class DailySessionService {
             }
         } catch (_) { /* ignore */ }
 
+        // Cancel token for waitAndNav race (Issue 1)
+        this._navGen = (this._navGen || 0) + 1;
+        var attachedGen = this._navGen;
+        game._sessionNavGen = attachedGen;
+
         var origScore = game.score.bind(game);
         game.score = function (pts, wordId) {
             origScore(pts, wordId);
@@ -542,6 +619,9 @@ class DailySessionService {
             var id = wordId != null ? wordId : (game.list && game.list[game.i] ? game.list[game.i].id : null);
             if (id != null) self.onGraded(id, false);
         };
+
+        // Replace waitAndNav with cancelable version (raw setTimeout in GameMode is not clearable)
+        self._installCancelableWaitAndNav(game, attachedGen);
 
         // Present/Flash: track shown cards via introduce + nav override
         if (type === 'present' || mode === 'flash') {
@@ -560,6 +640,8 @@ class DailySessionService {
 
     /**
      * Session-path grade handler.
+     * Quiz multi-attempt: intermediate miss defers FSRS/resolve/reinsert until terminal correct.
+     * Match: miss does not resolve; only score resolves (§2.4.3).
      * @param {number|string} wordId
      * @param {boolean} correct
      */
@@ -570,43 +652,90 @@ class DailySessionService {
 
         var step = this._step;
         var mode = step.mode || 'quiz';
+        var multiAttempt = !!MULTI_ATTEMPT_MODES[mode];
+        var successOnly = !!RESOLVE_ON_SUCCESS_ONLY[mode];
 
-        // Memory review (session path) — binary: Good=3 / Again=1
-        if (typeof window !== 'undefined' && window.MEMORY_ENGINE_ENABLED) {
-            try {
-                var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
-                if (mem && typeof mem.review === 'function' && !mem._isStub) {
-                    var rating = correct ? 3 : 1;
-                    mem.review(id, rating, mode, Date.now());
-                }
-            } catch (e) {
-                L('[DailySession] memory.review failed', e);
-            }
+        // --- Intermediate miss (Quiz/Dictation): defer resolve/reinsert/FSRS ---
+        if (multiAttempt && !correct) {
+            if (!step.hadMiss) step.hadMiss = new Set();
+            step.hadMiss.add(id);
+            this.stats.incorrect++;
+            this._updatedAt = Date.now();
+            this._persistPlanDebounced();
+            // Stay on card; no maybeFinishStep
+            return;
         }
 
-        if (correct) this.stats.correct++;
-        else this.stats.incorrect++;
+        // --- Match miss: analytics/memory/reinsert but do not resolve ---
+        if (successOnly && !correct) {
+            this.stats.incorrect++;
+            this._applyMemoryReview(id, 1, mode);
+            this._queueReinsert(step, id);
+            this._updatedAt = Date.now();
+            this._persistPlanDebounced();
+            // do not resolve; do not maybeFinishStep from miss alone
+            return;
+        }
 
-        // Resolve for step completion (first grade wins for pending)
+        // --- Terminal grade ---
+        var recovered = multiAttempt && correct && step.hadMiss && step.hadMiss.has(id);
+        // Quiz recovered after miss: single Again + reinsert once (no double FSRS)
+        // Clean correct: Good. Terminal miss (TF etc.): Again + reinsert.
+        var rating;
+        var treatAsAgain = false;
+        if (correct) {
+            if (recovered) {
+                rating = 1; // Again — single FSRS for the card cycle
+                treatAsAgain = true;
+            } else {
+                rating = 3; // Good
+            }
+            this.stats.correct++;
+        } else {
+            rating = 1;
+            treatAsAgain = true;
+            this.stats.incorrect++;
+        }
+
+        this._applyMemoryReview(id, rating, mode);
+
+        // Resolve for step completion
         step.resolvedWordIds.add(id);
         step.pendingWordIds.delete(id);
+        if (step.hadMiss) step.hadMiss.delete(id);
 
-        // Again: reinsert once max
-        if (!correct && step.reinsertLapses) {
-            var prev = step.reinsertCount.get(id) || 0;
-            if (prev < 1) {
-                step.reinsertCount.set(id, prev + 1);
-                if (step.reinsertQueue.indexOf(id) === -1) {
-                    step.reinsertQueue.push(id);
-                    this.stats.againCount++;
-                    L('[DailySession] reinsert queued', id);
-                }
-            }
+        // Again / recovered-as-Again: reinsert once max
+        if (treatAsAgain && step.reinsertLapses) {
+            this._queueReinsert(step, id);
         }
 
         this._updatedAt = Date.now();
         this._persistPlanDebounced();
         this.maybeFinishStep();
+    }
+
+    _applyMemoryReview(wordId, rating, mode) {
+        if (typeof window === 'undefined' || !window.MEMORY_ENGINE_ENABLED) return;
+        try {
+            var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+            if (mem && typeof mem.review === 'function' && !mem._isStub) {
+                mem.review(wordId, rating, mode, Date.now());
+            }
+        } catch (e) {
+            L('[DailySession] memory.review failed', e);
+        }
+    }
+
+    _queueReinsert(step, id) {
+        if (!step || !step.reinsertLapses) return;
+        var prev = step.reinsertCount.get(id) || 0;
+        if (prev >= 1) return;
+        step.reinsertCount.set(id, prev + 1);
+        if (step.reinsertQueue.indexOf(id) === -1) {
+            step.reinsertQueue.push(id);
+            this.stats.againCount++;
+            L('[DailySession] reinsert queued', id);
+        }
     }
 
     /**
@@ -649,7 +778,7 @@ class DailySessionService {
     }
 
     /**
-     * Reinsert Again words once: update list / pending, same GameMode or soft restart.
+     * Reinsert Again words once: cancel in-flight waitAndNav, repoint list index.
      */
     _applyReinsertPass() {
         var step = this._step;
@@ -659,6 +788,12 @@ class DailySessionService {
         step.pendingWordIds = new Set(ids);
         // Keep resolved of originals; reinsert words will be graded again but
         // reinsertCount already ≥1 so they will not re-queue.
+        if (step.hadMiss) {
+            ids.forEach(function (id) { step.hadMiss.delete(id); });
+        }
+
+        // Issue 1: cancel any waitAndNav scheduled by the grade that triggered reinsert
+        this._cancelPendingNav();
 
         var words = wordsFromIds(ids);
         try {
@@ -674,6 +809,8 @@ class DailySessionService {
             game.answered = false;
             game.busy = false;
             game.hasMissed = false;
+            // Re-install cancelable waitAndNav bound to new nav gen
+            this._installCancelableWaitAndNav(game, this._navGen);
             try {
                 if (typeof game.update === 'function') game.update();
                 else if (typeof game.render === 'function') game.render();
@@ -686,6 +823,60 @@ class DailySessionService {
         }
         L('[DailySession] reinsert pass', ids);
         this._persistPlanDebounced();
+    }
+
+    /**
+     * Bump nav generation so in-flight waitAndNav resolves but no-ops (does not nav).
+     * Do not clearTimeout those timers without resolving — that hangs the Promise.
+     */
+    _cancelPendingNav() {
+        this._navGen = (this._navGen || 0) + 1;
+        var game = this._game;
+        if (!game) return;
+        game._sessionNavGen = this._navGen;
+        try {
+            if (typeof app !== 'undefined' && app && app.audio && typeof app.audio.cancel === 'function') {
+                app.audio.cancel();
+            }
+        } catch (_) { /* ignore */ }
+    }
+
+    /**
+     * Install waitAndNav that respects _navGen so reinsert/finish cannot race auto-nav.
+     */
+    _installCancelableWaitAndNav(game, genAtInstall) {
+        if (!game) return;
+        var self = this;
+        var gen = genAtInstall != null ? genAtInstall : this._navGen;
+        game._sessionNavGen = gen;
+        game.waitAndNav = async function (audioPromise, fallbackDelay) {
+            var myGen = game._sessionNavGen;
+            var wait = false;
+            try {
+                wait = !!(typeof app !== 'undefined' && app && app.store && app.store.prefs &&
+                    app.store.prefs.audioWait);
+            } catch (_) { /* ignore */ }
+            try {
+                if (wait && audioPromise) {
+                    await audioPromise;
+                } else {
+                    var delay = fallbackDelay != null ? fallbackDelay : 1500;
+                    await new Promise(function (resolve) {
+                        var tid = setTimeout(resolve, delay);
+                        if (!game.timeouts) game.timeouts = [];
+                        game.timeouts.push(tid);
+                    });
+                }
+            } catch (e) {
+                L('[DailySession] waitAndNav audio error', e);
+            }
+            // Cancelled by reinsert / finishStep / destroy
+            if (self._navGen !== myGen || game._sessionNavGen !== myGen) return;
+            if (self._finishing || !self._step || self._uiPaused) return;
+            if (self.status !== 'active') return;
+            game.busy = false;
+            if (typeof game.nav === 'function') game.nav(1);
+        };
     }
 
     _restartCurrentStepWithWords(ids) {
@@ -708,6 +899,7 @@ class DailySessionService {
         this._finishing = true;
         this.stats.stepsDone++;
 
+        this._cancelPendingNav();
         this._destroyGameSoft();
         this._ownsMemoryReviews = false;
         this._step = null;
@@ -732,10 +924,21 @@ class DailySessionService {
 
     /**
      * Pause: persist plan + step meta; flush memory holds (flags); do NOT finalize holds.
+     * Keeps status === 'active' (with pausedAt) so Memory orphan-hold recovery leaves holds.
      */
     async pause() {
         if (this.status !== 'active') return;
-        this.status = 'paused';
+        if (this._uiPaused) {
+            // Idempotent re-pause (e.g. double goHome)
+            this._updatedAt = Date.now();
+            await this._persistPlan();
+            return;
+        }
+
+        this._uiPaused = true;
+        this.pausedAt = Date.now();
+        // status stays 'active' — required for orphan-hold recovery (memory.js)
+        this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
         try {
@@ -756,7 +959,7 @@ class DailySessionService {
 
         this._updatedAt = Date.now();
         await this._persistPlan();
-        L('[DailySession] paused at cursor', this.cursor);
+        L('[DailySession] paused (status=active) at cursor', this.cursor);
     }
 
     /**
@@ -765,6 +968,9 @@ class DailySessionService {
     async complete() {
         this._finishing = true;
         this.status = 'completed';
+        this._uiPaused = false;
+        this.pausedAt = null;
+        this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
 
@@ -813,6 +1019,9 @@ class DailySessionService {
     async abandon() {
         this._finishing = true;
         this.status = 'abandoned';
+        this._uiPaused = false;
+        this.pausedAt = null;
+        this._cancelPendingNav();
         this._ownsMemoryReviews = false;
         this._destroyGameSoft();
 
@@ -835,6 +1044,48 @@ class DailySessionService {
         this._updatedAt = Date.now();
         await this._persistPlan();
         L('[DailySession] abandoned');
+    }
+
+    /**
+     * Before force-start: abandon in-memory or persisted live plan so holds finalize.
+     */
+    async _finalizePreviousSessionBeforeStart() {
+        // Load persisted into this if we only have local/RTDB state
+        if (!(this.plan && this.status === 'active')) {
+            var loaded = await this._loadPersistedPlan();
+            if (loaded && loaded.plan &&
+                loaded.status !== 'completed' && loaded.status !== 'abandoned') {
+                this.plan = loaded.plan;
+                this.cursor = loaded.cursor || 0;
+                this.stats = loaded.stats || this.stats;
+                this.dateKey = loaded.dateKey || _dailySessionTodayKey();
+                this.status = 'active';
+                this._step = null;
+            }
+        }
+        if (this.status === 'active' && this.plan) {
+            L('[DailySession] force start — abandoning previous plan to finalize holds');
+            await this.abandon();
+        } else {
+            // No plan object but cards may still hold — finalize orphan holds anyway
+            try {
+                var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+                if (mem && typeof mem.finalizeSessionHolds === 'function' && !mem._isStub) {
+                    mem.finalizeSessionHolds(Date.now());
+                    if (typeof mem.flush === 'function') await mem.flush();
+                }
+            } catch (e) {
+                L('[DailySession] force-start finalize orphan holds failed', e);
+            }
+        }
+        // Reset so start() can rebuild
+        this._finishing = false;
+        this.status = 'idle';
+        this.plan = null;
+        this._step = null;
+        this._uiPaused = false;
+        this.pausedAt = null;
+        this._ownsMemoryReviews = false;
     }
 
     // --- Internals ---
@@ -1028,6 +1279,8 @@ class DailySessionService {
         if (game) {
             // Prevent pending waitAndNav from navigating after step end
             try {
+                this._navGen = (this._navGen || 0) + 1;
+                game._sessionNavGen = this._navGen;
                 game.busy = true;
                 game.nav = function () {};
                 game.waitAndNav = async function () {};
@@ -1065,14 +1318,17 @@ class DailySessionService {
             reinsertQueue: (step.reinsertQueue || []).slice(),
             reinsertCount: reinsertCountObj,
             pendingWordIds: Array.from(step.pendingWordIds || []),
-            shownWordIds: Array.from(step.shownWordIds || [])
+            shownWordIds: Array.from(step.shownWordIds || []),
+            hadMiss: Array.from(step.hadMiss || [])
         };
     }
 
     _planPayload() {
         return {
             dateKey: this.dateKey || _dailySessionTodayKey(),
+            // Always persist canonical status; UI pause uses pausedAt (status stays active)
             status: this.status,
+            pausedAt: this._uiPaused ? (this.pausedAt || Date.now()) : null,
             cursor: this.cursor,
             plan: this.plan,
             stats: this.stats,
@@ -1098,6 +1354,7 @@ class DailySessionService {
             var path = 'users/' + uid + '/dailySessions/' + payload.dateKey;
             await db.ref(path).update({
                 status: payload.status,
+                pausedAt: payload.pausedAt,
                 cursor: payload.cursor,
                 plan: payload.plan,
                 stats: payload.stats,

@@ -172,9 +172,11 @@ class App {
             stub.currentWordId = null;
         } else if (name === 'dailySession') {
             stub._ownsMemoryReviews = false;
+            stub._uiPaused = false;
             stub.status = 'idle';
             stub.plan = null;
             Object.defineProperty(stub, 'isActive', { get: function () { return false; } });
+            Object.defineProperty(stub, 'isPaused', { get: function () { return false; } });
         }
         // llm: available/hasModel/useCloud/endpoint — all stay undefined (falsy).
         // all stay undefined (falsy) — callers already guard with `if (app.llm && ...)`.
@@ -467,10 +469,11 @@ class App {
     }
 
     async goHome(pushState = true) {
-        // Daily Session: pause mid-step (persist holds, do not finalize)
+        // Daily Session: pause mid-step (status stays active + pausedAt; do not finalize holds)
         try {
             if (this.dailySession && !this.dailySession._isStub &&
                 this.dailySession.status === 'active' &&
+                !this.dailySession._uiPaused &&
                 typeof this.dailySession.pause === 'function') {
                 await this.dailySession.pause();
             }

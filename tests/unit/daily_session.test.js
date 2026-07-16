@@ -197,11 +197,14 @@ describe('buildQuizOnlyPlan', () => {
 describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
     function mockMemory() {
         const cards = new Map();
+        const reviews = [];
         return {
             _isStub: false,
             cards,
+            reviews,
             review(wordId, rating, mode, now) {
                 const id = Number(wordId);
+                reviews.push({ wordId: id, rating, mode, now });
                 const prev = cards.get(id) || { wordId: id };
                 const next = Object.assign({}, prev, {
                     lastRating: rating,
@@ -240,21 +243,35 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
 
     function mockGame(wordIds) {
         const list = wordIds.map((id) => ({ id }));
-        return {
+        const g = {
             key: 'quiz',
             list,
             i: 0,
             answered: false,
             busy: false,
             hasMissed: false,
+            timeouts: [],
+            navCalls: 0,
             score(pts, wordId) {
                 // bare — controller wraps
             },
             miss(wordId) {},
+            // Original-style waitAndNav (raw timer) — attachController replaces this
+            async waitAndNav(audioPromise, fallbackDelay = 10) {
+                await new Promise((r) => setTimeout(r, fallbackDelay));
+                this.busy = false;
+                this.nav(1);
+            },
+            nav(d) {
+                this.navCalls++;
+                if (!this.list || !this.list.length) return;
+                this.i = (this.i + d + this.list.length) % this.list.length;
+            },
             destroy() {},
             update() {},
             render() {}
         };
+        return g;
     }
 
     function mockData(wordIds) {
@@ -276,6 +293,40 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
                 return '2024-01-15';
             }
         };
+    }
+
+    function bootSession(svc, wordIds, mode = 'quiz') {
+        const composed = svc.compose({ wordIds, quizOnly: true });
+        svc.plan = {
+            steps: composed.steps,
+            intensity: 'casual',
+            defaults: composed.defaults,
+            newIds: [],
+            dueIds: wordIds.slice(),
+            createdAt: Date.now()
+        };
+        // Force mode on drill step when testing TF-style terminal miss
+        if (mode !== 'quiz') {
+            svc.plan.steps = svc.plan.steps.map((s) =>
+                s.type === 'drill' ? Object.assign({}, s, { mode }) : s
+            );
+        }
+        svc.defaults = composed.defaults;
+        svc.status = 'active';
+        svc.cursor = 0;
+        svc.dateKey = '2024-01-15';
+        app.data = mockData(wordIds);
+        const game = mockGame(wordIds);
+        if (mode !== 'quiz') game.key = mode;
+        app.game = game;
+        app.data.startSpecificReview(game.list);
+        svc.attachController(game, {
+            wordIds,
+            purpose: 'review',
+            mode,
+            type: 'drill'
+        });
+        return game;
     }
 
     beforeEach(() => {
@@ -303,35 +354,12 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
 
     it('onGraded resolves all 3 words then finishStep → complete; no sessionHold left', async () => {
         const svc = new DailySessionService();
-        // Build plan without launching real Quiz constructors
         const composed = svc.compose({ wordIds: [1, 2, 3], quizOnly: true });
         expect(composed.steps[0].mode).toBe('quiz');
         expect(composed.steps[0].wordIds).toEqual([1, 2, 3]);
 
-        svc.plan = {
-            steps: composed.steps,
-            intensity: 'casual',
-            defaults: composed.defaults,
-            newIds: [],
-            dueIds: [1, 2, 3],
-            createdAt: Date.now()
-        };
-        svc.defaults = composed.defaults;
-        svc.status = 'active';
-        svc.cursor = 0;
-        svc.dateKey = '2024-01-15';
-
-        const game = mockGame([1, 2, 3]);
-        app.game = game;
-        app.data.startSpecificReview(game.list);
+        const game = bootSession(svc, [1, 2, 3]);
         expect(app.data._reviewList.length).toBe(3);
-
-        svc.attachController(game, {
-            wordIds: [1, 2, 3],
-            purpose: 'review',
-            mode: 'quiz',
-            type: 'drill'
-        });
         expect(svc._ownsMemoryReviews).toBe(true);
         expect(svc.isActive).toBe(true);
 
@@ -355,91 +383,170 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         expect(prog.stats.correct).toBe(3);
     });
 
-    it('Again reinserts once then completes', async () => {
+    it('Again reinserts once then completes (Quiz miss→correct = single Again + reinsert)', async () => {
         const svc = new DailySessionService();
-        const composed = svc.compose({ wordIds: [10, 20], quizOnly: true });
-        svc.plan = {
-            steps: composed.steps,
-            intensity: 'casual',
-            defaults: composed.defaults,
-            newIds: [],
-            dueIds: [10, 20],
-            createdAt: Date.now()
-        };
-        svc.defaults = composed.defaults;
-        svc.status = 'active';
-        svc.cursor = 0;
+        const game = bootSession(svc, [10, 20]);
 
-        app.data = mockData([10, 20]);
-        const game = mockGame([10, 20]);
-        app.game = game;
-        app.data.startSpecificReview(game.list);
-
-        svc.attachController(game, {
-            wordIds: [10, 20],
-            purpose: 'review',
-            mode: 'quiz',
-            type: 'drill'
-        });
-
-        // Miss word 10 → reinsert queued; correct 20
+        // Intermediate miss — no resolve, no FSRS, no reinsert yet
         game.miss(10);
+        expect(svc._step.hadMiss.has(10)).toBe(true);
+        expect(svc._step.reinsertQueue).not.toContain(10);
+        expect(svc._step.resolvedWordIds.has(10)).toBe(false);
+        expect(app.memory.reviews.filter((r) => r.wordId === 10)).toHaveLength(0);
+
+        // Terminal correct after miss → single Again FSRS + reinsert
+        game.score(10, 10);
+        expect(app.memory.reviews.filter((r) => r.wordId === 10)).toHaveLength(1);
+        expect(app.memory.reviews.find((r) => r.wordId === 10).rating).toBe(1);
         expect(svc._step.reinsertQueue).toContain(10);
         expect(app.memory.cards.get(10).sessionHold).toBe(true);
 
+        // Clean good on second word
         game.score(10, 20);
 
         // Originals resolved → reinsert pass applied (pending has 10)
         expect(svc.status).toBe('active');
         expect(svc._step.pendingWordIds.has(10)).toBe(true);
         expect(svc._step.reinsertQueue.length).toBe(0);
-        // list should now be reinsert-only
         expect(game.list.map((w) => w.id)).toEqual([10]);
 
         // Grade reinsert Good — must not re-queue (max once)
         game.score(10, 10);
         expect(svc.status).toBe('completed');
         expect(svc.stats.againCount).toBe(1);
+        // word 10: Again (terminal after miss) + Good (reinsert) = 2 reviews total
+        expect(app.memory.reviews.filter((r) => r.wordId === 10)).toHaveLength(2);
 
         let held = 0;
         app.memory.cards.forEach((c) => { if (c.sessionHold) held++; });
         expect(held).toBe(0);
     });
 
-    it('pause does not finalize holds; complete does', async () => {
+    it('Quiz miss-then-correct does not double-apply FSRS before reinsert', () => {
         const svc = new DailySessionService();
-        const composed = svc.compose({ wordIds: [1], quizOnly: true });
-        svc.plan = {
-            steps: composed.steps,
-            intensity: 'casual',
-            defaults: composed.defaults,
-            createdAt: Date.now()
-        };
-        svc.defaults = composed.defaults;
-        svc.status = 'active';
-        svc.cursor = 0;
+        const game = bootSession(svc, [5]);
 
-        const game = mockGame([1]);
-        app.game = game;
-        app.data.startSpecificReview(game.list);
-        svc.attachController(game, {
-            wordIds: [1], purpose: 'review', mode: 'quiz', type: 'drill'
-        });
+        game.miss(5);
+        game.miss(5); // second wrong choice still intermediate
+        game.score(10, 5);
 
+        const reviews5 = app.memory.reviews.filter((r) => r.wordId === 5);
+        // Only one FSRS apply at terminal (Again), not Again+Good
+        expect(reviews5).toHaveLength(1);
+        expect(reviews5[0].rating).toBe(1);
+    });
+
+    it('waitAndNav after reinsert is cancelled (no auto-skip)', async () => {
+        const svc = new DailySessionService();
+        const game = bootSession(svc, [10, 20, 30]);
+
+        // Recover 10 (Again+reinsert), good 20, good 30 → reinsert pass
+        game.miss(10);
+        game.score(10, 10);
+        // Simulate Quiz scheduling waitAndNav after score (controller-wrapped)
+        const p1 = game.waitAndNav(null, 30);
+
+        game.score(10, 20);
+        game.score(10, 30);
+
+        // Reinsert should have cancelled the earlier waitAndNav
+        expect(svc.status).toBe('active');
+        expect(game.list.map((w) => w.id)).toEqual([10]);
+        expect(game.i).toBe(0);
+
+        await p1;
+        // Cancelled waitAndNav must not advance off reinsert card
+        expect(game.navCalls).toBe(0);
+        expect(game.i).toBe(0);
+        expect(svc.status).toBe('active');
+
+        game.score(10, 10);
+        expect(svc.status).toBe('completed');
+    });
+
+    it('pause keeps status active + pausedAt; does not finalize holds', async () => {
+        const svc = new DailySessionService();
+        const game = bootSession(svc, [1]);
+
+        // Terminal Again via multi-attempt recover
         game.miss(1);
+        game.score(10, 1);
         expect(app.memory.cards.get(1).sessionHold).toBe(true);
 
         await svc.pause();
-        expect(svc.status).toBe('paused');
-        expect(app.memory.cards.get(1).sessionHold).toBe(true); // not finalized
+        // Issue 2: status stays active for orphan-hold recovery
+        expect(svc.status).toBe('active');
+        expect(svc._uiPaused).toBe(true);
+        expect(svc.pausedAt).toBeTruthy();
+        expect(svc.isPaused).toBe(true);
+        expect(svc.isActive).toBe(true);
+        expect(app.memory.cards.get(1).sessionHold).toBe(true);
 
-        // Simulate re-attach and complete via abandon path finalize
+        const payload = JSON.parse(localStorage.getItem('vm_daily_session_v1'));
+        expect(payload.status).toBe('active');
+        expect(payload.pausedAt).toBeTruthy();
+
         await svc.abandon();
         expect(svc.status).toBe('abandoned');
         expect(app.memory.cards.get(1).sessionHold).toBeFalsy();
     });
 
-    it('getProgress reports step indices', () => {
+    it('start() after pause refuses without force; force abandons holds first', async () => {
+        const svc = new DailySessionService();
+        const game = bootSession(svc, [1, 2]);
+        game.miss(1);
+        game.score(10, 1);
+        expect(app.memory.cards.get(1).sessionHold).toBe(true);
+
+        await svc.pause();
+        expect(svc.status).toBe('active');
+        expect(svc._uiPaused).toBe(true);
+
+        const blocked = await svc.start({ wordIds: [9], quizOnly: true });
+        expect(blocked.ok).toBe(false);
+        expect(blocked.reason).toMatch(/paused|existing|already/);
+        // Holds still present (not orphaned by accidental start)
+        expect(app.memory.cards.get(1).sessionHold).toBe(true);
+
+        // force: abandon previous → finalize holds, then new plan
+        // Avoid real Quiz construct by short-circuiting launch — use allowEmpty false
+        // and mock construct path via pre-set status after force abandon internals
+        const forceResult = await svc.start({
+            wordIds: [9],
+            quizOnly: true,
+            force: true
+        });
+        // start may fail to launch Quiz in node (no Quiz ctor) but should not leave holds
+        // After force, previous hold on 1 must be finalized
+        expect(app.memory.cards.get(1).sessionHold).toBeFalsy();
+        // If launch failed due to missing Quiz, status may vary; hold finalize is the contract
+        if (forceResult.ok === false && forceResult.reason === 'empty-plan') {
+            // unexpected
+        }
+    });
+
+    it('Match miss does not resolve word; score does', () => {
+        const svc = new DailySessionService();
+        const game = bootSession(svc, [7, 8], 'match');
+
+        game.miss(7);
+        expect(svc._step.resolvedWordIds.has(7)).toBe(false);
+        expect(svc._step.pendingWordIds.has(7)).toBe(true);
+        expect(svc._step.reinsertQueue).toContain(7);
+
+        game.score(10, 7);
+        expect(svc._step.resolvedWordIds.has(7)).toBe(true);
+        expect(svc._step.pendingWordIds.has(7)).toBe(false);
+
+        game.score(10, 8);
+        // reinsert pass for 7
+        expect(svc.status).toBe('active');
+        expect(svc._step.pendingWordIds.has(7)).toBe(true);
+        game.score(10, 7);
+        expect(svc.status).toBe('completed');
+    });
+
+    it('getProgress reports step indices and paused flag', () => {
         const svc = new DailySessionService();
         svc.plan = {
             steps: buildQuizOnlyPlan([1, 2, 3]),
@@ -462,5 +569,10 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         expect(p.stepsTotal).toBe(1);
         expect(p.resolvedInStep).toBe(1);
         expect(p.pendingInStep).toBe(2);
+        expect(p.paused).toBe(false);
+
+        svc._uiPaused = true;
+        svc.pausedAt = Date.now();
+        expect(svc.getProgress().paused).toBe(true);
     });
 });

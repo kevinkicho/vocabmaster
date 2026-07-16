@@ -159,6 +159,37 @@ describe('card validation', () => {
             scheduledDays: 0
         }, 3, T0)).toThrow(/difficulty/);
     });
+
+    it('rejects stability <= 0 for non-new cards', () => {
+        const base = {
+            state: 'review',
+            difficulty: 5,
+            due: T0,
+            lastReview: T0,
+            reps: 1,
+            lapses: 0,
+            elapsedDays: 0,
+            scheduledDays: 1
+        };
+        expect(() => schedule({ ...base, stability: 0 }, 3, T0)).toThrow(/stability/);
+        expect(() => schedule({ ...base, stability: -1 }, 3, T0)).toThrow(/stability/);
+    });
+
+    it('rejects difficulty outside [1, 10] for non-new cards', () => {
+        const base = {
+            state: 'review',
+            stability: 4,
+            due: T0,
+            lastReview: T0,
+            reps: 1,
+            lapses: 0,
+            elapsedDays: 0,
+            scheduledDays: 1
+        };
+        expect(() => schedule({ ...base, difficulty: 0 }, 3, T0)).toThrow(/difficulty/);
+        expect(() => schedule({ ...base, difficulty: 10.1 }, 3, T0)).toThrow(/difficulty/);
+        expect(() => schedule({ ...base, difficulty: 99 }, 3, T0)).toThrow(/difficulty/);
+    });
 });
 
 describe('forgetting curve + interval (formula checks)', () => {

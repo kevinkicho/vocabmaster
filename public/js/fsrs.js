@@ -181,6 +181,8 @@ function _cloneCard(card) {
 
 /**
  * Validate card shape before scheduling. Fail closed with a clear Error.
+ * Non-new cards must have S > 0 (S=0 makes recall/forget formulas NaN) and
+ * D in [1, 10] (out-of-range D can yield negative next stability).
  * @param {*} card
  */
 function _validateCard(card) {
@@ -191,13 +193,20 @@ function _validateCard(card) {
         throw new Error('Invalid FSRS card state: ' + card.state);
     }
     if (card.state !== 'new') {
-        if (!Number.isFinite(card.stability) || card.stability < 0) {
+        // Floor matches init_stability minimum (max(w[g-1], 0.1)); reject 0.
+        if (!Number.isFinite(card.stability) || card.stability <= 0) {
             throw new Error('Invalid FSRS card stability: ' + card.stability);
         }
-        if (!Number.isFinite(card.difficulty)) {
+        if (!Number.isFinite(card.difficulty) || card.difficulty < 1 || card.difficulty > 10) {
             throw new Error('Invalid FSRS card difficulty: ' + card.difficulty);
         }
     }
+}
+
+/** Floor stability after formula updates (defensive; valid D usually already safe). */
+function _floorStability(s) {
+    if (!Number.isFinite(s) || s < 0.1) return 0.1;
+    return s;
 }
 
 /**
@@ -330,7 +339,7 @@ function schedule(card, rating, nowMs) {
     next.difficulty = _nextDifficulty(lastD, g);
 
     if (g === FSRS_RATING.Again) {
-        next.stability = _nextForgetStability(lastD, lastS, r);
+        next.stability = _floorStability(_nextForgetStability(lastD, lastS, r));
         next.lapses = (card.lapses || 0) + 1;
         next.state = 'relearning';
         next.scheduledDays = 0;
@@ -338,18 +347,18 @@ function schedule(card, rating, nowMs) {
         return next;
     }
 
-    next.stability = _nextRecallStability(lastD, lastS, r, g);
+    next.stability = _floorStability(_nextRecallStability(lastD, lastS, r, g));
     next.state = 'review';
 
     var hardIvl = nextIntervalDays(g === FSRS_RATING.Hard
         ? next.stability
-        : _nextRecallStability(lastD, lastS, r, FSRS_RATING.Hard));
+        : _floorStability(_nextRecallStability(lastD, lastS, r, FSRS_RATING.Hard)));
     var goodIvlR = nextIntervalDays(g === FSRS_RATING.Good
         ? next.stability
-        : _nextRecallStability(lastD, lastS, r, FSRS_RATING.Good));
+        : _floorStability(_nextRecallStability(lastD, lastS, r, FSRS_RATING.Good)));
     var easyIvlR = nextIntervalDays(g === FSRS_RATING.Easy
         ? next.stability
-        : _nextRecallStability(lastD, lastS, r, FSRS_RATING.Easy));
+        : _floorStability(_nextRecallStability(lastD, lastS, r, FSRS_RATING.Easy)));
 
     // ts-fsrs ordering: hard <= good, easy >= good+1.
     // When candidates already sit at maxIntervalDays, ordering + re-clamp

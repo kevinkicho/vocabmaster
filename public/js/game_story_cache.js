@@ -49,6 +49,42 @@ async _loadCacheThenStart() {
 
     _nextCachedStory() {
         if (!this._cachedStories || this._cachedIndex >= this._cachedStories.length) return null;
+
+        // Best-effort: prefer cache entries whose vocabIds intersect session seeds.
+        // Never require a perfect match — highest intersection wins; zero falls through
+        // to first available (do not block waiting for a better match).
+        var seeds = this.sessionSeedWordIds;
+        if ((!seeds || !seeds.length) && typeof app !== 'undefined' && app &&
+            app._sessionStorySeedWordIds && app._sessionStorySeedWordIds.length) {
+            seeds = app._sessionStorySeedWordIds;
+        }
+        if (seeds && seeds.length) {
+            var seedSet = new Set(seeds.map(Number).filter(function (id) {
+                return Number.isFinite(id);
+            }));
+            var bestIdx = -1;
+            var bestScore = 0;
+            for (var i = this._cachedIndex; i < this._cachedStories.length; i++) {
+                var entry = this._cachedStories[i];
+                if (!entry || !entry.questions || !entry.questions.length) continue;
+                var ids = entry.vocabIds || [];
+                var score = 0;
+                for (var j = 0; j < ids.length; j++) {
+                    if (seedSet.has(Number(ids[j]))) score++;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx >= 0 && bestScore > 0 && bestIdx !== this._cachedIndex) {
+                var tmp = this._cachedStories[this._cachedIndex];
+                this._cachedStories[this._cachedIndex] = this._cachedStories[bestIdx];
+                this._cachedStories[bestIdx] = tmp;
+                L('[Story] Cache best-effort seed intersect score=', bestScore, 'at', bestIdx);
+            }
+        }
+
         const cached = this._cachedStories[this._cachedIndex];
         this._cachedIndex++;
         const words = (cached.vocabIds || []).map(id => app.data.list.find(w => w.id === id)).filter(Boolean);

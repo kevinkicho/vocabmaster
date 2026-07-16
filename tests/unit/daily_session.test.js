@@ -182,6 +182,39 @@ describe('buildPlan golden shapes', () => {
         const b = buildPlan(vocab([1, 2]), vocab([10, 11, 12, 13]), casual());
         expect(a).toEqual(b);
     });
+
+    it('includeDictation adds up to 2 dictation ids from end of due before AI', () => {
+        const d = casual();
+        d.includeDictation = true;
+        const due = vocab([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        const steps = buildPlan([], due, d);
+        const dict = steps.find((s) => s.mode === 'dictation');
+        expect(dict).toBeTruthy();
+        expect(dict.type).toBe('drill');
+        expect(dict.wordIds).toEqual([9, 10]);
+        // still has quiz/tf/ai
+        expect(steps.some((s) => s.mode === 'quiz')).toBe(true);
+        expect(steps.some((s) => s.mode === 'tf')).toBe(true);
+        expect(steps.some((s) => s.type === 'ai')).toBe(true);
+        // order: drills, dictation, ai, complete
+        const modes = steps.map((s) => s.mode || s.type);
+        const dictIdx = modes.indexOf('dictation');
+        const aiIdx = modes.indexOf('story');
+        expect(dictIdx).toBeGreaterThan(-1);
+        expect(aiIdx).toBeGreaterThan(dictIdx);
+    });
+
+    it('includeDictation false (default) omits dictation', () => {
+        const steps = buildPlan(vocab([1]), vocab([2, 3, 4]), casual());
+        expect(steps.some((s) => s.mode === 'dictation')).toBe(false);
+    });
+
+    it('multi-mode plan includes present Flash + TF when new+due (not quizOnly)', () => {
+        const steps = buildPlan(vocab([1, 2]), vocab([10, 11, 12, 13]), casual());
+        expect(steps.some((s) => s.type === 'present' && s.mode === 'flash')).toBe(true);
+        expect(steps.some((s) => s.type === 'drill' && s.mode === 'tf')).toBe(true);
+        expect(steps.some((s) => s.type === 'ai' && s.mode === 'story')).toBe(true);
+    });
 });
 
 describe('buildQuizOnlyPlan', () => {
@@ -191,6 +224,17 @@ describe('buildQuizOnlyPlan', () => {
             { type: 'drill', mode: 'quiz', wordIds: [1, 2, 3], purpose: 'review' },
             { type: 'complete' }
         ]);
+    });
+
+    it('quizOnly compose has no flash/tf/dictation/ai', () => {
+        const svc = new DailySessionService();
+        globalThis.app = { store: { prefs: {} }, data: null, memory: null };
+        const composed = svc.compose({ wordIds: [1, 2, 3, 4, 5], quizOnly: true });
+        expect(composed.steps.every((s) => s.type === 'complete' || s.mode === 'quiz')).toBe(true);
+        expect(composed.steps.some((s) => s.mode === 'flash')).toBe(false);
+        expect(composed.steps.some((s) => s.mode === 'tf')).toBe(false);
+        expect(composed.steps.some((s) => s.type === 'ai')).toBe(false);
+        expect(composed.defaults.includeDictation).toBe(false);
     });
 });
 
@@ -676,5 +720,116 @@ describe('DailySessionService step completion (Quiz-only, no DOM)', () => {
         svc._uiPaused = true;
         svc.pausedAt = Date.now();
         expect(svc.getProgress().paused).toBe(true);
+    });
+
+    it('AI step: Skip finishes without memory.review; score/miss do not grade', () => {
+        const svc = new DailySessionService();
+        const seedIds = [101, 102, 103, 104];
+        svc.plan = {
+            steps: [
+                { type: 'ai', mode: 'story', wordIds: seedIds },
+                { type: 'complete' }
+            ],
+            intensity: 'casual',
+            defaults: getSessionDefaults({})
+        };
+        svc.defaults = getSessionDefaults({});
+        svc.status = 'active';
+        svc.cursor = 0;
+        svc.dateKey = '2024-01-15';
+        app.data = mockData(seedIds);
+        app.memory = mockMemory();
+
+        const game = {
+            key: 'story',
+            list: seedIds.map((id) => ({ id })),
+            i: 0,
+            root: { firstChild: null, querySelector: () => null, insertBefore() {}, appendChild() {} },
+            score() {},
+            miss() {},
+            destroy() {},
+            _showStoryNavFooter() { this._navFooterCalled = true; },
+            _loadNext() { this._loadNextCalled = true; },
+            _nextStory() { this._nextCalled = true; }
+        };
+        app.game = game;
+
+        svc.attachController(game, {
+            wordIds: seedIds,
+            mode: 'story',
+            type: 'ai'
+        });
+
+        expect(svc._ownsMemoryReviews).toBe(false);
+        expect(typeof game.skipDailySessionStep).toBe('function');
+        expect(game.sessionSeedWordIds).toEqual(seedIds);
+        expect(game.storiesPerSession).toBe(1);
+
+        // Comprehension score must not apply FSRS
+        const before = app.memory.reviews.length;
+        game.score(15); // Story-style score without wordId — not wrapped for AI
+        expect(app.memory.reviews.length).toBe(before);
+        svc.onGraded(101, true);
+        expect(app.memory.reviews.length).toBe(before);
+
+        // Skip ends the step (and session → complete)
+        game.skipDailySessionStep();
+        expect(svc.status).toBe('completed');
+        expect(svc.stats.stepsDone).toBe(1);
+        expect(app._sessionStorySeedWordIds).toBeNull();
+    });
+
+    it('AI step: questions complete via _showStoryNavFooter finishes without memory', () => {
+        const svc = new DailySessionService();
+        const seedIds = [1, 2];
+        svc.plan = {
+            steps: [
+                { type: 'ai', mode: 'story', wordIds: seedIds },
+                { type: 'complete' }
+            ],
+            intensity: 'casual',
+            defaults: getSessionDefaults({})
+        };
+        svc.defaults = getSessionDefaults({});
+        svc.status = 'active';
+        svc.cursor = 0;
+        app.data = mockData(seedIds);
+        app.memory = mockMemory();
+
+        const game = {
+            key: 'story',
+            list: seedIds.map((id) => ({ id })),
+            i: 0,
+            root: { firstChild: null, querySelector: () => null, insertBefore() {}, appendChild() {} },
+            dom: { footer: { innerHTML: '' } },
+            score() {},
+            miss() {},
+            destroy() {},
+            _showStoryNavFooter() { this._origNav = true; },
+            _loadNext() {},
+            _nextStory() {}
+        };
+        app.game = game;
+        svc.attachController(game, { wordIds: seedIds, mode: 'story', type: 'ai' });
+
+        // Simulate last question answered → hooked footer
+        game._showStoryNavFooter();
+        expect(svc.status).toBe('completed');
+        expect(app.memory.reviews.length).toBe(0);
+    });
+});
+
+describe('Story _pickWords session seeds (source contract)', () => {
+    it('game_story.js prefers sessionSeedWordIds', () => {
+        const storySrc = readFileSync(join(root, 'public', 'js', 'game_story.js'), 'utf8');
+        expect(storySrc).toMatch(/sessionSeedWordIds/);
+        expect(storySrc).toMatch(/_sessionStorySeedWordIds/);
+        expect(storySrc).toMatch(/preferred.*session seeds|session seeds/i);
+    });
+
+    it('game_story_cache.js best-effort seed intersect', () => {
+        const cacheSrc = readFileSync(join(root, 'public', 'js', 'game_story_cache.js'), 'utf8');
+        expect(cacheSrc).toMatch(/seedSet|sessionSeedWordIds/);
+        expect(cacheSrc).toMatch(/bestScore|best-effort/i);
     });
 });

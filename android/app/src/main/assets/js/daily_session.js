@@ -50,10 +50,9 @@ var SESSION_DEFAULTS = SESSION_INTENSITY_PRESETS.casual;
 
 /**
  * Runtime defaults for compose/buildPlan from prefs.sessionIntensity.
- * Pref is user-facing Settings radio (Casual pace / Exam prep); default = casual.
  * Default intensity = casual (15/5/12) when intensity not yet set.
- * @param {object|null|undefined} prefs app.store.prefs (or { sessionIntensity })
- * @returns {object} mutable copy of the active intensity preset
+ * @param {object|null|undefined} prefs
+ * @returns {object}
  */
 function getSessionDefaults(prefs) {
     var key = (prefs && prefs.sessionIntensity) === 'cram' ? 'cram' : 'casual';
@@ -562,31 +561,6 @@ class DailySessionService {
             stats: Object.assign({}, this.stats),
             intensity: this.intensity
         };
-    }
-
-    /**
-     * Whether Home should offer Continue (live plan or persisted plan for today).
-     * Completed/abandoned sessions are not resumable.
-     * @returns {Promise<boolean>}
-     */
-    async hasResumableSession() {
-        if (this.status === 'active' && this.plan && this.plan.steps && this.plan.steps.length) {
-            return true;
-        }
-        var loaded = null;
-        try {
-            loaded = await this._loadPersistedPlan();
-        } catch (_) {
-            loaded = null;
-        }
-        if (!loaded || !loaded.plan || !loaded.plan.steps || !loaded.plan.steps.length) {
-            return false;
-        }
-        if (loaded.status === 'completed' || loaded.status === 'abandoned') {
-            return false;
-        }
-        // active (incl. UI-paused), legacy 'paused', or missing status with a plan
-        return true;
     }
 
     /**

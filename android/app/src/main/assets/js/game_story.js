@@ -11,6 +11,16 @@ class Story extends GameMode {
         this._prefetched = null; // { storyWords, storyPart, questions, lang, rawText, wordIds }
         this._prefetching = false;
 
+        // Daily Session AI seed (prefer these in _pickWords / cache intersect)
+        // May be set via app._sessionStorySeedWordIds before construct (race-safe)
+        this.sessionSeedWordIds = null;
+        try {
+            if (typeof app !== 'undefined' && app && app._sessionStorySeedWordIds &&
+                app._sessionStorySeedWordIds.length) {
+                this.sessionSeedWordIds = app._sessionStorySeedWordIds.slice();
+            }
+        } catch (_) { /* ignore */ }
+
         // Session progress
         this.storiesPerSession = Infinity;
         this.storyNum = 0;      // how many stories completed or in-progress (1-based during play)
@@ -95,6 +105,44 @@ class Story extends GameMode {
         var lang = this._getTargetLang();
         var safety = 0;
 
+        // Prefer Daily Session seeds (sessionSeedWordIds / due-first plan seed)
+        var seeds = this.sessionSeedWordIds;
+        if ((!seeds || !seeds.length) && typeof app !== 'undefined' && app &&
+            app._sessionStorySeedWordIds && app._sessionStorySeedWordIds.length) {
+            seeds = app._sessionStorySeedWordIds;
+            this.sessionSeedWordIds = seeds.slice();
+        }
+        if (seeds && seeds.length) {
+            var byId = new Map();
+            var sources = [list];
+            try {
+                if (app.data && app.data.list && app.data.list.length) sources.push(app.data.list);
+                if (app.data && app.data.activeList && app.data.activeList.length) {
+                    sources.push(app.data.activeList);
+                }
+            } catch (_) { /* ignore */ }
+            for (var s = 0; s < sources.length; s++) {
+                var src = sources[s];
+                for (var i = 0; i < src.length; i++) {
+                    var w = src[i];
+                    if (w && w.id != null && !byId.has(Number(w.id))) {
+                        byId.set(Number(w.id), w);
+                    }
+                }
+            }
+            for (var si = 0; si < seeds.length && picked.length < count; si++) {
+                var sid = Number(seeds[si]);
+                if (!Number.isFinite(sid) || usedIds.has(sid)) continue;
+                var sw = byId.get(sid);
+                if (sw && (sw[lang] || sw.ja || sw.en)) {
+                    picked.push(sw);
+                    usedIds.add(sid);
+                }
+            }
+            L('[Story] _pickWords preferred', picked.length, 'session seeds of', count);
+        }
+
+        // Fill remainder randomly from filtered list
         while (picked.length < count && safety < 100) {
             var r = list[Math.floor(Math.random() * list.length)];
             if (r && !usedIds.has(r.id) && r.id !== undefined && (r[lang] || r.ja || r.en)) {

@@ -66,17 +66,42 @@ async startStory(forceAnew = false) {
                 return;
             }
 
-            // Priority 2: cached story from RTDB (pre-generated via AI)
+            // Priority 2: cached story from RTDB (pre-generated via AI).
+            // With session seeds: best-effort prefer intersect (via _nextCachedStory);
+            // if no positive intersect, generate with seeds instead of forcing
+            // an unrelated cache (never block waiting for a perfect match).
+            var hasSeeds = (this.sessionSeedWordIds && this.sessionSeedWordIds.length) ||
+                (typeof app !== 'undefined' && app && app._sessionStorySeedWordIds &&
+                    app._sessionStorySeedWordIds.length);
             const cached = this._nextCachedStory();
             if (cached) {
-                L('[Story] Serving cached story from RTDB');
-                this.storyWords = cached.storyWords;
-                this.questions = cached.questions;
-                this.qIndex = 0;
-                this._currentStoryTranslation = cached.translation || null;
-                this._showStoryWithQuestions(cached.storyPart, cached.lang);
-                this._prefetchNext();
-                return;
+                var useCache = true;
+                if (hasSeeds) {
+                    var seedSet = new Set(
+                        (this.sessionSeedWordIds || (app && app._sessionStorySeedWordIds) || [])
+                            .map(Number)
+                    );
+                    var intersect = 0;
+                    (cached.storyWords || []).forEach(function (w) {
+                        if (w && seedSet.has(Number(w.id))) intersect++;
+                    });
+                    if (intersect === 0) {
+                        // Put cache slot back for later free-play; generate with seeds now
+                        useCache = false;
+                        this._cachedIndex = Math.max(0, this._cachedIndex - 1);
+                        L('[Story] Session seeds set — skip unrelated cache, generate with seeds');
+                    }
+                }
+                if (useCache) {
+                    L('[Story] Serving cached story from RTDB');
+                    this.storyWords = cached.storyWords;
+                    this.questions = cached.questions;
+                    this.qIndex = 0;
+                    this._currentStoryTranslation = cached.translation || null;
+                    this._showStoryWithQuestions(cached.storyPart, cached.lang);
+                    this._prefetchNext();
+                    return;
+                }
             }
         }
 

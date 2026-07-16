@@ -113,9 +113,27 @@ If `load()` returns 0:
 
 ### 3.3 Tag-based filtering
 
-The home screen has a **Tag Filter** section with 24 clickable tag chips (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare). Selecting a tag filters `app.data.list` client-side via `getFilteredList()`. The filter persists in localStorage and works alongside the existing level filter (both are ANDed). Game modes get their list via `assignGameList()` (`game_core.js`): when `app.data._reviewList` is set (Smart Review / Daily Session), that scoped list is used; otherwise `getFilteredList()`. Settings and tag/level handlers also call `assignGameList` so they do not expand past a live review session.
+The home screen has a **Tag Filter** section with 24 clickable tag chips (N5–N1, HSK1–HSK6, A1–C1, TOPIK1–TOPIK5, common, uncommon, rare). Selecting a tag filters `app.data.list` client-side via `getFilteredList()`. The filter persists in localStorage and works alongside the existing level filter (both are ANDed). Game modes get their list via `assignGameList()` (`game_core.js`): when `app.data._reviewList` is set (Daily Session / `startReviewSession`), that scoped list is used; otherwise `getFilteredList()`. Settings and tag/level handlers also call `assignGameList` so they do not expand past a live review session.
 
-### 3.4 Why no mock data
+### 3.4 Memory engine & Today (spaced repetition)
+
+VocabMaster schedules reviews with a client-side **FSRS-4.5** memory engine (not a fixed SM-2 ladder inside analytics).
+
+| Piece | Path | Role |
+|-------|------|------|
+| FSRS pure module | `public/js/fsrs.js` | `initCard`, `schedule(card, rating, now)` — no Firebase |
+| MemoryService | `public/js/memory.js` | Per-word cards, RTDB + localStorage, migrate from c/w |
+| DailySessionService | `public/js/daily_session.js` | Finite **Today** plan (due + new), multi-mode steps, progress chrome |
+| Feature flag | `isMemoryEngineEnabled()` / `window.MEMORY_ENGINE_ENABLED` | **Default `true` (PR10)**; set `false` to disable |
+| Design doc | `docs/memory-engine-daily-session.md` | Full product/algorithm design (rev 4) |
+
+**Home UX (PR10):** Legacy **Smart Review** (most-missed → Quiz-only CTA) is **removed**. Scheduled practice goes through **Today** / Daily Session when the engine is on. All **11 free-practice modes** remain on the home grid. Internal helpers stay: `DataService.getReviewWords` (memory-aware due-first + most-missed fill), `startReviewSession` / `endReviewSession` / `_reviewList`.
+
+**Account delete:** `DataService.deleteUserAccount()` removes `users/{uid}` in RTDB (includes memory cards under that tree when present) then deletes the Firebase Auth user.
+
+User-facing copy uses plain language (“Today”, due/new, spaced repetition). FSRS internals and admin debug belong behind the existing admin/Developer gate (see design doc).
+
+### 3.5 Why no mock data
 
 Per AGENTS.md: "Never use mock data. Never create mock data. Always use real AI." Mock data would silently mask RTDB connection failures, leading to confusing behavior (stories generated from "Test 0" / "Test 1" etc.).
 

@@ -925,7 +925,11 @@ class DailySessionService {
     }
 
     _applyMemoryReview(wordId, rating, mode) {
-        if (typeof window === 'undefined' || !window.MEMORY_ENGINE_ENABLED) return;
+        if (typeof window === 'undefined') return;
+        var memOn = (typeof window.isMemoryEngineEnabled === 'function')
+            ? window.isMemoryEngineEnabled()
+            : !!window.MEMORY_ENGINE_ENABLED;
+        if (!memOn) return;
         try {
             var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
             if (mem && typeof mem.review === 'function' && !mem._isStub) {
@@ -1591,7 +1595,12 @@ class DailySessionService {
         try {
             var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
             if (mem && typeof mem.introduce === 'function' && !mem._isStub) {
-                if (typeof window !== 'undefined' && window.MEMORY_ENGINE_ENABLED) {
+                var engOn = (typeof window !== 'undefined') && (
+                    (typeof window.isMemoryEngineEnabled === 'function')
+                        ? window.isMemoryEngineEnabled()
+                        : !!window.MEMORY_ENGINE_ENABLED
+                );
+                if (engOn) {
                     mem.introduce(id, Date.now());
                 }
             }

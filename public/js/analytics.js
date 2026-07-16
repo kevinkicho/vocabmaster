@@ -43,7 +43,10 @@ class AnalyticsService {
 
         // Memory side-effect only — analytics c/w always runs above for all modes.
         // Free-play uses this hook; Daily Session skips when it owns reviews.
-        if (!window.MEMORY_ENGINE_ENABLED) return;
+        var memOn = (typeof window.isMemoryEngineEnabled === 'function')
+            ? window.isMemoryEngineEnabled()
+            : !!window.MEMORY_ENGINE_ENABLED;
+        if (!memOn) return;
         if (typeof app === 'undefined' || !app.memory || typeof app.memory.review !== 'function') return;
         if (wordId == null) return;
         if (meta && meta.skipMemory) return;

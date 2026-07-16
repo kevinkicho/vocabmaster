@@ -579,11 +579,6 @@ class App {
                         ${this.btn('Word Context', 'ph-flowers', 'emerald', ()=>new Context('context'))}
                     </div>
 
-                    <!-- Medium-term: Smart Review (Phase 2) -->
-                    <div class="mt-1 px-2">
-                        <button onclick="app.launchSmartReview()" class="w-full py-2 text-xs font-bold bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl active:scale-95 transition">Smart Review (Weak Words)</button>
-                    </div>
-
                     <!-- Tag Filter -->
                     <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
@@ -648,25 +643,6 @@ class App {
         }
     }
 
-    // Medium-term: Smart Review queue (Phase 2) - uses analytics + adaptive + current collection
-    async launchSmartReview() {
-        if (!this.data) return;
-        const started = await this.data.startReviewSession(12);
-        if (started) {
-            // Launch a mixed or preferred mode with review list, e.g. Quiz for good feedback
-            this.game = new Quiz('quiz');
-            history.pushState({ view: 'game', mode: 'review', index: this.game.i }, '');
-            // End review session when game ends (in game destroy or nav end)
-            const origDestroy = this.game.destroy.bind(this.game);
-            this.game.destroy = () => {
-                if (this.data) this.data.endReviewSession();
-                origDestroy();
-            };
-        } else {
-            if (app.ui && app.ui.showToast) app.ui.showToast("Not enough data for review yet. Play some games first!", 'warning');
-            this.goHome(false);
-        }
-    }
     toggleFull() { !document.fullscreenElement ? document.documentElement.requestFullscreen().catch(()=>{}) : document.exitFullscreen(); }
     modal(show) { 
         if(this.ui) this.ui.hideTooltip();

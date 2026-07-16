@@ -1072,7 +1072,7 @@ class DailySessionService {
 
 ### 5.5 Config / prefs
 
-- `window.MEMORY_ENGINE_ENABLED` (default false until PR10; then true)
+- `window.MEMORY_ENGINE_ENABLED` (**default true as of PR10**; set `false` to disable)
 - **User prefs** (`preferences_registry.js` / store):
   - `sessionIntensity`: `'casual' | 'cram'` — **default `'casual'`** — Settings UI (user-facing)
   - Optional later: override maxNew/maxDue only if product wants fine control; v1 uses intensity presets only
@@ -1173,7 +1173,7 @@ Latency: `compose` &lt; 50ms warm; `review` &lt; 1ms + async flush; Home counts 
 
 ## Rollout Plan
 
-1. Flag `MEMORY_ENGINE_ENABLED` default false until dogfood; PR10 default true.
+1. Flag `MEMORY_ENGINE_ENABLED` default **true** (PR10 shipped; was false during dogfood).
 2. PR chain below — memory before Home; intensity pref with Today (PR6b).
 3. Dogfood 7 days; inspect due curve and migration stagger (**admin** tools).
 4. Rollback: flag off → no memory.review, legacy Home; RTDB data retained.

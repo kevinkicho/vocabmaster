@@ -4,9 +4,10 @@ VocabMaster includes built-in telemetry and user feedback mechanisms to monitor 
 
 ## 1. AnalyticsService (`analytics.js`)
 Tracks granular user performance on a per-word basis.
-- Monitors how many times a word was answered correctly vs incorrectly.
-- Used to calculate the SRS (Spaced Repetition System) intervals.
-- Data is logged locally in `localStorage` but can be synchronized with Firebase RTDB for cross-device progression.
+- Monitors how many times a word was answered correctly vs incorrectly (`c` / `w` counters per word).
+- Data is logged locally in `localStorage` and synchronized with Firebase RTDB for cross-device progression.
+- **Spaced repetition** is **not** computed inside AnalyticsService. When the memory engine is enabled (`MEMORY_ENGINE_ENABLED`, default **true** since PR10), `recordAttempt` also calls `app.memory.review()` for allowlisted free-practice modes so the FSRS scheduler (`public/js/fsrs.js` + `public/js/memory.js`) updates due dates. Daily Session owns its own memory writes when active.
+- Design reference: [`docs/memory-engine-daily-session.md`](memory-engine-daily-session.md).
 
 ## 2. In-Game Rate Feature (`question_feedback`)
 In activities like the Quiz mode, users are presented with a discreet "Thumbs Up / Thumbs Down" UI to rate the quality of the current question.

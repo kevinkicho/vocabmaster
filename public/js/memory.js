@@ -30,9 +30,9 @@ var MIGRATE_CONFIG = Object.freeze({
 });
 
 /**
- * Feature flag: MEMORY_ENGINE_ENABLED default false.
+ * Feature flag: MEMORY_ENGINE_ENABLED default true (PR10 — Today is primary).
  * Prefers explicit window.MEMORY_ENGINE_ENABLED when set (boolean).
- * Else optional prefs.memoryEngineEnabled. Does not force-write window.
+ * Else optional prefs.memoryEngineEnabled.
  * @returns {boolean}
  */
 function isMemoryEngineEnabled() {
@@ -45,7 +45,7 @@ function isMemoryEngineEnabled() {
             return app.store.prefs.memoryEngineEnabled;
         }
     } catch (_) { /* app not ready */ }
-    return false;
+    return true;
 }
 
 /**
@@ -206,8 +206,8 @@ class MemoryService {
         this._flushing = false;
         this._metaDirty = false;
         this._bindLifecycle();
-        // Flag default is false via isMemoryEngineEnabled() — do not force-write
-        // window.MEMORY_ENGINE_ENABLED so prefs.memoryEngineEnabled remains usable.
+        // Flag default is true via isMemoryEngineEnabled() / window default (PR10).
+        // Explicit window.MEMORY_ENGINE_ENABLED = false still disables.
     }
 
     // --- Feature flag (read-only helper for callers) ---
@@ -1054,8 +1054,12 @@ class MemoryService {
 }
 
 // Multi-script exports (explicit window — AGENTS.md / design §3.6)
-// Do not force-write MEMORY_ENGINE_ENABLED here; default false via isMemoryEngineEnabled().
+// PR10: default MEMORY_ENGINE_ENABLED true when unset so analytics/dailySession
+// raw window checks and isMemoryEngineEnabled() agree. Explicit false still wins.
 if (typeof window !== 'undefined') {
+    if (typeof window.MEMORY_ENGINE_ENABLED !== 'boolean') {
+        window.MEMORY_ENGINE_ENABLED = true;
+    }
     window.MemoryService = MemoryService;
     window.MIGRATE_CONFIG = MIGRATE_CONFIG;
     window.bootstrapCardFromStats = bootstrapCardFromStats;

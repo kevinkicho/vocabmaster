@@ -153,9 +153,9 @@ describe('selectTopWordStatsForMigrate', () => {
 });
 
 describe('isMemoryEngineEnabled', () => {
-    it('defaults false when window flag unset', () => {
+    it('defaults true when window flag unset (PR10)', () => {
         delete globalThis.window.MEMORY_ENGINE_ENABLED;
-        expect(isMemoryEngineEnabled()).toBe(false);
+        expect(isMemoryEngineEnabled()).toBe(true);
     });
 
     it('reads window flag when boolean', () => {
@@ -167,6 +167,8 @@ describe('isMemoryEngineEnabled', () => {
 
     it('falls back to prefs when window flag unset', () => {
         delete globalThis.window.MEMORY_ENGINE_ENABLED;
+        globalThis.app = { store: { prefs: { memoryEngineEnabled: false } } };
+        expect(isMemoryEngineEnabled()).toBe(false);
         globalThis.app = { store: { prefs: { memoryEngineEnabled: true } } };
         expect(isMemoryEngineEnabled()).toBe(true);
         globalThis.app = undefined;

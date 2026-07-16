@@ -409,10 +409,16 @@ describe('DataService getReviewWords — memory due-first (PR4)', () => {
     });
 });
 
-describe('launchSmartReview still wired (main.js)', () => {
-    it('defines launchSmartReview and startReviewSession path', () => {
-        expect(mainSrc).toMatch(/async launchSmartReview\s*\(/);
-        expect(mainSrc).toMatch(/startReviewSession\s*\(\s*12\s*\)/);
-        expect(mainSrc).toMatch(/Smart Review/);
+describe('Smart Review home UX removed (PR10)', () => {
+    it('does not define launchSmartReview or Smart Review button', () => {
+        expect(mainSrc).not.toMatch(/async launchSmartReview\s*\(/);
+        expect(mainSrc).not.toMatch(/Smart Review/);
+        expect(mainSrc).not.toMatch(/launchSmartReview/);
+    });
+
+    it('keeps getReviewWords / startReviewSession for internal use (data.js)', () => {
+        expect(dataSrc).toMatch(/async getReviewWords\s*\(/);
+        expect(dataSrc).toMatch(/async startReviewSession\s*\(/);
+        expect(dataSrc).toMatch(/endReviewSession\s*\(/);
     });
 });

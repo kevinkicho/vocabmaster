@@ -19,6 +19,7 @@
 
 ## Current Status
 
+- **Today + memory engine**: Client-side FSRS spaced repetition (`public/js/fsrs.js`, `public/js/memory.js`) and Daily Session (`public/js/daily_session.js`). `MEMORY_ENGINE_ENABLED` defaults to **true**. Scheduled practice is the **Today** path; legacy Smart Review home CTA is removed. All **11 free-practice modes** remain. Design: [`docs/memory-engine-daily-session.md`](docs/memory-engine-daily-session.md).
 - **11 game modes**: Flashcards, True/False, Quiz, Matching, Sentences (offline cloze), Voice Challenge, Dictation, Story Mode, Grammar Gym, Chat Practice, Word Context.
 - **AI pipeline simplified**: Single fixed model `gemma4:31b-cloud` — no model detection, no dropdown, no fallback chain. If the model is unavailable, `generate()` throws a clear error message.
 - **Chat Practice**: Language-agnostic prompts — AI always responds in the target language regardless of what language the user writes in. Long-press trash button to clear chat history. Transcript now stores formatted HTML for proper bubble rendering on reload.
@@ -132,7 +133,8 @@ The app uses `gemma4:31b-cloud` as the fixed model. No model detection, no dropd
 - **Context-aware audio** — `playSmartAudio()` detects visible content (word vs. example sentence) and plays the appropriate audio
 - **Render pipeline** — Container hidden during updates, text fitted via binary search, then smooth 0.3s fade-in reveal
 - **Dynamic text fitting** — `fitSmart()` derives max font size from `min(containerWidth, containerHeight)` and binary-searches both axes
-- **Analytics** — Per-word accuracy tracking, daily score history, weekly/monthly charts, most-missed-words dashboard
+- **Analytics + memory** — Per-word accuracy tracking, daily score history, weekly/monthly charts; FSRS due scheduling via MemoryService (default on)
+- **Today session** — Finite daily plan (due reviews + new words) via DailySessionService; free-practice mode grid unchanged
 - **Themes** — 5 color themes (Classic, Sakura, Ocean, Coffee, Cyber) + dark mode + font family/style/weight controls
 - **Celebrations** — 13 confetti effects with per-effect enable/disable
 - **Presets** — One-click "I know X, I want to learn Y" presets that configure all game modes at once
@@ -177,9 +179,12 @@ The app uses `gemma4:31b-cloud` as the fixed model. No model detection, no dropd
 | `public/js/llm/llm_cache.js` | IndexedDB + in-memory cache for cloze matches |
 | `public/js/presets.js` | Preset system — applies "I know X, I want to learn Y" |
 | `public/js/preferences_registry.js` | Centralized preference schema with DOM bindings |
-| `public/js/data.js` | Firebase RTDB read/write, vocab list loading |
+| `public/js/data.js` | Firebase RTDB read/write, vocab list loading, `getReviewWords` / review session helpers |
+| `public/js/fsrs.js` | Pure FSRS-4.5 scheduler helpers |
+| `public/js/memory.js` | MemoryService — per-word FSRS cards, RTDB + localStorage |
+| `public/js/daily_session.js` | DailySessionService — Today plan compose/run, progress chrome |
 | `public/js/auth.js` | Firebase Auth — anonymous + Google sign-in |
-| `public/js/analytics.js` | Accuracy tracking, sessions, daily/weekly statistics |
+| `public/js/analytics.js` | Accuracy tracking, sessions; free-play memory.review hook when engine on |
 | `scripts/pregenerate-grammar.js` | Bulk Grammar Gym generator — Ollama, RTDB write, error-feedback retry |
 | `scripts/sync-assets.sh` | Syncs `public/` → `android/app/src/main/assets/` |
 | `android/.../TTSBridge.kt` | Native TTS bridge — per-engine voice enumeration |
@@ -191,8 +196,11 @@ The app uses `gemma4:31b-cloud` as the fixed model. No model detection, no dropd
 
 ## Architecture Docs
 
-- `docs/architecture.md` — Full AI pipeline, flow diagrams, schema reference
+- `docs/architecture.md` — Full AI pipeline, memory engine / Today overview, auth, schema notes
+- `docs/memory-engine-daily-session.md` — Memory engine + Daily Session design (FSRS, Today UX, PR plan)
+- `docs/telemetry-feedback.md` — Analytics, feedback, relationship to FSRS (not analytics-owned SRS)
 - `docs/audio-tts-architecture.md` — TTS provider detection, per-engine enumeration
 - `docs/development.md` — Pre-generation script reference, CI/CD, build notes
 - `docs/medium-term-roadmap.md` — Future feature planning
+- `docs/README.md` — Documentation index
 - `AGENTS.md` — Critical rules: cross-script scope, auth states, native TTS, explainLang, APK asset sync

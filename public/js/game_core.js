@@ -1,7 +1,7 @@
 /* js/game_core.js */
 
 // Shared list assignment for GameMode ctor + settings/filter handlers.
-// When _reviewList is set (Smart Review / Daily Session), keep that scope —
+// When _reviewList is set (Daily Session / startReviewSession), keep that scope —
 // do not expand to the full filtered list.
 function assignGameList(game) {
     if (!game || !app || !app.data) return;

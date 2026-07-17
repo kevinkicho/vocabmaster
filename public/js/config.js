@@ -41,7 +41,7 @@ function langNativeName(key) {
 }
 
 /**
- * Dropdown / list label: "Japanese · 日本語" (English + native when different).
+ * Dropdown / list label: native/endonym only (日本語, 한국어, English, …).
  * @param {object|string} langOrKey LANG_CONFIG entry or key string
  */
 function langOptionLabel(langOrKey) {
@@ -51,10 +51,8 @@ function langOptionLabel(langOrKey) {
         if (!conf) return langOrKey;
     }
     if (!conf) return '';
-    var en = conf.label || conf.key || '';
-    var native = conf.nativeLabel || '';
-    if (native && native !== en) return en + ' · ' + native;
-    return en;
+    if (conf.nativeLabel) return conf.nativeLabel;
+    return conf.label || conf.key || '';
 }
 
 if (typeof window !== 'undefined') {

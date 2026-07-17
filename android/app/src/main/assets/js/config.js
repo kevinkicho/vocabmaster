@@ -3,21 +3,21 @@
 const FLAG_IMG = (code, alt) => `<img src="https://flagcdn.com/w40/${code}.png" class="w-7 h-5 rounded-sm" alt="${alt}">`;
 
 const LANG_CONFIG = [
-    { index: 0,  key: 'ja',       exKey: 'ja_ex', code: 'ja', label: 'Japanese',       icon: FLAG_IMG('jp','JP'), tts: 'ja-JP', secondary: 'ja_furi' },
-    { index: 1,  key: 'ja_furi',  code: 'ja', label: 'Furigana',       icon: 'あ', tts: 'ja-JP', visualOnly: true, audioSrc: 'ja' },
-    { index: 2,  key: 'ja_roma',  code: 'en', label: 'Romaji (Ja)',    icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ja' },
-    { index: 3,  key: 'ko',       exKey: 'ko_ex', code: 'ko', label: 'Korean',         icon: FLAG_IMG('kr','KR'), tts: 'ko-KR', secondary: 'ko_roma' },
-    { index: 4,  key: 'ko_roma',  code: 'en', label: 'Romaji (Ko)',    icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ko' },
-    { index: 5,  key: 'en',       exKey: 'en_ex', code: 'en', label: 'English',        icon: FLAG_IMG('us','US'), tts: 'en-US' },
-    { index: 6,  key: 'zh',       exKey: 'zh_ex', code: 'zh', label: 'Chinese',        icon: FLAG_IMG('cn','CN'), tts: 'zh-CN', secondary: 'zh_pin' },
-    { index: 7,  key: 'zh_pin',   code: 'zh', label: 'Pinyin',         icon: 'pin', tts: 'zh-CN', visualOnly: true, audioSrc: 'zh' },
-    { index: 8,  key: 'es',       exKey: 'es_ex', code: 'es', label: 'Spanish',        icon: FLAG_IMG('es','ES'), tts: 'es-ES' },
-    { index: 9,  key: 'pt',       exKey: 'pt_ex', code: 'pt', label: 'Portuguese',     icon: FLAG_IMG('br','BR'), tts: 'pt-BR' },
-    { index: 10, key: 'it',       exKey: 'it_ex', code: 'it', label: 'Italian',        icon: FLAG_IMG('it','IT'), tts: 'it-IT' },
-    { index: 11, key: 'fr',       exKey: 'fr_ex', code: 'fr', label: 'French',         icon: FLAG_IMG('fr','FR'), tts: 'fr-FR' },
-    { index: 12, key: 'de',       exKey: 'de_ex', code: 'de', label: 'German',         icon: FLAG_IMG('de','DE'), tts: 'de-DE' },
-    { index: 13, key: 'ru',       exKey: 'ru_ex', code: 'ru', label: 'Russian',        icon: FLAG_IMG('ru','RU'), tts: 'ru-RU', secondary: 'ru_tr' },
-    { index: 14, key: 'ru_tr',    code: 'ru', label: 'Translit (Ru)',  icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ru' }
+    { index: 0,  key: 'ja',       exKey: 'ja_ex', code: 'ja', label: 'Japanese',       nativeLabel: '日本語',     icon: FLAG_IMG('jp','JP'), tts: 'ja-JP', secondary: 'ja_furi' },
+    { index: 1,  key: 'ja_furi',  code: 'ja', label: 'Furigana',       nativeLabel: 'ふりがな',   icon: 'あ', tts: 'ja-JP', visualOnly: true, audioSrc: 'ja' },
+    { index: 2,  key: 'ja_roma',  code: 'en', label: 'Romaji (Ja)',    nativeLabel: 'ローマ字',   icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ja' },
+    { index: 3,  key: 'ko',       exKey: 'ko_ex', code: 'ko', label: 'Korean',         nativeLabel: '한국어',     icon: FLAG_IMG('kr','KR'), tts: 'ko-KR', secondary: 'ko_roma' },
+    { index: 4,  key: 'ko_roma',  code: 'en', label: 'Romaji (Ko)',    nativeLabel: '로마자',     icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ko' },
+    { index: 5,  key: 'en',       exKey: 'en_ex', code: 'en', label: 'English',        nativeLabel: 'English',   icon: FLAG_IMG('us','US'), tts: 'en-US' },
+    { index: 6,  key: 'zh',       exKey: 'zh_ex', code: 'zh', label: 'Chinese',        nativeLabel: '中文',       icon: FLAG_IMG('cn','CN'), tts: 'zh-CN', secondary: 'zh_pin' },
+    { index: 7,  key: 'zh_pin',   code: 'zh', label: 'Pinyin',         nativeLabel: '拼音',       icon: 'pin', tts: 'zh-CN', visualOnly: true, audioSrc: 'zh' },
+    { index: 8,  key: 'es',       exKey: 'es_ex', code: 'es', label: 'Spanish',        nativeLabel: 'Español',   icon: FLAG_IMG('es','ES'), tts: 'es-ES' },
+    { index: 9,  key: 'pt',       exKey: 'pt_ex', code: 'pt', label: 'Portuguese',     nativeLabel: 'Português', icon: FLAG_IMG('br','BR'), tts: 'pt-BR' },
+    { index: 10, key: 'it',       exKey: 'it_ex', code: 'it', label: 'Italian',        nativeLabel: 'Italiano',  icon: FLAG_IMG('it','IT'), tts: 'it-IT' },
+    { index: 11, key: 'fr',       exKey: 'fr_ex', code: 'fr', label: 'French',         nativeLabel: 'Français',  icon: FLAG_IMG('fr','FR'), tts: 'fr-FR' },
+    { index: 12, key: 'de',       exKey: 'de_ex', code: 'de', label: 'German',         nativeLabel: 'Deutsch',   icon: FLAG_IMG('de','DE'), tts: 'de-DE' },
+    { index: 13, key: 'ru',       exKey: 'ru_ex', code: 'ru', label: 'Russian',        nativeLabel: 'Русский',   icon: FLAG_IMG('ru','RU'), tts: 'ru-RU', secondary: 'ru_tr' },
+    { index: 14, key: 'ru_tr',    code: 'ru', label: 'Translit (Ru)',  nativeLabel: 'Транслит',  icon: 'abc', tts: 'en-US', visualOnly: true, audioSrc: 'ru' }
 ];
 
 const DEFAULT_CELEBS = [
@@ -27,6 +27,40 @@ const DEFAULT_CELEBS = [
 ];
 
 const LANG_MAP = new Map(LANG_CONFIG.map(l => [l.key, l]));
+
+/**
+ * Native / endonym display name for a language key (ja → 日本語).
+ * Falls back to English label, then the raw key.
+ */
+function langNativeName(key) {
+    if (!key) return '';
+    var conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(key) : null;
+    if (conf && conf.nativeLabel) return conf.nativeLabel;
+    if (conf && conf.label) return conf.label;
+    return String(key);
+}
+
+/**
+ * Dropdown / list label: "Japanese · 日本語" (English + native when different).
+ * @param {object|string} langOrKey LANG_CONFIG entry or key string
+ */
+function langOptionLabel(langOrKey) {
+    var conf = langOrKey;
+    if (typeof langOrKey === 'string') {
+        conf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(langOrKey) : null;
+        if (!conf) return langOrKey;
+    }
+    if (!conf) return '';
+    var en = conf.label || conf.key || '';
+    var native = conf.nativeLabel || '';
+    if (native && native !== en) return en + ' · ' + native;
+    return en;
+}
+
+if (typeof window !== 'undefined') {
+    window.langNativeName = langNativeName;
+    window.langOptionLabel = langOptionLabel;
+}
 
 const CEFR_LEVELS = {
     A1: { label: 'Beginner', description: 'Can understand and use familiar everyday expressions and basic phrases', wordCountRange: '500-1000' },

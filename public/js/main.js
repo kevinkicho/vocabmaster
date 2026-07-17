@@ -661,7 +661,9 @@ class App {
                         + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
                         + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
-                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
+                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · '
+                        + (typeof langNativeName === 'function' ? langNativeName(prof.targetLang) : (prof.targetLang || ''))
+                        + '</p>'
                         + (isGuided
                             ? '<div class="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden" aria-hidden="true">'
                               + '<div class="h-full rounded-full bg-indigo-500" style="width:' + Math.min(100, unitPct) + '%"></div></div>'

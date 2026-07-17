@@ -5,8 +5,8 @@
 | **Title** | Tiered Learning Path · AI Engagement · Secure AI Transport · Global Chat FAB |
 | **Author** | VocabMaster design (AI-assisted) |
 | **Date** | 2026-07-16 |
-| **Status** | **Draft rev 2** (addresses design review 17d4c81d) |
-| **Revision** | 2 |
+| **Status** | **Implemented on main** (rev 2 design + follow-ups landed 2026-07-17) |
+| **Revision** | 2 + follow-ups |
 | **Audience** | Senior engineers implementing curriculum path, engagement, proxy hardening, and always-on tutor chat |
 | **Branch policy** | **main only** — incremental, reviewable commits/PRs; preserve Today + memory |
 | **Related** | `docs/memory-engine-daily-session.md` (rev 4 Approved), `docs/architecture.md`, `docs/web-ai-parity-proxy-implementation.md`, `docs/telemetry-feedback.md`, `AGENTS.md` |

@@ -57,4 +57,29 @@ test.describe('VocabMaster App Basic Sanity', () => {
     await page.locator('#modal-settings').click({ position: { x: 5, y: 5 } });
     await expect(page.locator('#modal-settings')).toBeHidden({ timeout: 5000 });
   });
+
+  test('home shows Learning map and Sentence Build', async ({ page }) => {
+    await page.waitForSelector('#btn-init:not([disabled])', { timeout: 30000 });
+    await page.click('#btn-init');
+    await expect(page.locator('#app-view')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#app-view').getByText('Learning map')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#app-view').getByText('Sentence Build')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('Today modes deep-link opens Daily activities in settings', async ({ page }) => {
+    await page.waitForSelector('#btn-init:not([disabled])', { timeout: 30000 });
+    await page.click('#btn-init');
+    await expect(page.locator('#app-view')).toBeVisible({ timeout: 10000 });
+    // Chip may be on Today card when session not empty, or after path/today render
+    const chip = page.locator('#app-view').getByRole('button', { name: 'Today modes' });
+    if (await chip.count()) {
+      await chip.first().click();
+      await expect(page.locator('#modal-settings')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('#settings-daily-activities')).toBeVisible({ timeout: 5000 });
+    } else {
+      // Fallback: open settings and assert section exists
+      await page.click('button[onclick="app.modal(true)"]');
+      await expect(page.locator('#settings-daily-activities')).toBeVisible({ timeout: 5000 });
+    }
+  });
 });

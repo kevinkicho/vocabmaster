@@ -1,0 +1,359 @@
+{
+  "date": "2026-07-17",
+  "corpus": "data/tier1_enriched.json",
+  "method": {
+    "exact": "Headword field after paren-strip must appear as exact substring of *_ex. Multi-gloss whole string (e.g. 静か・閑か) counts only if fully present — matches pre-SentenceUtils Sentences.generateCloze primary path.",
+    "utils": "SentenceUtils.findBlankSpan: candidates from headword + secondary readings + multi-gloss splits + light JA conjugation; exact / Latin morph / CJK longest substring ≥2."
+  },
+  "languages": {
+    "ja": {
+      "total": 498,
+      "exactHits": 19,
+      "exactRate": 0.0382,
+      "utilsHits": 489,
+      "utilsRate": 0.9819,
+      "sampleMisses": [
+        {
+          "head": "家",
+          "furi": "け",
+          "ex": "わたしのいえはあかいやねです。"
+        },
+        {
+          "head": "外",
+          "furi": "がい",
+          "ex": "そとであそびましょう。"
+        },
+        {
+          "head": "さらい",
+          "furi": "さらい",
+          "ex": "あさって、ともだちにいます。"
+        },
+        {
+          "head": "力",
+          "furi": "りょく",
+          "ex": "かのじょはちからがつよいです。"
+        },
+        {
+          "head": "山",
+          "furi": "やま",
+          "ex": "きょねん、ふじさんにのぼりました。"
+        },
+        {
+          "head": "子",
+          "furi": "ね",
+          "ex": "あのこはまいにちがっこうへいきます。"
+        },
+        {
+          "head": "下",
+          "furi": "もと",
+          "ex": "いすのしたにねこがいます。"
+        },
+        {
+          "head": "心",
+          "furi": "しん",
+          "ex": "こころをこめててがみをかきました。"
+        }
+      ]
+    },
+    "en": {
+      "total": 498,
+      "exactHits": 186,
+      "exactRate": 0.3735,
+      "utilsHits": 437,
+      "utilsRate": 0.8775,
+      "sampleMisses": [
+        {
+          "head": "mostly; generally",
+          "furi": "だいたい",
+          "ex": "Most of the work is finished."
+        },
+        {
+          "head": "to say",
+          "furi": "いう",
+          "ex": "She said 'thank you'."
+        },
+        {
+          "head": "to do",
+          "furi": "する",
+          "ex": "I will play tennis tomorrow."
+        },
+        {
+          "head": "graduation",
+          "furi": "そつぎょう",
+          "ex": "I will graduate in March next year."
+        },
+        {
+          "head": "freedom; liberty",
+          "furi": "じゆう",
+          "ex": "On Sunday I have free time."
+        },
+        {
+          "head": "Ah!; Oh!",
+          "furi": "ああ",
+          "ex": "Ah, this cake is delicious!"
+        },
+        {
+          "head": "throat",
+          "furi": "のど",
+          "ex": "I'm thirsty. Please give me water."
+        },
+        {
+          "head": "key",
+          "furi": "かぎ",
+          "ex": "Please lock the door."
+        }
+      ]
+    },
+    "zh": {
+      "total": 498,
+      "exactHits": 295,
+      "exactRate": 0.5924,
+      "utilsHits": 353,
+      "utilsRate": 0.7088,
+      "sampleMisses": [
+        {
+          "head": "大体",
+          "furi": "だいたい",
+          "ex": "大部分的工作都完成了。"
+        },
+        {
+          "head": "短的",
+          "furi": "みじかい",
+          "ex": "这支铅笔很短。"
+        },
+        {
+          "head": "送来",
+          "furi": "よこす",
+          "ex": "她递给我一个礼物。"
+        },
+        {
+          "head": "做",
+          "furi": "する",
+          "ex": "我明天要打网球。"
+        },
+        {
+          "head": "低的",
+          "furi": "ひくい",
+          "ex": "这张桌子很矮。"
+        },
+        {
+          "head": "关闭",
+          "furi": "しめる",
+          "ex": "请把窗户关上。很冷。"
+        },
+        {
+          "head": "大的",
+          "furi": "おおきい",
+          "ex": "我家有一个大院子。"
+        },
+        {
+          "head": "多的",
+          "furi": "おおい",
+          "ex": "这个城市人很多。"
+        }
+      ]
+    },
+    "ko": {
+      "total": 498,
+      "exactHits": 249,
+      "exactRate": 0.5,
+      "utilsHits": 338,
+      "utilsRate": 0.6787,
+      "sampleMisses": [
+        {
+          "head": "대체로",
+          "furi": "だいたい",
+          "ex": "대부분의 일은 끝났습니다."
+        },
+        {
+          "head": "말하다",
+          "furi": "いう",
+          "ex": "그녀는 \"감사합니다\"라고 말했습니다."
+        },
+        {
+          "head": "짧다",
+          "furi": "みじかい",
+          "ex": "이 연필은 짧습니다."
+        },
+        {
+          "head": "마시다",
+          "furi": "のむ",
+          "ex": "나는 매일 물을 마십니다."
+        },
+        {
+          "head": "보내다",
+          "furi": "よこす",
+          "ex": "그녀가 나에게 선물을 건넸습니다."
+        },
+        {
+          "head": "쉬다",
+          "furi": "やすむ",
+          "ex": "오늘은 일을 쉽니다."
+        },
+        {
+          "head": "안녕하세요",
+          "furi": "おはよう",
+          "ex": "좋은 아침입니다. 오늘도 좋은 날씨네요."
+        },
+        {
+          "head": "하다",
+          "furi": "する",
+          "ex": "내일 테니스를 합니다."
+        }
+      ]
+    },
+    "es": {
+      "total": 498,
+      "exactHits": 241,
+      "exactRate": 0.4839,
+      "utilsHits": 315,
+      "utilsRate": 0.6325,
+      "sampleMisses": [
+        {
+          "head": "en general",
+          "furi": "だいたい",
+          "ex": "La mayor parte del trabajo está terminada."
+        },
+        {
+          "head": "decir",
+          "furi": "いう",
+          "ex": "Ella dijo \"gracias\"."
+        },
+        {
+          "head": "beber",
+          "furi": "のむ",
+          "ex": "Bebo agua todos los días."
+        },
+        {
+          "head": "enviar",
+          "furi": "よこす",
+          "ex": "Ella me entregó un regalo."
+        },
+        {
+          "head": "descansar",
+          "furi": "やすむ",
+          "ex": "Hoy descanso del trabajo."
+        },
+        {
+          "head": "hacer",
+          "furi": "する",
+          "ex": "Mañana jugaré al tenis."
+        },
+        {
+          "head": "graduación",
+          "furi": "そつぎょう",
+          "ex": "Me graduaré en marzo del próximo año."
+        },
+        {
+          "head": "libertad",
+          "furi": "じゆう",
+          "ex": "El domingo tengo tiempo libre."
+        }
+      ]
+    },
+    "fr": {
+      "total": 498,
+      "exactHits": 260,
+      "exactRate": 0.5221,
+      "utilsHits": 337,
+      "utilsRate": 0.6767,
+      "sampleMisses": [
+        {
+          "head": "généralement",
+          "furi": "だいたい",
+          "ex": "La plupart du travail est fini."
+        },
+        {
+          "head": "combiné avec",
+          "furi": "あわせて",
+          "ex": "J'ai chargé les bagages ensemble."
+        },
+        {
+          "head": "dire",
+          "furi": "いう",
+          "ex": "Elle a dit \"merci\"."
+        },
+        {
+          "head": "boire",
+          "furi": "のむ",
+          "ex": "Je bois de l'eau tous les jours."
+        },
+        {
+          "head": "œil",
+          "furi": "め",
+          "ex": "Ses yeux sont bleus et jolis."
+        },
+        {
+          "head": "envoyer",
+          "furi": "よこす",
+          "ex": "Elle m'a remis un cadeau."
+        },
+        {
+          "head": "se reposer",
+          "furi": "やすむ",
+          "ex": "Aujourd'hui je me repose du travail."
+        },
+        {
+          "head": "faire",
+          "furi": "する",
+          "ex": "Demain je jouerai au tennis."
+        }
+      ]
+    },
+    "de": {
+      "total": 498,
+      "exactHits": 251,
+      "exactRate": 0.504,
+      "utilsHits": 334,
+      "utilsRate": 0.6707,
+      "sampleMisses": [
+        {
+          "head": "im Allgemeinen",
+          "furi": "だいたい",
+          "ex": "Der Großteil der Arbeit ist fertig."
+        },
+        {
+          "head": "sagen",
+          "furi": "いう",
+          "ex": "Sie sagte \"Danke\"."
+        },
+        {
+          "head": "trinken",
+          "furi": "のむ",
+          "ex": "Ich trinke jeden Tag Wasser."
+        },
+        {
+          "head": "schicken",
+          "furi": "よこす",
+          "ex": "Sie hat mir ein Geschenk überreicht."
+        },
+        {
+          "head": "sich ausruhen",
+          "furi": "やすむ",
+          "ex": "Heute ruhe ich mich von der Arbeit aus."
+        },
+        {
+          "head": "machen",
+          "furi": "する",
+          "ex": "Morgen spiele ich Tennis."
+        },
+        {
+          "head": "Freiheit",
+          "furi": "じゆう",
+          "ex": "Am Sonntag habe ich freie Zeit."
+        },
+        {
+          "head": "Ah!",
+          "furi": "ああ",
+          "ex": "Ah, dieser Kuchen ist lecker!"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "ja_exact": 0.0382,
+    "ja_utils": 0.9819,
+    "en_exact": 0.3735,
+    "en_utils": 0.8775
+  }
+}

@@ -12,6 +12,20 @@ window.SETTINGS_HTML = `
                   <div class="flex justify-between items-center mt-1 p-1 bg-slate-100 dark:bg-neutral-800 rounded-lg border border-slate-200 dark:border-neutral-700"><label class="flex-1 text-center cursor-pointer"><input type="radio" name="session-intensity" value="casual" class="peer sr-only" onchange="app.ui._syncRadioVisual('session-intensity'); if(app.ui._updateSessionIntensityHint) app.ui._updateSessionIntensityHint()"><span class="block py-1.5 px-1 text-[10px] font-bold uppercase text-slate-400 rounded shadow-sm transition-all">Casual pace</span></label><label class="flex-1 text-center cursor-pointer"><input type="radio" name="session-intensity" value="cram" class="peer sr-only" onchange="app.ui._syncRadioVisual('session-intensity'); if(app.ui._updateSessionIntensityHint) app.ui._updateSessionIntensityHint()"><span class="block py-1.5 px-1 text-[10px] font-bold uppercase text-slate-400 rounded shadow-sm transition-all">Exam prep</span></label></div>
                   <p id="session-intensity-hint" class="text-[9px] text-center text-slate-400 dark:text-neutral-500 mt-1">~8 min · up to 5 new · 12 review</p>
                   <div class="h-px bg-slate-200 dark:bg-neutral-700 w-full"></div>
+                  <div id="settings-daily-activities" class="scroll-mt-4">
+                  <p class="text-[9px] uppercase font-bold text-slate-400 text-center mt-2">Daily activities (Today)</p>
+                  <p class="text-[9px] text-center text-slate-400 dark:text-neutral-500 mb-2">Opt out of modes you prefer to skip. Flashcards still introduce new words.</p>
+                  <div class="grid grid-cols-1 gap-1.5 text-left">
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Quiz</span><input type="checkbox" id="session-inc-quiz" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">True / False</span><input type="checkbox" id="session-inc-tf" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Sentences</span><input type="checkbox" id="session-inc-sentences" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Sentence Build</span><input type="checkbox" id="session-inc-sentence-build" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Match</span><input type="checkbox" id="session-inc-match" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Speaking (Voice + Dictation)</span><input type="checkbox" id="session-inc-speaking" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                    <label class="flex justify-between items-center cursor-pointer px-1"><span class="text-[11px] font-bold">Story (AI)</span><input type="checkbox" id="session-inc-story" class="w-4 h-4 accent-indigo-600 rounded"></label>
+                  </div>
+                  </div>
+                  <div class="h-px bg-slate-200 dark:bg-neutral-700 w-full mt-3"></div>
                   <p class="text-[9px] uppercase font-bold text-slate-400 text-center mt-2">Learning Path</p>
                   <p id="path-settings-status" class="text-[10px] text-center text-slate-500 dark:text-neutral-400 mb-1">Free practice</p>
                   <div class="flex justify-between items-center mt-1 p-1 bg-slate-100 dark:bg-neutral-800 rounded-lg border border-slate-200 dark:border-neutral-700">

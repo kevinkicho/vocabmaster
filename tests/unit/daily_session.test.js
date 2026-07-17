@@ -72,14 +72,11 @@ describe('SESSION_INTENSITY_PRESETS / getSessionDefaults', () => {
 describe('buildPlan golden shapes', () => {
     const casual = () => getSessionDefaults({ sessionIntensity: 'casual' });
 
-    it('(5 new, 10 due): Flash+Quiz new, Quiz 7 + TF 3 review, Story seed 4 due, complete', () => {
+    it('(5 new, 10 due): Flash+Quiz new, multi-mode due rotation, Story seed, complete (F6b)', () => {
         const newItems = vocab([101, 102, 103, 104, 105]);
         const due = vocab([201, 202, 203, 204, 205, 206, 207, 208, 209, 210]);
         const steps = buildPlan(newItems, due, casual());
 
-        expect(steps.map((s) => s.type)).toEqual([
-            'present', 'drill', 'drill', 'drill', 'ai', 'complete'
-        ]);
         expect(steps[0]).toMatchObject({
             type: 'present', mode: 'flash', purpose: 'new',
             wordIds: [101, 102, 103, 104, 105]
@@ -88,35 +85,41 @@ describe('buildPlan golden shapes', () => {
             type: 'drill', mode: 'quiz', purpose: 'new',
             wordIds: [101, 102, 103, 104, 105]
         });
-        // ceil(10 * 0.7) = 7
-        expect(steps[2]).toMatchObject({
-            type: 'drill', mode: 'quiz', purpose: 'review',
-            wordIds: [201, 202, 203, 204, 205, 206, 207]
-        });
-        expect(steps[3]).toMatchObject({
-            type: 'drill', mode: 'tf', purpose: 'review',
-            wordIds: [208, 209, 210]
-        });
-        expect(steps[4]).toMatchObject({
-            type: 'ai', mode: 'story',
-            wordIds: [201, 202, 203, 204]
-        });
-        expect(steps[5]).toEqual({ type: 'complete' });
+        // Due ids round-robin across enabled modes (quiz, tf, sentences, sentence_build, match, dictation, voice)
+        const reviewDrills = steps.filter((s) => s.type === 'drill' && s.purpose === 'review');
+        expect(reviewDrills.length).toBeGreaterThanOrEqual(2);
+        const allDue = reviewDrills.flatMap((s) => s.wordIds).sort((a, b) => a - b);
+        expect(allDue).toEqual([201, 202, 203, 204, 205, 206, 207, 208, 209, 210]);
+        // Modes should include sentence_build when prefs default on
+        expect(reviewDrills.some((s) => s.mode === 'sentence_build')).toBe(true);
+        const ai = steps.find((s) => s.type === 'ai');
+        expect(ai).toMatchObject({ mode: 'story', wordIds: [201, 202, 203, 204] });
+        expect(steps[steps.length - 1]).toEqual({ type: 'complete' });
     });
 
-    it('(0 new, 12 due): Quiz ceil(12*0.7)=9 + TF 3, Story D1–D4, complete', () => {
+    it('(0 new, 12 due): multi-mode rotation + Story D1–D4, complete', () => {
         const due = vocab([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         const steps = buildPlan([], due, casual());
 
-        expect(steps.map((s) => [s.type, s.mode])).toEqual([
-            ['drill', 'quiz'],
-            ['drill', 'tf'],
-            ['ai', 'story'],
-            ['complete', undefined]
-        ]);
-        expect(steps[0].wordIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        expect(steps[1].wordIds).toEqual([10, 11, 12]);
-        expect(steps[2].wordIds).toEqual([1, 2, 3, 4]);
+        const reviewDrills = steps.filter((s) => s.type === 'drill');
+        const allDue = reviewDrills.flatMap((s) => s.wordIds).sort((a, b) => a - b);
+        expect(allDue).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        expect(steps.some((s) => s.mode === 'quiz')).toBe(true);
+        expect(steps.some((s) => s.mode === 'sentence_build')).toBe(true);
+        const ai = steps.find((s) => s.type === 'ai');
+        expect(ai.wordIds).toEqual([1, 2, 3, 4]);
+        expect(steps[steps.length - 1].type).toBe('complete');
+    });
+
+    it('opt-out speaking excludes voice/dictation from plan (F6b)', () => {
+        const d = getSessionDefaults({
+            sessionIntensity: 'casual',
+            sessionIncludeSpeaking: false
+        });
+        const due = vocab([1, 2, 3, 4, 5, 6, 7]);
+        const steps = buildPlan([], due, d);
+        expect(steps.some((s) => s.mode === 'voice' || s.mode === 'dictation')).toBe(false);
+        expect(steps.some((s) => s.mode === 'quiz')).toBe(true);
     });
 
     it('(5 new, 0 due): Flash+Quiz new only + Story seed from new, complete', () => {
@@ -171,10 +174,8 @@ describe('buildPlan golden shapes', () => {
             [{ wordId: 5 }, { id: 6 }, 7],
             Object.assign(casual(), { includeAiBlock: false })
         );
-        // ceil(3*0.7)=3 all quiz
-        expect(steps[0].wordIds).toEqual([5, 6, 7]);
-        expect(steps[0].mode).toBe('quiz');
-        expect(steps.filter((s) => s.mode === 'tf')).toHaveLength(0);
+        const all = steps.filter((s) => s.type === 'drill').flatMap((s) => s.wordIds).sort((a, b) => a - b);
+        expect(all).toEqual([5, 6, 7]);
     });
 
     it('is deterministic for same inputs', () => {

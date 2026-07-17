@@ -21,6 +21,16 @@ const PREFERENCE_SCHEMA = [
   // ===== LEARNING PATH / TUTOR (home + settings) =====
   { key: 'tutorMomentsEnabled', type: 'bool', default: true,    domId: 'toggle-tutor-moments',     section: 'path', label: 'AI coach tips' },
 
+  // ===== TODAY / DAILY SESSION MODE INCLUSION (F6b — defaults all on) =====
+  // Speaking family opt-out is first-class (voice + dictation).
+  { key: 'sessionIncludeQuiz',           type: 'bool', default: true,  domId: 'session-inc-quiz',           section: 'session', label: 'Today: Quiz' },
+  { key: 'sessionIncludeTf',             type: 'bool', default: true,  domId: 'session-inc-tf',             section: 'session', label: 'Today: True/False' },
+  { key: 'sessionIncludeSentences',      type: 'bool', default: true,  domId: 'session-inc-sentences',      section: 'session', label: 'Today: Sentences' },
+  { key: 'sessionIncludeSentenceBuild',  type: 'bool', default: true,  domId: 'session-inc-sentence-build', section: 'session', label: 'Today: Sentence Build' },
+  { key: 'sessionIncludeMatch',          type: 'bool', default: true,  domId: 'session-inc-match',          section: 'session', label: 'Today: Match' },
+  { key: 'sessionIncludeSpeaking',       type: 'bool', default: true,  domId: 'session-inc-speaking',       section: 'session', label: 'Today: Speaking (Voice + Dictation)' },
+  { key: 'sessionIncludeStory',          type: 'bool', default: true,  domId: 'session-inc-story',          section: 'session', label: 'Today: Story (AI)' },
+
   // ===== FLASHCARDS =====
   { key: 'flashSpeed',        type: 'select', default: '700',   domId: 'flash-speed',              section: 'flash', label: 'Flip Speed' },
   { key: 'flashAuto',         type: 'bool',   default: true,    domId: 'flash-auto',               section: 'flash', label: 'Auto Advance', presetBehavior: 'always' },

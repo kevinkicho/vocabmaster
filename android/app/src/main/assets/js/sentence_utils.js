@@ -151,14 +151,32 @@ var SentenceUtils = (function () {
     function findBlankSpan(sentence, item, langKey) {
         sentence = normalizeText(sentence);
         if (!sentence) return null;
+        // F3: optional precomputed span on vocab item { blanks: { ja: { start, end } } }
+        try {
+            var pre = item && item.blanks && item.blanks[langKey];
+            if (pre && Number.isFinite(pre.start) && Number.isFinite(pre.end) &&
+                pre.start >= 0 && pre.end > pre.start && pre.end <= sentence.length) {
+                return {
+                    start: pre.start,
+                    end: pre.end,
+                    matched: sentence.slice(pre.start, pre.end)
+                };
+            }
+        } catch (_) {}
         var cands = blankCandidates(item, langKey);
         var i, c, idx, reg, m;
 
-        // 1) exact (case-insensitive for Latin)
+        // 1) exact (case-insensitive for Latin; Cyrillic letters for ru)
         for (i = 0; i < cands.length; i++) {
             c = cands[i];
             if (c.length < 1) continue;
-            if (isEuroLang(langKey)) {
+            if (langKey === 'ru') {
+                reg = new RegExp(escapeReg(c) + '[\\w\\u0400-\\u04FF]*', 'i');
+                m = sentence.match(reg);
+                if (m && m.index != null) {
+                    return { start: m.index, end: m.index + m[0].length, matched: m[0] };
+                }
+            } else if (isEuroLang(langKey)) {
                 reg = new RegExp(escapeReg(c) + '[\\w\\u00C0-\\u024F]*', 'i');
                 m = sentence.match(reg);
                 if (m && m.index != null) {
@@ -300,7 +318,15 @@ var SentenceUtils = (function () {
             parts = mergeJapaneseParticles(parts);
         }
 
-        // 5) Anchor vocab headword as one block if split across pieces
+        // 5a) Curated blocks override (F7) when present on item
+        if (opts.item && Array.isArray(opts.item.buildBlocks) && opts.item.buildBlocks.length >= 2) {
+            var curated = opts.item.buildBlocks.map(function (b) { return String(b); }).filter(Boolean);
+            if (curated.join('').replace(/\s+/g, '') === sentence.replace(/\s+/g, '')) {
+                return balanceBlocks(curated, minBlocks, maxBlocks, langCode);
+            }
+        }
+
+        // 5b) Anchor vocab headword as one block if split across pieces
         if (opts.item) {
             parts = fuseVocabAnchor(parts, opts.item, langCode);
         }

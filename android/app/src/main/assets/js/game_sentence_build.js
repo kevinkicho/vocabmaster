@@ -12,6 +12,8 @@ class SentenceBuild extends GameMode {
         this._pool = [];
         this._built = [];
         this._done = false;
+        /** Free-play first-Check-only FSRS (OQ2): wordIds already graded this mode instance */
+        this._fsrsGraded = {};
         this.setup();
         this.update();
     }
@@ -243,8 +245,17 @@ class SentenceBuild extends GameMode {
         this.busy = true;
         this._done = true;
 
+        // OQ2: free-play first-Check-only FSRS — subsequent Checks skip memory.
+        // Session path uses MULTI_ATTEMPT_MODES + onGraded (analytics hook skipped).
+        var wid = c && c.id;
+        var alreadyGraded = wid != null && this._fsrsGraded[wid];
+        var memMeta = alreadyGraded
+            ? { applyMemory: false, skipMemory: true }
+            : {};
+        if (wid != null && !alreadyGraded) this._fsrsGraded[wid] = true;
+
         if (ok) {
-            this.score(12);
+            this.score(12, wid, memMeta);
             if (app.celebration) app.celebration.play();
             this.highlightQBox(this.dom.promptBox, true);
             this.dom.built.classList.add('border-emerald-400', 'bg-emerald-50', 'dark:bg-emerald-950');
@@ -257,15 +268,17 @@ class SentenceBuild extends GameMode {
             } catch (_) {}
             this.waitAndNav(pAudio, 1800);
         } else {
-            this.miss();
+            this.miss(wid, memMeta);
             this.highlightQBox(this.dom.promptBox, false);
             this.dom.built.classList.add('border-rose-400', 'bg-rose-50', 'dark:bg-rose-950');
-            // show correct order briefly then allow retry
+            // Multi-attempt: show correct order briefly then allow rebuild/retry
             var self = this;
             setTimeout(function () {
                 self.dom.built.classList.remove('border-rose-400', 'bg-rose-50', 'dark:bg-rose-950');
-                self._built = self._correctBlocks.slice();
-                self._pool = [];
+                self._built = [];
+                self._pool = (window.SentenceUtils && SentenceUtils.shuffleBlocks)
+                    ? SentenceUtils.shuffleBlocks(self._correctBlocks)
+                    : self._correctBlocks.slice().sort(function () { return Math.random() - 0.5; });
                 self._renderBuilt();
                 self._renderPool();
                 self._done = false;
@@ -274,6 +287,7 @@ class SentenceBuild extends GameMode {
             }, 1200);
         }
     }
+
 }
 
 window.SentenceBuild = SentenceBuild;

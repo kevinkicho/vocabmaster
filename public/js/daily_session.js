@@ -57,12 +57,42 @@ var SESSION_MODE_LABELS = Object.freeze({
     voice: 'Voice',
     dictation: 'Dictation',
     sentences: 'Sentences',
+    sentence_build: 'Sentence Build',
     story: 'Story',
     grammar: 'Grammar',
     context: 'Context',
     present: 'Learn',
     ai: 'Story'
 });
+
+/**
+ * Whether a drill/AI mode is included in Today compose (F6b prefs).
+ * Defaults ON when pref missing. Flash present always allowed for new words.
+ * @param {string} mode
+ * @param {object|null} prefs
+ * @returns {boolean}
+ */
+function isSessionModeIncluded(mode, prefs) {
+    prefs = prefs || {};
+    // Speaking family
+    if (mode === 'voice' || mode === 'dictation') {
+        return prefs.sessionIncludeSpeaking !== false;
+    }
+    var map = {
+        quiz: 'sessionIncludeQuiz',
+        tf: 'sessionIncludeTf',
+        sentences: 'sessionIncludeSentences',
+        sentence_build: 'sessionIncludeSentenceBuild',
+        match: 'sessionIncludeMatch',
+        story: 'sessionIncludeStory',
+        ai: 'sessionIncludeStory',
+        flash: null, // always for new present
+        present: null
+    };
+    var key = map[mode];
+    if (key == null) return true;
+    return prefs[key] !== false;
+}
 
 /** Empty session stats shape (persisted on dailySessions/{date}.stats). */
 function emptySessionStats() {
@@ -119,12 +149,29 @@ function getSessionDefaults(prefs) {
         reinsertLapses: base.reinsertLapses,
         estimatedMinutes: base.estimatedMinutes,
         backlogCopy: base.backlogCopy,
-        includeDictation: !!(prefs && prefs.includeDictation)
+        includeDictation: !!(prefs && prefs.includeDictation),
+        // F6b: pass prefs through so buildPlan can filter modes
+        _prefs: prefs || null
     };
 }
 
 /**
- * Deterministic plan builder (design §2.2.1).
+ * Enabled review drill modes for due-segment rotation (F6b).
+ * Order is stable for determinism.
+ */
+function enabledDueModes(prefs) {
+    var candidates = ['quiz', 'tf', 'sentences', 'sentence_build', 'match', 'dictation', 'voice'];
+    var out = [];
+    for (var i = 0; i < candidates.length; i++) {
+        if (isSessionModeIncluded(candidates[i], prefs)) out.push(candidates[i]);
+    }
+    // Always keep at least quiz if everything disabled (safety net)
+    if (!out.length) out.push('quiz');
+    return out;
+}
+
+/**
+ * Deterministic plan builder (design §2.2.1 + F6/F6b mode prefs).
  * @param {Array<{id:number}>} newItems length ≤ maxNew, stable order
  * @param {Array<{id:number}>} due length ≤ maxDue, selection order
  * @param {object} d session defaults (getSessionDefaults result)
@@ -138,28 +185,41 @@ function buildPlan(newItems, due, d) {
         .filter(function (id) { return Number.isFinite(id); });
 
     d = d || SESSION_DEFAULTS;
+    var prefs = d._prefs || null;
 
-    // --- New segment: Flash present (if any new) then Quiz for same new ids ---
+    // --- New segment: Flash present always, then Quiz (if included) for same new ids ---
     if (newIds.length > 0) {
         steps.push({ type: 'present', mode: 'flash', wordIds: newIds.slice(), purpose: 'new' });
-        steps.push({ type: 'drill', mode: 'quiz', wordIds: newIds.slice(), purpose: 'new' });
+        if (isSessionModeIncluded('quiz', prefs)) {
+            steps.push({ type: 'drill', mode: 'quiz', wordIds: newIds.slice(), purpose: 'new' });
+        } else {
+            // Prefer first enabled drill for new reinforcement
+            var alts = enabledDueModes(prefs);
+            steps.push({ type: 'drill', mode: alts[0], wordIds: newIds.slice(), purpose: 'new' });
+        }
     }
 
-    // --- Due segment: Quiz 70% then TF 30% (by count, ceil quiz) ---
+    // --- Due segment: rotate across enabled modes (not quiz-only) ---
     if (dueIds.length > 0) {
-        var nQuiz = Math.ceil(dueIds.length * 0.7);
-        var quizDue = dueIds.slice(0, nQuiz);
-        var tfDue = dueIds.slice(nQuiz);
-        if (quizDue.length) {
-            steps.push({ type: 'drill', mode: 'quiz', wordIds: quizDue, purpose: 'review' });
+        var modes = enabledDueModes(prefs);
+        // Round-robin assign each due id to a mode for variety
+        var buckets = {};
+        var m;
+        for (m = 0; m < modes.length; m++) buckets[modes[m]] = [];
+        for (var di = 0; di < dueIds.length; di++) {
+            buckets[modes[di % modes.length]].push(dueIds[di]);
         }
-        if (tfDue.length) {
-            steps.push({ type: 'drill', mode: 'tf', wordIds: tfDue, purpose: 'review' });
+        // Emit in mode priority order so chrome is stable
+        for (m = 0; m < modes.length; m++) {
+            var mid = modes[m];
+            if (buckets[mid] && buckets[mid].length) {
+                steps.push({ type: 'drill', mode: mid, wordIds: buckets[mid], purpose: 'review' });
+            }
         }
     }
 
-    // --- AI block: first min(aiWordCount, due+new) ids preferring due then new ---
-    if (d.includeAiBlock && d.aiBlock === 'story') {
+    // --- AI block: Story when enabled in prefs ---
+    if (d.includeAiBlock && d.aiBlock === 'story' && isSessionModeIncluded('story', prefs)) {
         var seed = dueIds.concat(newIds).slice(0, d.aiWordCount || 4);
         if (seed.length > 0) {
             steps.push({ type: 'ai', mode: 'story', wordIds: seed });
@@ -257,7 +317,7 @@ function wordsFromIds(wordIds) {
  * Modes where miss is intermediate (user stays on card until correct).
  * Terminal grade = eventual score. Defer resolve/reinsert/FSRS until then.
  */
-var MULTI_ATTEMPT_MODES = { quiz: true, dictation: true };
+var MULTI_ATTEMPT_MODES = { quiz: true, dictation: true, sentence_build: true };
 
 /**
  * Modes where miss must not alone resolve the word for step completion
@@ -839,12 +899,27 @@ class DailySessionService {
             self._attachPresentHooks(game);
         }
 
-        // AI steps: provide skip helper on game
-        if (type === 'ai') {
-            game.skipDailySessionStep = function () {
-                self.finishStep();
-            };
-        }
+        // In-session skip (F6b) — finish step without permanent pref change
+        game.skipDailySessionStep = function () {
+            self.finishStep();
+        };
+        // Soft chrome: skip chip when progress UI is shown
+        try {
+            var chrome = document.getElementById('daily-session-progress');
+            if (chrome && !chrome.querySelector('#ds-skip-step')) {
+                var skipBtn = document.createElement('button');
+                skipBtn.id = 'ds-skip-step';
+                skipBtn.type = 'button';
+                skipBtn.className = 'ml-2 text-[10px] font-bold text-slate-400 underline';
+                skipBtn.textContent = 'Skip activity';
+                skipBtn.onclick = function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (game.skipDailySessionStep) game.skipDailySessionStep();
+                };
+                chrome.appendChild(skipBtn);
+            }
+        } catch (_) {}
 
         L('[DailySession] attachController', mode, 'words=', wordIds.length, 'pending=', pending.size);
     }
@@ -1541,10 +1616,14 @@ class DailySessionService {
             if (mode === 'match' && typeof Match !== 'undefined') return new Match('match');
             if (mode === 'voice' && typeof Voice !== 'undefined') return new Voice('voice');
             if (mode === 'sentences' && typeof Sentences !== 'undefined') return new Sentences('sentences');
+            if (mode === 'sentence_build' && typeof SentenceBuild !== 'undefined') {
+                return new SentenceBuild('sentence_build');
+            }
             if (mode === 'dictation' && typeof Dictation !== 'undefined') return new Dictation('dictation');
             if (mode === 'story' && typeof Story !== 'undefined') return new Story('story');
             if (mode === 'grammar' && typeof Grammar !== 'undefined') return new Grammar('grammar');
             if (mode === 'context' && typeof Context !== 'undefined') return new Context('context');
+            if (mode === 'chat' && typeof Chat !== 'undefined') return new Chat('chat');
         } catch (e) {
             L('[DailySession] construct mode failed', mode, e);
         }
@@ -2046,5 +2125,8 @@ if (typeof window !== 'undefined') {
     window.countPlanWordUnits = countPlanWordUnits;
     window.emptySessionStats = emptySessionStats;
     window.sessionModeLabel = sessionModeLabel;
+    window.isSessionModeIncluded = isSessionModeIncluded;
+    window.enabledDueModes = enabledDueModes;
     window.DAILY_SESSION_LS_KEY = DAILY_SESSION_LS_KEY;
+    window.MULTI_ATTEMPT_MODES = MULTI_ATTEMPT_MODES;
 }

@@ -770,7 +770,7 @@ Each follow-up that touches `public/` **must** sync APK assets and bump cache-bu
 - [x] Path settings markup in `settings_html.js` + sync in `ui_settings.js` (not home chips)
 - [x] Unit tests `tests/unit/sentence_utils.test.js`
 - [x] `index.html` script tags ordered correctly
-- [ ] Follow-ups F1–F8 (incl. F6b session mode prefs) as product priority allows
+- [x] Follow-ups F1–F8 executed on main (metrics, F6/F6b session modes, morph, map a11y, buildBlocks, e2e, audits)
 
 ---
 

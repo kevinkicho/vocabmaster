@@ -83,4 +83,21 @@ describe('SentenceUtils chunking', () => {
         const blocks = SentenceUtils.chunkSentence('I like this brown bag.', 'en', {});
         expect(blocks.length).toBeGreaterThanOrEqual(4);
     });
+
+    it('honors curated buildBlocks when they reassemble the sentence (F7)', () => {
+        const item = {
+            ja: '茶色',
+            ja_ex: 'この茶色のかばんが好きです。',
+            buildBlocks: ['この', '茶色の', 'かばんが', '好きです。']
+        };
+        const blocks = SentenceUtils.chunkSentence(item.ja_ex, 'ja', { item });
+        expect(blocks).toEqual(item.buildBlocks);
+    });
+
+    it('matches Russian with Cyrillic morphology extension (F4)', () => {
+        const item = { ru: 'комната', ru_ex: 'Эта комната очень просторная.' };
+        const span = SentenceUtils.findBlankSpan(item.ru_ex, item, 'ru');
+        expect(span).toBeTruthy();
+        expect(span.matched).toContain('комнат');
+    });
 });

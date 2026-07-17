@@ -703,7 +703,10 @@ class App {
                     + '<div class="rounded-[1.5rem] p-5 bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">'
                     + '<p class="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">Today</p>';
                 if (empty) {
-                    todayHtml += '<p class="text-sm font-bold">All caught up — practice freely below, or check back later.</p>';
+                    todayHtml += '<p class="text-sm font-bold">All caught up — practice freely below, or check back later.</p>'
+                        + '<div class="flex flex-wrap gap-2 mt-4">'
+                        + '<button type="button" onclick="app.openSettingsToDailyActivities && app.openSettingsToDailyActivities()" class="px-3 py-1.5 rounded-full bg-white/20 text-white text-[10px] font-bold">Today modes</button>'
+                        + '</div>';
                 } else {
                     todayHtml += '<p class="text-lg font-black tracking-tight">' + dueN + ' due · ' + newN + ' new · ~' + est + ' min</p>'
                         + '<p class="text-[11px] opacity-80 mt-1">Spaced repetition + path words</p>'
@@ -714,6 +717,7 @@ class App {
                     } else {
                         todayHtml += '<button type="button" onclick="app.dailySession.start()" class="px-4 py-2 rounded-full bg-white text-indigo-700 text-xs font-black active:scale-95">Start session</button>';
                     }
+                    todayHtml += '<button type="button" onclick="app.openSettingsToDailyActivities && app.openSettingsToDailyActivities()" class="px-3 py-1.5 rounded-full bg-white/20 text-white text-[10px] font-bold active:scale-95">Today modes</button>';
                     todayHtml += '</div>';
                 }
                 todayHtml += '</div></div>';
@@ -795,12 +799,25 @@ class App {
                 var el = document.getElementById('learning-map-root');
                 if (el) el.remove();
             }
-            root.querySelector('#learning-map-close').onclick = close;
+            function onEsc(e) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    doClose();
+                }
+            }
+            function doClose() {
+                document.removeEventListener('keydown', onEsc, true);
+                var el = document.getElementById('learning-map-root');
+                if (el) el.remove();
+            }
+            document.addEventListener('keydown', onEsc, true);
+            root.querySelector('#learning-map-close').onclick = doClose;
             root.querySelector('#learning-map-backdrop').addEventListener('click', function (e) {
-                if (e.target && e.target.id === 'learning-map-backdrop') close();
+                if (e.target && e.target.id === 'learning-map-backdrop') doClose();
             });
             root.querySelector('#learning-map-continue').onclick = function () {
-                close();
+                doClose();
                 if (self.dailySession && self.dailySession.hasResumableSession && self.dailySession.hasResumableSession()) {
                     self.dailySession.continue();
                 } else if (self.dailySession && self.dailySession.start) {
@@ -808,17 +825,24 @@ class App {
                 }
             };
             root.querySelector('#learning-map-placement').onclick = function () {
-                close();
+                doClose();
                 if (self.learningPath.startPlacement) self.learningPath.startPlacement();
             };
             root.querySelectorAll('[data-unit-index]').forEach(function (btn) {
+                btn.setAttribute('aria-current', btn.className.indexOf('ring-2') !== -1 ? 'true' : 'false');
                 btn.onclick = function () {
                     var idx = parseInt(btn.getAttribute('data-unit-index'), 10);
                     if (self.learningPath.selectUnit) self.learningPath.selectUnit(idx);
-                    close();
+                    doClose();
                     self.goHome(false);
                 };
             });
+            // Focus first interactive control (a11y F5)
+            setTimeout(function () {
+                var first = root.querySelector('[data-unit-index]:not([disabled])') ||
+                    root.querySelector('#learning-map-continue');
+                if (first) first.focus();
+            }, 30);
         } catch (e) {
             L('[Path] openLearningMap failed', e);
             if (this.ui && this.ui.showToast) this.ui.showToast('Could not open learning map', 'error');
@@ -892,6 +916,25 @@ class App {
             el.classList.add('hidden'); 
             if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' });
         }
+    }
+
+    /**
+     * F6b: open Settings scrolled to Daily activities (Today mode prefs).
+     */
+    openSettingsToDailyActivities() {
+        this.modal(true);
+        requestAnimationFrame(function () {
+            var section = document.getElementById('settings-daily-activities');
+            if (section && typeof section.scrollIntoView === 'function') {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                try {
+                    section.classList.add('ring-2', 'ring-indigo-400', 'rounded-xl');
+                    setTimeout(function () {
+                        section.classList.remove('ring-2', 'ring-indigo-400', 'rounded-xl');
+                    }, 1600);
+                } catch (_) {}
+            }
+        });
     }
 }
 

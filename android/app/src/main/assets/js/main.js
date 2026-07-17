@@ -311,10 +311,21 @@ class App {
 
         // --- AUTH & UI LISTENER (Central Control Tower) ---
         if(typeof firebase !== 'undefined' && typeof auth !== 'undefined') {
-            // Handle OAuth redirect result (from signInWithRedirect in WebView)
-            auth.getRedirectResult().catch(e => {
+            // Handle OAuth redirect result (WebView + COOP fallback path)
+            auth.getRedirectResult().then(function (result) {
+                if (result && result.user && !result.user.isAnonymous) {
+                    L('[Auth] Redirect sign-in complete', result.user.email);
+                    try {
+                        if (app.ui && app.ui.showToast) {
+                            app.ui.showToast('Signed in as ' + (result.user.email || result.user.displayName || 'Google'), 'success');
+                        }
+                    } catch (_) {}
+                }
+            }).catch(function (e) {
                 // Redirect OAuth not supported from file:// origin (APK WebView)
-                // This is expected; silently ignore
+                if (e && e.code && e.code !== 'auth/operation-not-supported-in-this-environment') {
+                    L('[Auth] getRedirectResult:', e);
+                }
             });
             auth.onAuthStateChanged(user => {
                 L("Auth State Changed:", user ? user.email : "None");
@@ -522,21 +533,43 @@ class App {
             } else if (isFileOrigin) {
                 window.location.href = 'https://vocabmaster112225.web.app/';
             } else {
-                // Web browser: use popup. If COOP headers block window.close
-                // (Cross-Origin-Opener-Policy), Firebase throws
-                // auth/popup-blocked or auth/cancelled-popup-request. We
-                // catch those silently and fall back to redirect.
-                auth.signInWithPopup(provider).catch(e => {
-                    L("Login Error:", e);
-                    resetBtn();
-                    if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request' || (e.message && e.message.includes('Cross-Origin-Opener-Policy'))) {
-                        // COOP blocked the popup — fall back to redirect
-                        L("Popup blocked, falling back to signInWithRedirect");
-                        auth.signInWithRedirect(provider);
-                    } else if (e.code !== 'auth/popup-closed-by-user') {
-                        app.ui.showToast("Login Failed: " + e.message, 'error');
-                    }
-                });
+                // Web: prefer popup when COOP allows popups. Hosting/Vite set
+                // Cross-Origin-Opener-Policy: same-origin-allow-popups so
+                // Firebase can poll window.closed without console errors.
+                // If the page is fully crossOriginIsolated (stricter COOP),
+                // popup cannot observe the OAuth window — use redirect.
+                var useRedirect = false;
+                try {
+                    useRedirect = !!window.crossOriginIsolated;
+                } catch (_) { useRedirect = false; }
+
+                if (useRedirect) {
+                    L('[Auth] crossOriginIsolated — using signInWithRedirect');
+                    auth.signInWithRedirect(provider).catch(function (e) {
+                        L('Login redirect error:', e);
+                        resetBtn();
+                        if (app.ui) app.ui.showToast('Login Failed: ' + (e.message || e), 'error');
+                    });
+                } else {
+                    auth.signInWithPopup(provider).then(function () {
+                        // onAuthStateChanged updates the login button
+                        resetBtn();
+                    }).catch(function (e) {
+                        L('Login Error:', e);
+                        resetBtn();
+                        // Popup blocked / cancelled → redirect fallback
+                        if (e.code === 'auth/popup-blocked' ||
+                            e.code === 'auth/cancelled-popup-request' ||
+                            (e.message && e.message.indexOf('Cross-Origin-Opener-Policy') !== -1)) {
+                            L('[Auth] Popup blocked by COOP/browser — falling back to redirect');
+                            auth.signInWithRedirect(provider).catch(function (e2) {
+                                if (app.ui) app.ui.showToast('Login Failed: ' + (e2.message || e2), 'error');
+                            });
+                        } else if (e.code !== 'auth/popup-closed-by-user') {
+                            if (app.ui) app.ui.showToast('Login Failed: ' + e.message, 'error');
+                        }
+                    });
+                }
             }
         } catch (e) {
             L("handleAuthClick crashed:", e);

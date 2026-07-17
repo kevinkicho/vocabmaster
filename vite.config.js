@@ -16,11 +16,18 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: true,
-    open: false
+    open: false,
+    // Allow Firebase Auth popup to poll window.closed (avoids COOP console errors)
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'
+    }
   },
   preview: {
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'
+    }
   },
   appType: 'mpa',
   test: {

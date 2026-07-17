@@ -6,11 +6,11 @@
 | **Author** | VocabMaster design (AI-assisted) |
 | **Date** | 2026-07-17 |
 | **Status** | **Implemented on main (v1)** — core of Parts A–D shipped in `19a1300` and related path/FAB work |
-| **Revision** | 3 |
+| **Revision** | 4 |
 | **Audience** | Engineers maintaining path home UX, Sentences mode, Sentence Build, and shared `SentenceUtils` |
 | **Branch policy** | **main only** — incremental, reviewable commits/PRs; preserve Today + memory + path |
 | **Related** | `docs/memory-engine-daily-session.md`, `docs/tiered-learning-ai-engagement-fab-chat.md`, `docs/architecture.md` §3.4–3.5, `AGENTS.md` |
-| **Primary code** | `public/js/sentence_utils.js`, `public/js/game_sentences.js`, `public/js/game_sentence_build.js`, `public/js/learning_path.js`, `public/js/main.js`, `public/js/analytics.js`, `public/js/settings_html.js` (path radios markup), `public/js/ui_settings.js` (path settings sync), `public/js/daily_session.js` (Today compose / multi-attempt — F6), `tests/unit/sentence_utils.test.js`, `public/index.html` |
+| **Primary code** | `public/js/sentence_utils.js`, `public/js/game_sentences.js`, `public/js/game_sentence_build.js`, `public/js/learning_path.js`, `public/js/main.js`, `public/js/analytics.js`, `public/js/settings_html.js` (path radios markup), `public/js/ui_settings.js` (path settings sync), `public/js/daily_session.js` (Today compose / multi-attempt — F6/F6b), `tests/unit/sentence_utils.test.js`, `public/index.html` |
 | **Key commit** | `19a1300` — *feat: learning map UX, sentences cloze fix, Sentence Build activity* |
 
 ### Revision history
@@ -20,6 +20,7 @@
 | 1 | 2026-07-17 | Formal design of shipped v1 + follow-up backlog (offline blank index, data quality, map polish, E2E) |
 | 2 | 2026-07-17 | Review fixes: soft-unlock wording consistency; F6 Daily Session multi-attempt checklist; map `placementStatus` side effect; `settings_html.js` anchors; euro morph / `ru` caveat; F1 baseline artifact requirement |
 | 3 | 2026-07-17 | Re-review polish: Alternatives soft-unlock decision wording; Part C `buildPlan` truth table (drop false dictation compose claim) |
+| 4 | 2026-07-17 | Owner decisions: OQ1 session mode prefs + Today include-all-with-skip; OQ2 first-check FSRS; OQ7 keep placement pending on map opt-in |
 
 ---
 
@@ -187,7 +188,7 @@ Opening the map from free mode (and the home “Continue with guided” button) 
 
 **v1 product truth:** This placement flip is **live behavior**, not accidental. No code path auto-launches Placement solely because status is `'pending'` — impact is latent on profile shape / future gates / Settings status. Engineers must not assume map open only touches `pathMode` + unit 0.
 
-**Not a v1 code change requirement:** If product later wants “map browsing without placement pending,” that is an explicit follow-up (call a no-placement guided entry or clear `pending` when skipping). Until then, document and preserve the side effect.
+**Owner decision (OQ7, final):** **Keep current behavior.** Soft-encourage placement via `pending` is OK. Do **not** clear or bypass this side effect on map opt-in.
 
 #### Unlock rules (`listUnitsForMap`)
 
@@ -434,9 +435,11 @@ Style constraints (AGENTS.md): custom palette colors without `/opacity` modifier
 
 **Why multi-attempt matters:** Sentence Build’s free-play product model is **miss → reveal correct order → allow retry** (`_done = false` after ~1.2s). Under Daily Session, `attachController` wraps `miss`/`score` → `onGraded`. Modes **not** in `MULTI_ATTEMPT_MODES` treat the first incorrect Check as a **terminal** Again + resolve + reinsert, while the UI still lets the learner re-Check — step completion and FSRS desync.
 
-**Free-play FSRS double-grade (known):** Each `miss()` and later successful `score()` can both call `recordAttempt` → memory review via `MEMORY_AUTO_MODES`. Open Question #2 / F6 decide whether free-play should be first-grade-only.
+**Free-play FSRS — owner decision (OQ2, final): first Check only.** Only the **first** grade on a card writes memory via `recordAttempt` / FSRS. Retries after miss (reveal → re-Check) are practice only — no extra FSRS hits. **Not yet implemented on main** (today each `miss()` then later `score()` can both review); implement with F6 free-play policy item.
 
-Cross-reference: multi-attempt deferral semantics live in `public/js/daily_session.js` (`MULTI_ATTEMPT_MODES`, `onGraded`) and are described for Quiz/Dictation in `docs/memory-engine-daily-session.md` (step completion / grading contract). F6 must mirror that pattern for `sentence_build` **or** drop silent retry under session control.
+**Session path (F6):** multi-attempt single-Again recovery like Quiz remains required when Daily Session owns reviews — independent of free-play first-check (session defers intermediate miss; one terminal FSRS).
+
+Cross-reference: multi-attempt deferral semantics live in `public/js/daily_session.js` (`MULTI_ATTEMPT_MODES`, `onGraded`) and are described for Quiz/Dictation in `docs/memory-engine-daily-session.md` (step completion / grading contract).
 
 #### Acceptance criteria (Part C)
 
@@ -446,7 +449,8 @@ Cross-reference: multi-attempt deferral semantics live in `public/js/daily_sessi
 - [x] `sentence_build` in `MEMORY_AUTO_MODES`.
 - [x] Script tag in `index.html`; global `window.SentenceBuild`.
 - [ ] Playwright E2E happy path (follow-up F8).
-- [ ] Daily Session integration (follow-up **F6** — full checklist in PR Plan; not “just add a weight”).
+- [ ] Daily Session integration (follow-up **F6** multi-attempt + construct/labels; **F6b** session mode inclusion prefs + Today include-all-with-skip).
+- [ ] Free-play first-Check-only FSRS (OQ2 — with F6).
 
 ---
 
@@ -568,7 +572,9 @@ No client writes to `/vocab` from these modes.
 | Sentences | `#sn-text`, `#sn-bottom-text` | Cloze + secondary display |
 | Sentence Build | `#sb-*` | Prompt, tray, pool, actions |
 | Home Context grid | Sentence Build button | Next to Sentences |
-| Daily Session controller | `daily_session.js` | F6: compose, labels, multi-attempt (not wired for `sentence_build` in v1) |
+| Daily Session controller | `daily_session.js` | F6: multi-attempt + construct/labels; F6b: mode inclusion prefs (not wired for `sentence_build` / include-all in v1) |
+| Today card settings chip | home Today card (F6b) | Deep-link → Settings “Daily activities” section |
+| Settings daily activities | `settings_html.js` + `ui_settings.js` (F6b) | Per-mode opt-out (esp. speaking) |
 
 Script load order (`public/index.html` excerpt):
 
@@ -629,12 +635,12 @@ Not a full conjugator — optimized for N5 example coverage.
 | False-positive short CJK substring blank | Wrong pedagogical blank | Longest-first candidates; min length 2; future precompute + manual overrides |
 | Segmenter quality variance across WebViews | Odd block boundaries | Particle merge + balance + vocab anchor; fallback path |
 | Soft unlock too soft / too hard | Frustration or cheese | Formula is all prior + current + one look-ahead (`i ≤ cur+1`); map polish can add mastery *hints* without hard gate |
-| Retry-after-miss on Sentence Build inflates free-play FSRS | Double `recordAttempt` (miss then score) | Open Q #2 / F6: first-grade-only option; free-play monitor |
-| Session desync if F6 ships weight without multi-attempt | Terminal Again while UI retries | **F6 hard requirement:** `MULTI_ATTEMPT_MODES` **or** terminal miss UX — pick one |
+| Retry-after-miss on Sentence Build inflates free-play FSRS | Double `recordAttempt` (miss then score) on main today | **OQ2 decided:** first-Check-only; implement in F6 |
+| Session desync if F6 ships weight without multi-attempt | Terminal Again while UI retries | **F6 hard requirement:** prefer `MULTI_ATTEMPT_MODES.sentence_build` |
 | APK asset desync | Web fixed, APK stale | Mandatory copy of `public/` → `android/.../assets/` on UI PRs |
 | Multi-script globals forgotten | Runtime `undefined` | Always `window.*`; unit tests load via vm context setting `window` |
 | Bad furigana rows | Persistent blank miss | Data cleanup batch (follow-up) |
-| Map open forces guided + may set placement pending | Surprise mode / placement status change | Documented intentional `setPathMode` side effect; free users reverse in Settings; no auto-launch Placement on pending |
+| Map open forces guided + may set placement pending | Surprise mode / placement status change | **OQ7 decided:** keep pending soft-encourage; free users reverse guided in Settings; no auto-launch Placement on pending |
 | Overstated Russian euro morph | False confidence in blank hit for RU | Doc caveat + F4 Cyrillic morph follow-up |
 
 ---
@@ -660,13 +666,20 @@ Not a full conjugator — optimized for N5 example coverage.
 
 ## Open Questions
 
-1. Should Daily Session **auto-include** `sentence_build` in the default mode rotation, and at what weight vs `sentences`? (Blocked on F6 product decision; engineering checklist still required either way.)
-2. Should incorrect Sentence Build Check **re-grade** multiple times for FSRS in **free-play**, or only first Check per card? (Session path must use multi-attempt single-Again recovery like Quiz — see F6 — independent of free-play choice.)
+### Resolved (owner 2026-07-17)
+
+| # | Question | Decision |
+|---|----------|----------|
+| **1** | Today mode rotation / include `sentence_build`? | **YES — try to include all games** in Daily Session, with user ability to **skip** / opt out of activities they dislike (esp. speaking). Settings modal gets **daily activity / session mode inclusion prefs**. Today card chip/control deep-links into Settings at that section. Shipped via **F6 + F6b** (not a single-mode weight). |
+| **2** | Free-play Sentence Build FSRS on retries? | **First Check only.** Only the first grade writes memory; retries are practice without extra FSRS hits. |
+| **7** | Map opt-in placement pending? | **Keep current.** `setPathMode('guided')` may set `placementStatus` skipped→pending; soft encourage placement is OK. |
+
+### Still open
+
 3. For multi-gloss answers in Sentences choices, should distractors/correct display prefer the **matched surface** (`cloze.matched`) over full multi-gloss headword?
 4. Map **tier switcher** in-sheet vs only via Settings/placement?
 5. Precomputed blanks: store under `/vocab` (global) or user-agnostic Cloud Storage artifact built at deploy time?
 6. KO honorific endings / ZH 了/过/着 — same merge table pattern as JA particles?
-7. Should map opt-in stop flipping `placementStatus` skipped → pending (keep guided without placement pressure)?
 
 ---
 
@@ -674,17 +687,20 @@ Not a full conjugator — optimized for N5 example coverage.
 
 1. **Home primary path actions are Learning map + Continue** — free/guided and freePlayScope are Settings-only power controls (markup `settings_html.js`, sync `ui_settings.js`).
 2. **Soft unlock** for units: unit `i` is unlocked iff `i ≤ currentUnitIndex + 1` — **all earlier units + current + at most one look-ahead**; not mastery-hard-gated. (Do not reinterpret as “only current±1.”)
-3. **Opening Learning map from free mode opts into guided** and ensures unit 0 — map is a guided surface. **Also** inherits `setPathMode('guided')` side effect: `placementStatus` `'skipped'` → `'pending'` (no auto Placement launch on pending alone).
+3. **Opening Learning map from free mode opts into guided** and ensures unit 0 — map is a guided surface. **Also** inherits `setPathMode('guided')` side effect: `placementStatus` `'skipped'` → `'pending'` (no auto Placement launch on pending alone). **OQ7: keep this soft placement encourage.**
 4. **Shared `SentenceUtils`** owns cloze + chunking; game modes only wire UI.
 5. **Blank matching priority:** exact / **Latin-script** euro morphology → CJK longest substring ≥ 2; candidates from headword + secondary readings + multi-gloss + light JA conjugation. Russian morph extension is not claimed in v1 (exact + `ru_tr`).
 6. **Honest miss:** if no span found, show full sentence unmasked rather than a random blank.
-7. **Sentence Build mode key `sentence_build`** is in **`MEMORY_AUTO_MODES`** with other recognition/production drills (free-play). **Today inclusion is F6**, not v1.
+7. **Sentence Build mode key `sentence_build`** is in **`MEMORY_AUTO_MODES`** with other recognition/production drills (free-play). Today inclusion is **F6/F6b**, not v1 ship.
 8. **Chunking stack:** `Intl.Segmenter` → fallback → punct merge → JA particles → vocab anchor → balance 2–8.
 9. **No heavy dictionary segmenters in client v1**; optional offline RTDB enrichment later.
 10. **Cross-script exports via `window.*`** only; APK assets are a separate copy that must be synced.
 11. **explainLang remains presetSource-derived**; never a separate pref.
 12. **main-only branch policy**; document status = Implemented on main (v1) with explicit follow-up PRs.
-13. **F6 must not ship compose weight alone** — multi-attempt controller semantics (or terminal-miss UX) + labels + construct branch are part of the same PR acceptance.
+13. **F6 engineering completeness:** multi-attempt controller semantics (prefer `MULTI_ATTEMPT_MODES.sentence_build`) + labels + construct branch; do not ship compose emission without these.
+14. **OQ1 — Today include-all-with-skip:** Daily Session should aim to include **all practice games** (including `sentence_build`, `sentences`, speaking modes, etc.) subject to **per-mode inclusion prefs** and in-session **skip**. Users who dislike speaking (or any mode) opt out in Settings; session length/intensity still caps total steps.
+15. **OQ1 — Session mode inclusion prefs UI:** Settings modal has a **Daily activities / session modes** section (toggles opt-out). A chip/control on the **Today card** on home opens Settings **scrolled/focused** to that section (deep-link).
+16. **OQ2 — Free-play Sentence Build FSRS is first-Check-only:** only the first grade on a card updates memory; subsequent Check after retry does not re-apply FSRS.
 
 ---
 
@@ -708,25 +724,37 @@ Not a full conjugator — optimized for N5 example coverage.
 | **F2** | Furigana / multi-gloss data cleanup | Batch fix bad `ja_furi` / primary sense order; re-run F1 | Hit rate ↑; sample audit of tier1 |
 | **F3** | Offline blank index (optional RTDB fields) | Precompute `blanks/{lang}`; client prefer span if present | Fallback still works offline without fields |
 | **F4** | JA conjugation + KO/ZH merge + RU morph | Expand stems; measure-word / ending merges; **Cyrillic / unicode morph extension** for `ru` (or document continued exact-only); more unit tests | New tests green; no block join regressions; ru morph either improved or explicitly out of scope with test |
-| **F5** | Learning map polish | Tier switcher, unit detail sheet, Escape/focus trap, `aria-current`, light animations; optional placement-pending policy on map open | a11y checklist; no path data model break |
-| **F6** | Sentence Build in Today compose | Full Daily Session integration — **not** “add weight only” | See **F6 acceptance checklist** below |
+| **F5** | Learning map polish | Tier switcher, unit detail sheet, Escape/focus trap, `aria-current`, light animations (placement-pending on map opt-in **kept** per OQ7) | a11y checklist; no path data model break |
+| **F6** | Sentence Build session controller + first-check FSRS | Multi-attempt, construct, labels, free-play first-Check FSRS; wire `sentence_build` into compose when prefs allow | See **F6 acceptance checklist** below |
+| **F6b** | Session mode inclusion prefs + Today deep-link | Include-all-with-skip product surface: Settings toggles for daily activities; `buildPlan` filters by prefs; Today card chip → Settings section | See **F6b acceptance checklist** below |
 | **F7** | Curated blocks for hard rows | Optional `buildBlocks` enrichment for long/complex examples | Only overrides when present |
-| **F8** | Playwright E2E | Cloze blank visible on known fixture word; Sentence Build reorder happy path; map open/select | CI stable on main |
+| **F8** | Playwright E2E | Cloze blank visible on known fixture word; Sentence Build reorder happy path; map open/select; prefs opt-out | CI stable on main |
 
 #### F6 acceptance checklist (blocking before implementation)
 
-Must complete **all** items (or document an explicit product “out of scope” for compose emission — still fix construct/labels if any path can emit the mode):
+Must complete **all** items for `sentence_build` (and same multi-attempt pattern for any newly composed multi-retry modes):
 
-- [ ] **Compose / plan emission:** Product decision on weight vs `sentences` (and whether due segment rotates build); implement in `buildPlan` / intensity defaults only if “yes.”
+- [ ] **Compose emission (owner OQ1):** Include `sentence_build` when the mode is enabled in session mode prefs (default **on**). Do not hardcode a one-off weight-only hack — prefer shared rotation with F6b prefs.
 - [ ] **`_constructMode('sentence_build')`:** Explicit branch constructing `new SentenceBuild('sentence_build')` (do not rely solely on `launchGameMode` fallthrough).
 - [ ] **`SESSION_MODE_LABELS.sentence_build`:** User-facing label (e.g. `'Sentence Build'`) for progress chrome.
-- [ ] **Multi-attempt vs terminal miss (pick exactly one):**
-  - **Preferred (matches free-play pedagogy):** add `sentence_build: true` to `MULTI_ATTEMPT_MODES` so intermediate `miss` defers resolve/reinsert/FSRS; terminal correct after miss = single **Again** + reinsert once (mirror Quiz in `onGraded`); **or**
-  - **Alternative:** change Sentence Build under session ownership to **terminal miss** (no silent re-Check / no `_done = false` retry) so first incorrect Check finishes the grade contract.
-- [ ] **Free-play FSRS policy (ties Open Q #2):** if product chooses single review per card, implement first-grade-only memory for free-play retries; if not, document double-grade as accepted.
-- [ ] **Test:** intermediate miss does **not** finish the Daily Session step; terminal correct recovers as Again once (mirror Quiz multi-attempt tests).
-- [ ] **Docs cross-link:** update or reference multi-attempt rules in `docs/memory-engine-daily-session.md` when F6 lands.
+- [ ] **Multi-attempt (owner-aligned):** add `sentence_build: true` to `MULTI_ATTEMPT_MODES` so intermediate `miss` defers resolve/reinsert/FSRS; terminal correct after miss = single **Again** + reinsert once (mirror Quiz in `onGraded`). Terminal-miss UX is **not** the chosen free-play pedagogy.
+- [ ] **Free-play FSRS (OQ2 final):** first-Check-only — only the first grade on a card applies memory; retries after reveal do not call `memory.review` again (e.g. `skipMemory` / mode flag after first grade).
+- [ ] **Test:** intermediate miss does **not** finish the Daily Session step; terminal correct recovers as Again once (mirror Quiz multi-attempt tests). Free-play: second correct after miss does not double-apply FSRS.
+- [ ] **Docs cross-link:** update or reference multi-attempt + first-check rules in `docs/memory-engine-daily-session.md` when F6 lands.
 - [ ] APK asset sync for any `public/js/daily_session.js` / game changes.
+
+#### F6b acceptance checklist (session mode inclusion prefs — OQ1)
+
+Can land with or immediately after F6; blocks “include all games” product goal:
+
+- [ ] **Prefs model:** per-mode (or per-family, e.g. speaking) inclusion flags stored with session/prefs (defaults: all included). Speaking activities opt-out is a first-class case.
+- [ ] **Settings UI:** section in Settings modal (e.g. “Daily activities” / “Today modes”) with toggles; markup in `settings_html.js`, bind/sync in `ui_settings.js` / prefs registry as project patterns require.
+- [ ] **`buildPlan` / compose:** only emit steps for modes the user has included; still respect intensity caps (`maxNew` / `maxDue` / target total). Prefer variety across enabled modes rather than quiz-only when alternatives are on.
+- [ ] **In-session skip:** user can skip a step/mode when they do not want that activity right now (without disabling the pref permanently).
+- [ ] **Today card deep-link:** chip/control on the Today card opens Settings modal **scrolled/focused** to the daily activities section (not a second prefs UI on home).
+- [ ] **Wire legacy `includeDictation`:** either map into the new prefs or remove dead default once F6b owns inclusion.
+- [ ] Tests: opted-out speaking mode never appears in plan; deep-link opens correct settings section.
+- [ ] APK asset sync.
 
 Each follow-up that touches `public/` **must** sync APK assets and bump cache-bust query params on `index.html` script tags as project convention.
 
@@ -742,7 +770,7 @@ Each follow-up that touches `public/` **must** sync APK assets and bump cache-bu
 - [x] Path settings markup in `settings_html.js` + sync in `ui_settings.js` (not home chips)
 - [x] Unit tests `tests/unit/sentence_utils.test.js`
 - [x] `index.html` script tags ordered correctly
-- [ ] Follow-ups F1–F8 as product priority allows
+- [ ] Follow-ups F1–F8 (incl. F6b session mode prefs) as product priority allows
 
 ---
 
@@ -765,4 +793,4 @@ Each follow-up that touches `public/` **must** sync APK assets and bump cache-bu
 
 ---
 
-*End of design document — rev 3, 2026-07-17. Status: Implemented on main (v1); review + re-review polish applied.*
+*End of design document — rev 4, 2026-07-17. Status: Implemented on main (v1); owner OQ1/OQ2/OQ7 decisions incorporated.*

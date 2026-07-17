@@ -41,6 +41,35 @@ function assignGameList(game) {
 }
 window.assignGameList = assignGameList;
 
+/**
+ * Modals that must suppress game keyboard nav while open.
+ * Cornerstone: single source of truth for "chrome owns input".
+ */
+var GAME_KEY_SUPPRESS_MODAL_IDS = [
+    'modal-settings', 'modal-stats', 'modal-profile', 'modal-note',
+    'modal-edit', 'learning-map-root', 'chat-sheet-root'
+];
+
+function isGameKeyChromeBlocking() {
+    try {
+        if (window.ChatFAB && typeof ChatFAB.isOpen === 'function' && ChatFAB.isOpen()) return true;
+    } catch (_) {}
+    var modalLike = {
+        'modal-settings': 1, 'modal-stats': 1, 'modal-profile': 1,
+        'modal-note': 1, 'modal-edit': 1
+    };
+    for (var i = 0; i < GAME_KEY_SUPPRESS_MODAL_IDS.length; i++) {
+        var id = GAME_KEY_SUPPRESS_MODAL_IDS[i];
+        var el = document.getElementById(id);
+        if (!el) continue;
+        if (el.classList && el.classList.contains('hidden')) continue;
+        if (modalLike[id]) return true;
+        // Overlay roots: only when they have content mounted
+        if (el.innerHTML && String(el.innerHTML).trim().length > 0) return true;
+    }
+    return false;
+}
+
 class GameMode {
     constructor(key) {
         this.key = key;
@@ -51,9 +80,20 @@ class GameMode {
         this.root = document.getElementById('app-view');
         this.busy = false;
         this.answered = false;
-        this.timeouts = []; 
+        this.timeouts = [];
+        /** Resolvers for in-flight waitAndNav delays — destroy() must settle them. */
+        this._waitResolvers = [];
         this.uiTimer = null; 
-        this.selectedEl = null; 
+        this.selectedEl = null;
+        /** Lifecycle: true after destroy(); all async paths must no-op. */
+        this._destroyed = false;
+        /** Bumped on destroy / cancel so in-flight waitAndNav no-ops. */
+        this._lifecycleGen = 0;
+        /** Bumped each afterRender start; late fits ignore stale gen. */
+        this._renderGen = 0;
+        /** Stable key handler identity for idempotent bind/unbind. */
+        this.boundHandleKey = null;
+        this._keysBound = false;
         
         // Caching DOM elements to avoid querySelector re-runs
         this.dom = {}; 
@@ -89,19 +129,26 @@ class GameMode {
         }
         
         this.onWindowResize = () => {
+            if (this._destroyed) return;
             if(this.resizeTimeout) clearTimeout(this.resizeTimeout);
             this.resizeTimeout = setTimeout(() => {
-                app.fitter.fitAll();
+                if (this._destroyed) return;
+                if (app.fitter) app.fitter.fitAll();
                 if(typeof this.handleResize === 'function') this.handleResize();
             }, 100);
         };
         window.addEventListener('resize', this.onWindowResize);
         this.bindKeys();
     }
+
+    /** True if this instance should ignore input/async work. */
+    isAlive() {
+        return !this._destroyed;
+    }
     
     // --- INPUT HANDLING ---
     handleInput(el, text, lang, onConfirm) {
-        if (this.busy || this.answered) return;
+        if (this._destroyed || this.busy || this.answered) return;
         const mode = app.store.prefs.globalClickMode || 'double';
 
         if (mode === 'single') {
@@ -121,14 +168,29 @@ class GameMode {
         }
     }
     
+    /**
+     * Idempotent keyboard bind: always unbind first; single stable handler fn.
+     * Cornerstone: never stack document keydown listeners.
+     */
     bindKeys() {
-        this.boundHandleKey = (e) => this.handleKey(e);
+        if (this._destroyed) return;
+        this.unbindKeys();
+        if (!this.boundHandleKey) {
+            var self = this;
+            this.boundHandleKey = function (e) { self.handleKey(e); };
+        }
         document.addEventListener('keydown', this.boundHandleKey);
+        this._keysBound = true;
     }
-    unbindKeys() { document.removeEventListener('keydown', this.boundHandleKey); }
+    unbindKeys() {
+        if (this.boundHandleKey) {
+            document.removeEventListener('keydown', this.boundHandleKey);
+        }
+        this._keysBound = false;
+    }
     handleKey(e) {
-        if (document.getElementById('modal-note') && !document.getElementById('modal-note').classList.contains('hidden')) return;
-        if (document.getElementById('modal-settings') && !document.getElementById('modal-settings').classList.contains('hidden')) return;
+        if (this._destroyed || this.busy) return;
+        if (isGameKeyChromeBlocking()) return;
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
         const k = e.key.toLowerCase();
         if (['arrowright', 'enter', ' ', 'd', 'w'].includes(k)) { e.preventDefault(); this.triggerAction('next'); }
@@ -136,11 +198,15 @@ class GameMode {
         else if (k === 'arrowup') { e.preventDefault(); this.triggerAction('up'); }
         else if (k === 'arrowdown') { e.preventDefault(); this.triggerAction('down'); }
     }
-    triggerAction(action) { if (action === 'next' || action === 'up') this.nav(1); else if (action === 'prev' || action === 'down') this.nav(-1); }
+    triggerAction(action) {
+        if (this._destroyed || this.busy) return;
+        if (action === 'next' || action === 'up') this.nav(1);
+        else if (action === 'prev' || action === 'down') this.nav(-1);
+    }
     
     // --- NAVIGATION ---
     nav(d) {
-        if(this.busy) return;
+        if (this._destroyed || this.busy) return;
         if(app.ui) app.ui.hideTooltip();
         this.selectedEl = null;
 
@@ -209,6 +275,7 @@ class GameMode {
     setTimeout(fn, delay) { const id = window.setTimeout(fn, delay); this.timeouts.push(id); return id; }
     
     score(pts=10, wordId=null, meta) {
+        if (this._destroyed) return;
         app.score = Math.max(0, Number(app.score) || 0);
         const numPts = Math.max(0, Number(pts) || 0);
         app.score += numPts;
@@ -230,6 +297,7 @@ class GameMode {
     }
 
     miss(wordId=null, meta) {
+        if (this._destroyed) return;
         const wId = wordId !== null ? wordId : (this.list && this.list[this.i] ? this.list[this.i].id : null);
         // Optional meta forwarded to analytics; miss defaults to Again via binary map
         if(app.analytics && wId !== null) app.analytics.recordAttempt(wId, this.key, false, meta);
@@ -245,18 +313,39 @@ class GameMode {
         } catch (_) {}
     }
 
+    /**
+     * Free-play cancelable wait then nav. Tracks timeout on this.timeouts so
+     * destroy() clears it. Lifecycle gen no-ops if destroyed mid-wait.
+     * Daily Session replaces this with its own cancelable wrapper.
+     */
     async waitAndNav(audioPromise, fallbackDelay = 1500) {
-        const wait = app.store.prefs.audioWait;
+        if (this._destroyed) return;
+        const gen = this._lifecycleGen;
+        const wait = app.store && app.store.prefs ? app.store.prefs.audioWait : true;
         try {
             if (wait && audioPromise) {
                 await audioPromise;
             } else {
-                await new Promise(r => setTimeout(r, fallbackDelay));
+                var self = this;
+                await new Promise(function (resolve) {
+                    var settled = false;
+                    var done = function () {
+                        if (settled) return;
+                        settled = true;
+                        resolve();
+                    };
+                    var tid = setTimeout(done, fallbackDelay != null ? fallbackDelay : 1500);
+                    if (!self.timeouts) self.timeouts = [];
+                    self.timeouts.push(tid);
+                    if (!self._waitResolvers) self._waitResolvers = [];
+                    self._waitResolvers.push(done);
+                });
             }
         } catch (e) {
             L('[GameCore] waitAndNav audio error:', e);
         }
-        this.busy = false; 
+        if (this._destroyed || this._lifecycleGen !== gen) return;
+        this.busy = false;
         this.nav(1);
     }
 
@@ -496,32 +585,70 @@ class GameMode {
     }
 
     destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        this._lifecycleGen = (this._lifecycleGen || 0) + 1;
+        this._renderGen = (this._renderGen || 0) + 1;
+        this.busy = true; // block further nav/input
         // Learning Loop — end session before cleanup
         if (app && app.learningLoop) {
-            app.learningLoop.endSession({ completed: true, accuracy: this._getSessionAccuracy() });
+            try {
+                app.learningLoop.endSession({ completed: true, accuracy: this._getSessionAccuracy() });
+            } catch (_) {}
         }
-        if(app.analytics) app.analytics.endSession();
-        this.timeouts.forEach(id => clearTimeout(id));
+        if(app.analytics) {
+            try { app.analytics.endSession(); } catch (_) {}
+        }
+        // Settle in-flight waitAndNav promises before clearing timers (avoid hung awaits)
+        if (this._waitResolvers && this._waitResolvers.length) {
+            this._waitResolvers.slice().forEach(function (r) {
+                try { r(); } catch (_) {}
+            });
+            this._waitResolvers = [];
+        }
+        if (this.timeouts && this.timeouts.length) {
+            this.timeouts.forEach(function (id) { clearTimeout(id); });
+        }
         if(this.uiTimer) clearTimeout(this.uiTimer);
+        if (this.resizeTimeout) clearTimeout(this.resizeTimeout);
         this.timeouts = [];
-        window.removeEventListener('resize', this.onWindowResize);
+        if (this.onWindowResize) {
+            window.removeEventListener('resize', this.onWindowResize);
+        }
         this.unbindKeys();
         if(app.ui) app.ui.hideTooltip();
     }
     
-    async afterRender() { 
-        await app.fitter.fitAll();
+    async afterRender() {
+        if (this._destroyed) return;
+        const gen = ++this._renderGen;
+        if (app.fitter) await app.fitter.fitAll();
+        if (this._destroyed || this._renderGen !== gen) return;
         if(this.list && this.list[this.i] && app.notes) { 
             if (this.key !== 'match') {
                 app.notes.check(this.list[this.i].id); 
             }
         }
+        if (this._destroyed || this._renderGen !== gen) return;
         // Optimization: scope querySelector to this.root
-        const targets = this.root.querySelectorAll('.fit-target');
-        targets.forEach(el => { if (el.innerHTML.indexOf('<span class="hanzi-char') === -1) { el.innerHTML = this.wrapHanzi(el.innerText); } });
+        if (this.root) {
+            const targets = this.root.querySelectorAll('.fit-target');
+            targets.forEach(el => { if (el.innerHTML.indexOf('<span class="hanzi-char') === -1) { el.innerHTML = this.wrapHanzi(el.innerText); } });
+        }
         if(app.notes) app.notes.attachTooltipListeners();
         
         // Use requestAnimationFrame for smoother visibility toggle
-        requestAnimationFrame(() => { if(this.root) this.root.classList.add('visible'); });
+        var self = this;
+        requestAnimationFrame(function () {
+            if (self._destroyed || self._renderGen !== gen) return;
+            if (self.root) self.root.classList.add('visible');
+        });
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.GameMode = GameMode;
+    window.assignGameList = assignGameList;
+    window.GAME_KEY_SUPPRESS_MODAL_IDS = GAME_KEY_SUPPRESS_MODAL_IDS;
+    window.isGameKeyChromeBlocking = isGameKeyChromeBlocking;
 }

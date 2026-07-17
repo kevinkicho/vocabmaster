@@ -155,6 +155,23 @@ User-facing copy uses plain language (“Today”, due/new, spaced repetition). 
 
 Per AGENTS.md: "Never use mock data. Never create mock data. Always use real AI." Mock data would silently mask RTDB connection failures, leading to confusing behavior (stories generated from "Test 0" / "Test 1" etc.).
 
+### 3.7 UI lifecycle contracts (cornerstone)
+
+These invariants prevent races/duplicate events without changing visual UX:
+
+| Contract | Location | Rule |
+|----------|----------|------|
+| **Game `_destroyed`** | `game_core.js` | After `destroy()`, `score`/`miss`/`nav`/`waitAndNav`/`bindKeys` no-op; `_lifecycleGen` bumps |
+| **Cancelable free-play wait** | `GameMode.waitAndNav` | Delays tracked on `timeouts` + `_waitResolvers`; destroy settles resolvers then clears timers |
+| **Idempotent keys** | `bindKeys` | Always unbind first; single stable `boundHandleKey` (no stacked document listeners) |
+| **Chrome owns keyboard** | `isGameKeyChromeBlocking()` | Settings/stats/profile/note/edit + learning map + FAB sheet suppress game keys |
+| **Single-flight nav** | `App._navLock` | `goHome` / `launch` / `goBack` cannot interleave (8s lock expiry safety) |
+| **History** | `popstate` | `session-complete` → dismiss summary; `game`/`subgame`/`dailySession` → goHome (pause); `home` → goHome |
+| **Session wait** | `daily_session` wrapper | Honors `_destroyed` + `_lifecycleGen` + `_navGen` |
+| **Render gen** | `afterRender` | Late `fitAll` ignored if `_renderGen` advanced (nav/destroy) |
+
+Unit tests: `tests/unit/game_lifecycle.test.js`.
+
 ## 4. Story Mode
 
 ### 4.1 Flow

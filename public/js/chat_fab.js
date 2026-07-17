@@ -41,10 +41,15 @@ var ChatFAB = (function () {
     function hostKeyguard(enable) {
         try {
             if (!window.app || !app.game) return;
+            // Never rebind a destroyed instance (cornerstone lifecycle)
+            if (app.game._destroyed) return;
             if (enable) {
                 if (typeof app.game.unbindKeys === 'function') app.game.unbindKeys();
             } else {
-                if (typeof app.game.bindKeys === 'function') app.game.bindKeys();
+                // Only rebind if this game is still the live app.game
+                if (typeof app.game.bindKeys === 'function' && !app.game._destroyed) {
+                    app.game.bindKeys();
+                }
             }
         } catch (_) {}
     }

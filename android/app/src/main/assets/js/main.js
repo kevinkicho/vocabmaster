@@ -13,7 +13,8 @@ function _handleUncaught(label, detail) {
     return;
   }
   // Only auto-recover when a game is active; home/settings can stay put.
-  if (app && app.game && app.goHome) {
+  // Skip if navigation already in flight (avoid goHome re-entrancy storms).
+  if (app && app.game && app.goHome && !app._navLock) {
     try { if (app.ui) app.ui.showToast('Recovered from an error — returned home', 'error'); } catch (_) {}
     app.goHome(false);
   }
@@ -31,6 +32,10 @@ class App {
         this.game = null;
         this._returnTo = null;
         this._failedServices = {};
+        /** Single-flight nav: goHome / launch / goBack must not interleave. */
+        this._navLock = false;
+        this._navLockSince = 0;
+        this._launchToken = 0;
 
         // R2: Service init via single helper. Critical services set _fatalError
         // and surface a toast; non-critical services get a no-op stub so callers
@@ -74,14 +79,65 @@ class App {
         if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => this.init()); } 
         else { this.init(); }
 
-        // Android back button / browser back: return to previous game if applicable
-        window.addEventListener('popstate', function(e) {
-            if (e.state && e.state.returnTo && app && app.goBack) {
-                app.goBack();
-            } else if (e.state && e.state.view === 'home') {
-                if (app && app.goHome) app.goHome(false);
+        // Android back / browser back — full history matrix (session + game + home)
+        window.addEventListener('popstate', function (e) {
+            if (!app || app._navLock) return;
+            var st = e.state || {};
+            try {
+                if (st.returnTo && typeof app.goBack === 'function') {
+                    app.goBack();
+                    return;
+                }
+                // Completion summary: dismiss like Done, then home
+                if (st.view === 'session-complete' || st.view === 'home') {
+                    if (app.dailySession && !app.dailySession._isStub) {
+                        if (typeof app.dailySession.dismissSummary === 'function') {
+                            app.dailySession.dismissSummary();
+                            return;
+                        }
+                        if (typeof app.dailySession.dismissSummaryUi === 'function') {
+                            app.dailySession.dismissSummaryUi();
+                        }
+                    }
+                    if (app.goHome) app.goHome(false);
+                    return;
+                }
+                // Mid-game (free-play or daily session step): pause session if needed, home
+                if (st.view === 'game' || st.view === 'subgame' || st.dailySession) {
+                    if (app.goHome) app.goHome(false);
+                    return;
+                }
+                // Unknown/null state — prefer home if a game is open
+                if (app.game && app.goHome) app.goHome(false);
+            } catch (err) {
+                L('[App] popstate handler failed', err);
             }
         });
+    }
+
+    /**
+     * Acquire single-flight navigation lock. Auto-expires after 8s safety.
+     * @returns {boolean} true if acquired
+     */
+    _acquireNavLock(reason) {
+        var now = Date.now();
+        if (this._navLock) {
+            if (now - (this._navLockSince || 0) > 8000) {
+                L('[App] nav lock expired, forcing release', this._navLockReason);
+            } else {
+                L('[App] nav lock busy, skip', reason, 'held by', this._navLockReason);
+                return false;
+            }
+        }
+        this._navLock = true;
+        this._navLockSince = now;
+        this._navLockReason = reason || 'nav';
+        return true;
+    }
+
+    _releaseNavLock() {
+        this._navLock = false;
+        this._navLockReason = null;
     }
 
     // R2: No-op service stub. Returns a plain object with explicit no-op
@@ -489,6 +545,17 @@ class App {
     }
 
     async goHome(pushState = true) {
+        if (!this._acquireNavLock('goHome')) return;
+        try {
+        // Close overlays that own input
+        try {
+            if (window.ChatFAB && ChatFAB.isOpen && ChatFAB.isOpen()) ChatFAB.close();
+        } catch (_) {}
+        try {
+            var mapRoot = document.getElementById('learning-map-root');
+            if (mapRoot) mapRoot.remove();
+        } catch (_) {}
+
         // Daily Session: pause mid-step (status stays active + pausedAt; do not finalize holds)
         // Skip pause when the completion summary is showing (status already completed).
         try {
@@ -521,7 +588,9 @@ class App {
                 }
             }
         } catch (_) { /* ignore */ }
-        if(this.game) this.game.destroy();
+        if(this.game) {
+            try { this.game.destroy(); } catch (_) {}
+        }
         this.game = null;
         if(app.audio) app.audio.cancel(); 
         if(this.ui) this.ui.hideTooltip();
@@ -531,7 +600,7 @@ class App {
         if(fab) fab.innerHTML = '';
         
         const view = document.getElementById('app-view');
-        if(!view) return;
+        if(!view) { this._releaseNavLock(); return; }
         view.classList.remove('visible');
         
         this.dailyScore = Math.max(0, Number(await this.data.getTodayTotal()) || 0);
@@ -605,14 +674,33 @@ class App {
                     <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            var afterHome = () => {
-                if (this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); }
-                if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' });
-                this._loadCoachTip();
+            var self = this;
+            var afterHome = function () {
+                try {
+                    if (self.ui) { self.ui.renderTagFilter(); self.ui._updateAIStatus(); }
+                    if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' });
+                    self._loadCoachTip();
+                } finally {
+                    self._releaseNavLock();
+                }
             };
-            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); afterHome(); }).catch(()=>{ view.classList.add('visible'); afterHome(); });
-            else { view.classList.add('visible'); afterHome(); }
+            if (self.fitter) {
+                self.fitter.fitAll().then(function () {
+                    view.classList.add('visible');
+                    afterHome();
+                }).catch(function () {
+                    view.classList.add('visible');
+                    afterHome();
+                });
+            } else {
+                view.classList.add('visible');
+                afterHome();
+            }
         });
+        } catch (homeErr) {
+            L('[App] goHome failed', homeErr);
+            this._releaseNavLock();
+        }
     }
 
     /** Non-blocking coach tip of the day into #home-coach-tip. */
@@ -876,39 +964,71 @@ class App {
         else if (mode === 'chat') this.game = new Chat('chat');
     }
 
-    launch(fn) { 
+    launch(fn) {
+        if (!this._acquireNavLock('launch')) return;
+        var token = ++this._launchToken;
         try {
             if (window.ChatFAB && ChatFAB.isOpen && ChatFAB.isOpen()) ChatFAB.close();
-            if(this.audio) this.audio.cancel();
-            if(this.game) this.game.destroy(); 
-            this.game = fn(); 
-            history.pushState({ view: 'game', mode: this.game.key, index: this.game.i }, '');
-            if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'game', mode: this.game && this.game.key });
-        } catch(e) {
-            L("Launch Error:", e.stack || e);
-            if (app.ui && app.ui.showToast) app.ui.showToast("Failed to start game: " + e.message, 'error');
+            if (this.audio) this.audio.cancel();
+            if (this.game) {
+                try { this.game.destroy(); } catch (_) {}
+                this.game = null;
+            }
+            if (token !== this._launchToken) return; // superseded
+            this.game = fn();
+            history.pushState({
+                view: 'game',
+                mode: this.game && this.game.key,
+                index: this.game ? this.game.i : 0
+            }, '');
+            if (window.ChatFAB) {
+                window.ChatFAB.syncVisibility({ view: 'game', mode: this.game && this.game.key });
+            }
+        } catch (e) {
+            L('Launch Error:', e.stack || e);
+            if (app.ui && app.ui.showToast) {
+                app.ui.showToast('Failed to start game: ' + e.message, 'error');
+            }
+            this._releaseNavLock();
             this.goHome(false);
+            return;
         }
+        this._releaseNavLock();
     }
 
     // --- Sub-game navigation ---
     launchSubGame(fn) {
-        if (this.game) {
-            this._returnTo = { key: this.game.key };
-            this.game.destroy();
+        if (!this._acquireNavLock('launchSubGame')) return;
+        try {
+            if (this.game) {
+                this._returnTo = { key: this.game.key };
+                try { this.game.destroy(); } catch (_) {}
+                this.game = null;
+            }
             if (this.audio) this.audio.cancel();
+            this.game = fn();
+            history.pushState({ view: 'subgame', returnTo: true }, '');
+        } catch (e) {
+            L('launchSubGame failed', e);
         }
-        this.game = fn();
-        history.pushState({ view: 'subgame', returnTo: true }, '');
+        this._releaseNavLock();
     }
 
     goBack() {
         if (this._returnTo) {
+            if (!this._acquireNavLock('goBack')) return;
             var key = this._returnTo.key;
             this._returnTo = null;
-            if (this.game) this.game.destroy();
-            if (this.audio) this.audio.cancel();
-            this.launchGameMode(key);
+            try {
+                if (this.game) {
+                    try { this.game.destroy(); } catch (_) {}
+                    this.game = null;
+                }
+                if (this.audio) this.audio.cancel();
+                this.launchGameMode(key);
+            } finally {
+                this._releaseNavLock();
+            }
         } else {
             this.goHome();
         }

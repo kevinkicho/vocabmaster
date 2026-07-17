@@ -1171,6 +1171,7 @@ class DailySessionService {
         var gen = genAtInstall != null ? genAtInstall : this._navGen;
         game._sessionNavGen = gen;
         game.waitAndNav = async function (audioPromise, fallbackDelay) {
+            if (game._destroyed) return;
             // One-shot after reinsert-triggering score: Quiz always calls waitAndNav
             // after score(); that must not advance off the first reinsert card.
             if (self._suppressNextWaitAndNav) {
@@ -1182,6 +1183,7 @@ class DailySessionService {
             }
 
             var myGen = game._sessionNavGen;
+            var lifeGen = game._lifecycleGen;
             var wait = false;
             try {
                 wait = !!(typeof app !== 'undefined' && app && app.store && app.store.prefs &&
@@ -1193,15 +1195,24 @@ class DailySessionService {
                 } else {
                     var delay = fallbackDelay != null ? fallbackDelay : 1500;
                     await new Promise(function (resolve) {
-                        var tid = setTimeout(resolve, delay);
+                        var settled = false;
+                        var done = function () {
+                            if (settled) return;
+                            settled = true;
+                            resolve();
+                        };
+                        var tid = setTimeout(done, delay);
                         if (!game.timeouts) game.timeouts = [];
                         game.timeouts.push(tid);
+                        if (!game._waitResolvers) game._waitResolvers = [];
+                        game._waitResolvers.push(done);
                     });
                 }
             } catch (e) {
                 L('[DailySession] waitAndNav audio error', e);
             }
             // Cancelled by reinsert / finishStep / destroy (in-flight only)
+            if (game._destroyed || game._lifecycleGen !== lifeGen) return;
             if (self._navGen !== myGen || game._sessionNavGen !== myGen) return;
             if (self._finishing || !self._step || self._uiPaused) return;
             if (self.status !== 'active') return;

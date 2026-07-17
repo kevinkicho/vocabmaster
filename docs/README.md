@@ -19,6 +19,7 @@ This index is the navigation page for VocabMaster documentation. Prefer current-
 | [Architecture](architecture.md) | Runtime pipelines, auth, AI transport, **memory engine / Today** (§3.4) |
 | [Memory engine & Daily Session](memory-engine-daily-session.md) | FSRS design, Today UX, session plan, PR sequence (rev 4) |
 | [Tiered Learning + AI Engagement + Chat FAB](tiered-learning-ai-engagement-fab-chat.md) | Path/units, tutor moments, secure Ollama transport, global Chat FAB — **Implemented on main** |
+| [Learning Map · Sentences Cloze · Sentence Build · CJK Chunking](learning-map-sentences-cloze-sentence-build.md) | Path home UX, cloze blank reliability, Sentence Build, `SentenceUtils` — **Implemented on main (v1), rev 3** |
 | [Telemetry & User Feedback](telemetry-feedback.md) | Analytics, question feedback, learning loop — **not** legacy “analytics owns SRS” |
 | [Audio & TTS Architecture](audio-tts-architecture.md) | Browser/native TTS routing |
 | [Web AI Parity Proxy](web-ai-parity-proxy-implementation.md) | Historical proxy notes; **runtime entrypoint is Cloud Run `functions/src/server.ts`** (see architecture §3.5) |
@@ -40,6 +41,9 @@ This index is the navigation page for VocabMaster documentation. Prefer current-
 | Chat FAB + ChatPanel | `public/js/chat_fab.js`, `chat_panel.js` |
 | Tutor moments | `public/js/tutor_moments.js` |
 | Engagement counters | `public/js/engagement.js` |
+| SentenceUtils (cloze + chunk) | `public/js/sentence_utils.js` |
+| Sentence Build | `public/js/game_sentence_build.js` |
+| Learning map | `public/js/main.js` → `openLearningMap` |
 | AI proxy (Cloud Run) | `functions/src/server.ts` |
 
 **PR10:** Memory engine default on; legacy Smart Review home button / `launchSmartReview` removed. All 11 free-practice modes kept.

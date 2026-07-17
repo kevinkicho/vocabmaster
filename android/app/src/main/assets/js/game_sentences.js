@@ -17,10 +17,12 @@ class Sentences extends GameMode {
                 <div class="flex-none h-[45%] landscape:h-full landscape:flex-1 flex flex-col min-h-0">
                     <div id="sn-header" class="shrink-0"></div>
                     <div id="s-box" class="bg-white dark:bg-neutral-900 rounded-[2rem] border border-slate-100 dark:border-neutral-800 shadow-sm flex-1 grid grid-rows-[7fr_3fr] mb-2 landscape:mb-0 overflow-hidden min-h-0">
-                         <div class="overflow-hidden px-4 py-3 flex items-center justify-center">
-                             <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-relaxed break-words text-center"></p>
+                         <div class="overflow-hidden px-4 py-3 flex items-center justify-center min-h-0">
+                             <p id="sn-text" class="fit-smart text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-relaxed break-words text-center w-full"></p>
                          </div>
-                         <div id="sn-bottom-disp" class="border-t-2 border-slate-300 dark:border-neutral-600 overflow-hidden px-4 py-2 flex items-center justify-center"></div>
+                         <div id="sn-bottom-disp" class="border-t-2 border-slate-300 dark:border-neutral-600 overflow-hidden px-4 py-2 flex items-center justify-center min-h-0">
+                             <p id="sn-bottom-text" class="fit-smart text-base sm:text-lg font-black text-slate-500 dark:text-neutral-400 leading-relaxed break-words text-center w-full"></p>
+                         </div>
                     </div>
                 </div>
                 <div class="flex-1 landscape:w-1/2 flex flex-col justify-end landscape:justify-between landscape:pt-2 min-h-0">
@@ -41,6 +43,7 @@ class Sentences extends GameMode {
         this.dom.sBox = this.root.querySelector('#s-box');
         this.dom.text = this.root.querySelector('#sn-text');
         this.dom.bottomDisp = this.root.querySelector('#sn-bottom-disp');
+        this.dom.bottomText = this.root.querySelector('#sn-bottom-text');
         this.dom.audio = this.root.querySelector('#sn-audio');
         this.dom.btns = [0,1,2,3].map(i => this.root.querySelector(`#sn-btn-${i}`));
         
@@ -48,78 +51,29 @@ class Sentences extends GameMode {
         this.setupHeader();
     }
 
-    normalizeText(str) {
-        if (!str) return "";
-        return str.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
-    }
-
-    generateCloze(rawSentence, rawTarget, langCode) {
-        if (!rawSentence) return { html: "", audio: "" };
-        const sentence = this.normalizeText(rawSentence);
-        const targetFull = this.normalizeText(rawTarget);
-        const cleanTarget = targetFull.replace(/\(.*?\)/g, "").trim(); 
-        if (!cleanTarget) return { html: escapeHtml(sentence), audio: sentence };
-
-        const createMask = (word) => {
-            const id = 'main-blank-' + Math.random().toString(36).substr(2, 5);
-            return `<span id="${id}" data-word="${escapeHtml(word)}" class="main-blank inline-block px-1 mx-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900/50 rounded text-transparent select-none transition-all duration-300 min-w-[2em] text-center align-bottom">${escapeHtml(word)}</span>`;
-        };
-
-        const escapeReg = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const sentenceHtml = escapeHtml(sentence);
-        const cleanTargetHtml = escapeHtml(cleanTarget);
-
-        let reg = new RegExp(`(${escapeReg(cleanTargetHtml)})`, 'gi');
-        if (sentenceHtml.match(reg)) return { html: sentenceHtml.replace(reg, (match) => createMask(cleanTarget)), audio: sentence.replace(new RegExp(`(${escapeReg(cleanTarget)})`, 'gi'), " ... ") };
-
-        const delimiters = /[\\/|;]/g; 
-        if (targetFull.match(delimiters)) {
-            const variants = targetFull.split(delimiters).map(s => s.trim()).filter(s => s);
-            variants.sort((a, b) => b.length - a.length);
-            for (const v of variants) {
-                const vClean = v.replace(/\(.*?\)/g, "").trim();
-                if(!vClean) continue;
-                const vHtml = escapeHtml(vClean);
-                reg = new RegExp(`(${escapeReg(vHtml)})`, 'gi');
-                if (sentenceHtml.match(reg)) return { html: sentenceHtml.replace(reg, (match) => createMask(vClean)), audio: sentence.replace(new RegExp(`(${escapeReg(vClean)})`, 'gi'), " ... ") };
-            }
+    /**
+     * Cloze from vocab item + example. Uses SentenceUtils (readings, stems).
+     * Falls back to legacy string-only match if utils missing.
+     */
+    generateCloze(rawSentence, itemOrTarget, langCode) {
+        if (window.SentenceUtils && typeof SentenceUtils.generateCloze === 'function') {
+            return SentenceUtils.generateCloze(rawSentence, itemOrTarget, langCode);
         }
-
-        const separators = /[\s·・]/g;
-        const tokens = cleanTarget.split(separators).filter(t => t.length > 0);
-        
-        if (tokens.length > 0) {
-            let tempHtml = sentenceHtml;
-            let tempAudio = sentence;
-            let matchedAny = false;
-            
-            tokens.sort((a, b) => b.length - a.length);
-            const isEuro = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru'].includes(langCode);
-
-            tokens.forEach(token => {
-                if (token.length < 3 && tokens.length > 1) return;
-
-                const tokenHtml = escapeHtml(token);
-                const tokenEsc = escapeReg(tokenHtml);
-                let conjugationReg;
-
-                if (isEuro) {
-                    conjugationReg = new RegExp(`(${tokenEsc}[\\w\\u00C0-\\u024F]*)`, 'gi');
-                } else {
-                    conjugationReg = new RegExp(`(${tokenEsc})`, 'gi');
-                }
-                
-                if (tempHtml.match(conjugationReg)) {
-                    tempHtml = tempHtml.replace(conjugationReg, (match) => createMask(token));
-                    tempAudio = tempAudio.replace(new RegExp(`(${escapeReg(token)})`, 'gi'), " ... ");
-                    matchedAny = true;
-                }
-            });
-
-            if (matchedAny) return { html: tempHtml, audio: tempAudio };
+        // Minimal fallback
+        const sentence = (rawSentence || '').trim();
+        const target = typeof itemOrTarget === 'string'
+            ? itemOrTarget
+            : (itemOrTarget && itemOrTarget[langCode]) || '';
+        if (!sentence) return { html: '', audio: '', matched: null };
+        if (target && sentence.indexOf(target) !== -1) {
+            const html = escapeHtml(sentence).replace(
+                escapeHtml(target),
+                '<span class="main-blank inline-block px-1 border-b-2 border-violet-400 bg-violet-100 dark:bg-violet-900 text-transparent min-w-[1.5em]">' +
+                    escapeHtml(target) + '</span>'
+            );
+            return { html: html, audio: sentence.replace(target, ' ... '), matched: target };
         }
-
-        return { html: sentenceHtml, audio: sentence };
+        return { html: escapeHtml(sentence), audio: sentence, matched: null };
     }
 
     update() {
@@ -171,80 +125,118 @@ class Sentences extends GameMode {
              }
         });
 
-        // Build cloze directly from example sentence (no AI needed)
-        const cloze = this.generateCloze(sentenceRaw, targetRaw, qKey);
+        // Build cloze from full vocab item (readings + stems via SentenceUtils)
+        const cloze = this.generateCloze(sentenceRaw, c, qKey);
         this.maskedHtml = cloze.html;
         this.maskedAudioText = cloze.audio;
+        this.rawAudioText = this.normalizeSentence(sentenceRaw);
+        this._clozeMatched = cloze.matched || null;
 
-        let bottomHtml = '';
+        let bottomInner = '';
         const dispMode = p.sentencesBottomDisp || 'sentence_masked';
 
         if (dispMode !== 'none') {
-            let bottomText = '';
             let bExKey = bottomKey;
             const bConf = typeof LANG_MAP !== 'undefined' ? LANG_MAP.get(bottomKey) || null : null;
             if (bConf && bConf.exKey) bExKey = bConf.exKey;
 
-            const wordText = c[bottomKey] || "";
-            const sentenceText = c[bExKey] || wordText || "";
+            const wordText = c[bottomKey] || '';
+            const sentenceText = c[bExKey] || wordText || '';
 
             switch (dispMode) {
-                case 'sentence_masked':
-                    const bResult = this.generateCloze(sentenceText, wordText, bottomKey);
-                    bottomText = bResult.html;
+                case 'sentence_masked': {
+                    // Mask using bottom-language headword/reading against bottom example
+                    const bResult = this.generateCloze(sentenceText, c, bottomKey);
+                    bottomInner = bResult.html;
                     break;
-                case 'sentence_full': bottomText = escapeHtml(sentenceText); break;
-                case 'word_masked': bottomText = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${escapeHtml(wordText)}</span>`; break;
-                case 'word_full': bottomText = escapeHtml(wordText); break;
+                }
+                case 'sentence_full':
+                    bottomInner = escapeHtml(sentenceText);
+                    break;
+                case 'word_masked':
+                    bottomInner = `<span class="inline-block border-b-2 border-slate-300 min-w-[3em] text-transparent select-none bg-slate-100 dark:bg-neutral-800 rounded px-1">${escapeHtml(wordText)}</span>`;
+                    break;
+                case 'word_full':
+                    bottomInner = escapeHtml(wordText);
+                    break;
             }
-            if(bottomText) bottomHtml = `<div class="w-full"><p class="text-sm font-black text-slate-400 dark:text-neutral-500">${bottomText}</p></div>`;
         }
 
-        if(this.dom.text) {
-             this.dom.text.innerHTML = "";
-             this.dom.text.dataset.brProcessed = "";
-             this.dom.text.dataset.lastFitted = "";
-             this.dom.text.innerHTML = this.maskedHtml;
-             this.dom.text.dataset.wid = c.id;
+        if (this.dom.text) {
+            this.dom.text.innerHTML = '';
+            this.dom.text.dataset.brProcessed = '';
+            this.dom.text.dataset.lastFitted = '';
+            this.dom.text.innerHTML = this.maskedHtml;
+            this.dom.text.dataset.wid = c.id;
         }
 
-        if(this.dom.bottomDisp) this.dom.bottomDisp.innerHTML = bottomHtml;
+        if (this.dom.bottomText) {
+            this.dom.bottomText.innerHTML = bottomInner || '';
+            this.dom.bottomText.dataset.brProcessed = '';
+            this.dom.bottomText.dataset.lastFitted = '';
+            this.dom.bottomText.classList.toggle('hidden', !bottomInner);
+        } else if (this.dom.bottomDisp) {
+            this.dom.bottomDisp.innerHTML = bottomInner
+                ? `<p class="fit-smart text-base font-black text-slate-500 dark:text-neutral-400 text-center w-full">${bottomInner}</p>`
+                : '';
+        }
 
         this.afterRender();
         this.runCustomAutoPlay(c);
     }
 
+    normalizeSentence(str) {
+        if (window.SentenceUtils && SentenceUtils.normalizeText) {
+            return SentenceUtils.normalizeText(str);
+        }
+        return (str || '').trim();
+    }
+
     async afterRender() {
-        await app.fitter.fitSmart(this.dom.text); 
-        this.dom.btns.forEach(btn => {
-            const span = btn.querySelector('.fit-target');
-            if(span) app.fitter.fit(span);
-        });
-        if(this.list && this.list[this.i] && app.notes) { app.notes.check(this.list[this.i].id); }
-        
-        const textEl = this.dom.text;
-        if(textEl) {
-             const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null, false);
-             const nodes = [];
-             while(walker.nextNode()) nodes.push(walker.currentNode);
-              nodes.forEach(node => {
-                  if(node.parentNode && (node.parentNode.tagName === 'SPAN' || node.parentNode.classList.contains('main-blank'))) return; 
-                  if(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/.test(node.nodeValue)) {
-                      const span = document.createElement('span');
-                      const escaped = escapeHtml(node.nodeValue);
-                      span.innerHTML = escaped.replace(/([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g, '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>');
-                      node.parentNode.replaceChild(span, node);
-                  }
-              });
+        if (app.fitter) {
+            if (this.dom.text) await app.fitter.fitSmart(this.dom.text);
+            if (this.dom.bottomText && this.dom.bottomText.innerHTML) {
+                await app.fitter.fitSmart(this.dom.bottomText);
+            }
         }
         this.dom.btns.forEach(btn => {
             const span = btn.querySelector('.fit-target');
-            if(span && span.innerHTML.indexOf('hanzi-char') === -1) {
+            if (span && app.fitter) app.fitter.fit(span);
+        });
+        if (this.list && this.list[this.i] && app.notes) {
+            app.notes.check(this.list[this.i].id);
+        }
+
+        const wrapHanziIn = (textEl) => {
+            if (!textEl) return;
+            const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null, false);
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(node => {
+                if (node.parentNode && (node.parentNode.tagName === 'SPAN' ||
+                    (node.parentNode.classList && node.parentNode.classList.contains('main-blank')))) return;
+                if (/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/.test(node.nodeValue || '')) {
+                    const span = document.createElement('span');
+                    const escaped = escapeHtml(node.nodeValue);
+                    span.innerHTML = escaped.replace(
+                        /([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF])/g,
+                        '<span class="hanzi-char cursor-help transition-colors" data-char="$1">$1</span>'
+                    );
+                    node.parentNode.replaceChild(span, node);
+                }
+            });
+        };
+        wrapHanziIn(this.dom.text);
+        wrapHanziIn(this.dom.bottomText);
+
+        this.dom.btns.forEach(btn => {
+            const span = btn.querySelector('.fit-target');
+            if (span && span.innerHTML.indexOf('hanzi-char') === -1) {
                 span.innerHTML = this.wrapHanzi(span.innerText);
             }
         });
-        if(app.notes) app.notes.attachTooltipListeners();
-        requestAnimationFrame(() => { if(this.root) this.root.classList.add('visible'); });
+        if (app.notes) app.notes.attachTooltipListeners();
+        requestAnimationFrame(() => { if (this.root) this.root.classList.add('visible'); });
     }
 
     runCustomAutoPlay(c) {

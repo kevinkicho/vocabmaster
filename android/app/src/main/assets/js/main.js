@@ -136,7 +136,7 @@ class App {
             'load', 'flush', 'getProfile', 'setPathMode', 'setFreePlayScope', 'setTier',
             'getActiveUnit', 'ensureUnit', 'getComposePool', 'getPracticeList',
             'selectTodayItems', 'pathProgressLabel', 'startPlacement', 'skipPlacement',
-            'getUnitTheme', 'unitProgressPercent',
+            'getUnitTheme', 'unitProgressPercent', 'listUnitsForMap', 'selectUnit',
             // presets
             'apply',
             // store
@@ -572,8 +572,9 @@ class App {
                     </div>
 
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Context</h3>
-                    <div class="grid grid-cols-1 gap-3 sm:gap-4 w-full">
+                    <div class="grid grid-cols-2 gap-3 sm:gap-4 w-full">
                         ${this.btn('Sentences', 'ph-text-t', 'violet', ()=>new Sentences('sentences'))}
+                        ${this.btn('Sentence Build', 'ph-rows', 'pink', ()=>new SentenceBuild('sentence_build'))}
                     </div>
 
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 pl-2">Speaking</h3>
@@ -642,13 +643,16 @@ class App {
                     try {
                         if (this.learningPath.unitProgressPercent) unitPct = this.learningPath.unitProgressPercent() || 0;
                     } catch (_) {}
-                    var scopeLabel = (prof.freePlayScope === 'filtered') ? 'Practice all filtered' : 'Unit only';
+                    var resumableToday = false;
+                    try {
+                        resumableToday = this.dailySession && this.dailySession.hasResumableSession &&
+                            this.dailySession.hasResumableSession();
+                    } catch (_) {}
                     pathHtml = '<div class="px-1">'
                         + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
                         + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
-                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '')
-                        + (prof.pathMode === 'guided' ? ' · free play: ' + scopeLabel : '') + '</p>'
+                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
                         + (prof.pathMode === 'guided'
                             ? '<div class="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden" aria-hidden="true">'
                               + '<div class="h-full rounded-full bg-indigo-500" style="width:' + Math.min(100, unitPct) + '%"></div></div>'
@@ -656,15 +660,12 @@ class App {
                             : '')
                         + '<div id="home-coach-tip" class="hidden mt-2 text-[11px] text-slate-600 dark:text-neutral-300 leading-relaxed"></div>'
                         + '<div class="flex flex-wrap gap-2 mt-3">'
-                        + (prof.pathMode === 'guided'
-                            ? '<button type="button" onclick="app.learningPath.setPathMode(\'free\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">Switch to free</button>'
-                              + '<button type="button" onclick="app.learningPath.setFreePlayScope(app.learningPath.getProfile().freePlayScope===\'filtered\'?\'unit\':\'filtered\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">'
-                              + (prof.freePlayScope === 'filtered' ? 'Limit free play to unit' : 'Practice all filtered') + '</button>'
-                            : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Start guided path</button>')
-                        + ((prof.placementStatus === 'pending' || prof.placementStatus === 'skipped' || prof.pathMode === 'free' || prof.placementStatus === 'done')
-                            ? '<button type="button" onclick="app.learningPath.startPlacement()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-amber-500 text-white">'
-                              + (prof.placementStatus === 'done' ? 'Redo placement' : 'Take placement') + '</button>'
-                            : '')
+                        + '<button type="button" onclick="app.openLearningMap && app.openLearningMap()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Learning map</button>'
+                        + (resumableToday
+                            ? '<button type="button" onclick="app.dailySession.continue()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500 text-white">Continue</button>'
+                            : (prof.pathMode === 'guided'
+                                ? '<button type="button" onclick="app.dailySession && app.dailySession.start()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500 text-white">Continue path</button>'
+                                : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-600 text-white">Continue with guided</button>'))
                         + '</div></div></div>';
                 }
             }
@@ -728,6 +729,102 @@ class App {
         return `<button onclick="app.launch(${String(fn)})" class="bg-gradient-to-br ${colors[c]} shadow-indigo-200 dark:shadow-none text-white p-4 rounded-[2rem] h-32 flex flex-col items-center justify-center shadow-lg active:scale-95 transition-all relative overflow-hidden group hover:shadow-xl border border-white/20"><div class="mb-2 transform group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-300"><i class="ph-duotone ${i} text-5xl text-white"></i></div><span class="font-bold text-sm tracking-wide">${t}</span></button>`;
     }
 
+    /**
+     * Learning map sheet: units in current tier + continue / placement actions.
+     * Replaces awkward free-scope chips on the path card.
+     */
+    openLearningMap() {
+        try {
+            if (!this.learningPath || this.learningPath._isStub) {
+                if (this.ui && this.ui.showToast) this.ui.showToast('Learning path not ready yet', 'info');
+                return;
+            }
+            var prof = this.learningPath.getProfile();
+            if (prof.pathMode !== 'guided') {
+                this.learningPath.setPathMode('guided');
+                this.learningPath.ensureUnit(0);
+                prof = this.learningPath.getProfile();
+            }
+            var units = (typeof this.learningPath.listUnitsForMap === 'function')
+                ? this.learningPath.listUnitsForMap()
+                : [];
+            var existing = document.getElementById('learning-map-root');
+            if (existing) existing.remove();
+
+            var root = document.createElement('div');
+            root.id = 'learning-map-root';
+            var unitRows = units.map(function (u) {
+                var active = u.unitId === prof.currentUnitId;
+                var locked = !!u.locked;
+                var pct = u.progress != null ? u.progress : 0;
+                var cls = locked
+                    ? 'opacity-50'
+                    : (active ? 'ring-2 ring-indigo-400' : '');
+                return '<button type="button" data-unit-index="' + u.index + '" ' +
+                    (locked ? 'disabled' : '') +
+                    ' class="w-full text-left rounded-2xl border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-3 mb-2 ' + cls + '">' +
+                    '<div class="flex justify-between items-center">' +
+                    '<span class="text-sm font-black text-slate-800 dark:text-white">Unit ' + (u.index + 1) +
+                    (u.themeTitle ? ' · ' + escapeHtml(u.themeTitle) : '') + '</span>' +
+                    '<span class="text-[10px] font-bold text-slate-400">' +
+                    (locked ? 'Locked' : (active ? 'Current' : pct + '%')) + '</span></div>' +
+                    '<p class="text-[11px] text-slate-500 mt-1">' + (u.wordCount || 0) + ' words · ' + escapeHtml(u.tier || '') + '</p>' +
+                    (!locked ? '<div class="mt-2 h-1 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden"><div class="h-full bg-indigo-500" style="width:' + Math.min(100, pct) + '%"></div></div>' : '') +
+                    '</button>';
+            }).join('');
+
+            root.innerHTML =
+                '<div class="fixed inset-0 bg-black/40 z-[70] flex items-end sm:items-center justify-center" id="learning-map-backdrop">' +
+                '<div class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-neutral-800 max-h-[85vh] flex flex-col" role="dialog" aria-label="Learning map">' +
+                '<div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-neutral-800">' +
+                '<div><p class="text-sm font-black text-slate-800 dark:text-white">Learning map</p>' +
+                '<p class="text-[10px] text-slate-400">' + escapeHtml(prof.currentTier || '') + ' · ' + escapeHtml(prof.framework || '') + '</p></div>' +
+                '<button type="button" id="learning-map-close" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-neutral-800 flex items-center justify-center" aria-label="Close"><i class="ph-bold ph-x"></i></button>' +
+                '</div>' +
+                '<div class="flex-1 overflow-y-auto px-4 py-3">' +
+                (unitRows || '<p class="text-sm text-slate-500">No units yet — start guided path first.</p>') +
+                '</div>' +
+                '<div class="px-4 py-3 border-t border-slate-100 dark:border-neutral-800 flex flex-wrap gap-2">' +
+                '<button type="button" id="learning-map-continue" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black">Continue</button>' +
+                '<button type="button" id="learning-map-placement" class="py-2.5 px-3 rounded-xl bg-amber-500 text-white text-xs font-bold">Placement</button>' +
+                '</div></div></div>';
+
+            document.body.appendChild(root);
+            var self = this;
+            function close() {
+                var el = document.getElementById('learning-map-root');
+                if (el) el.remove();
+            }
+            root.querySelector('#learning-map-close').onclick = close;
+            root.querySelector('#learning-map-backdrop').addEventListener('click', function (e) {
+                if (e.target && e.target.id === 'learning-map-backdrop') close();
+            });
+            root.querySelector('#learning-map-continue').onclick = function () {
+                close();
+                if (self.dailySession && self.dailySession.hasResumableSession && self.dailySession.hasResumableSession()) {
+                    self.dailySession.continue();
+                } else if (self.dailySession && self.dailySession.start) {
+                    self.dailySession.start();
+                }
+            };
+            root.querySelector('#learning-map-placement').onclick = function () {
+                close();
+                if (self.learningPath.startPlacement) self.learningPath.startPlacement();
+            };
+            root.querySelectorAll('[data-unit-index]').forEach(function (btn) {
+                btn.onclick = function () {
+                    var idx = parseInt(btn.getAttribute('data-unit-index'), 10);
+                    if (self.learningPath.selectUnit) self.learningPath.selectUnit(idx);
+                    close();
+                    self.goHome(false);
+                };
+            });
+        } catch (e) {
+            L('[Path] openLearningMap failed', e);
+            if (this.ui && this.ui.showToast) this.ui.showToast('Could not open learning map', 'error');
+        }
+    }
+
     launchGameMode(mode) {
         if (mode === 'flash') this.game = new Flashcard('flash');
         else if (mode === 'quiz') this.game = new Quiz('quiz');
@@ -735,6 +832,7 @@ class App {
         else if (mode === 'match') this.game = new Match('match');
         else if (mode === 'voice') this.game = new Voice('voice');
         else if (mode === 'sentences') this.game = new Sentences('sentences');
+        else if (mode === 'sentence_build') this.game = new SentenceBuild('sentence_build');
         else if (mode === 'dictation') this.game = new Dictation('dictation');
         else if (mode === 'context') this.game = new Context('context');
         else if (mode === 'story') this.game = new Story('story');

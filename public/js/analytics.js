@@ -2,7 +2,7 @@
 
 /** Modes that auto-update FSRS memory via recordAttempt (free-play hook). */
 const MEMORY_AUTO_MODES = new Set([
-    'quiz', 'tf', 'match', 'sentences', 'dictation', 'voice'
+    'quiz', 'tf', 'match', 'sentences', 'sentence_build', 'dictation', 'voice'
 ]);
 
 class AnalyticsService {

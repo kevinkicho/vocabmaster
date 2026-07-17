@@ -213,11 +213,18 @@ class LearningPathService {
     /**
      * Ensure unit snapshot exists; return unit state.
      */
-    ensureUnit(unitIndex) {
+    /**
+     * Ensure unit snapshot exists.
+     * @param {number} unitIndex
+     * @param {{ makeCurrent?: boolean }} [opts] — makeCurrent default true only when no current unit yet
+     */
+    ensureUnit(unitIndex, opts) {
+        opts = opts || {};
         var p = this.getProfile();
         var tier = p.currentTier;
         var unitId = tier + '_u' + unitIndex;
         if (!p.units) p.units = {};
+        var created = false;
         if (!p.units[unitId]) {
             var list = (typeof app !== 'undefined' && app && app.data && app.data.list) ? app.data.list : [];
             var ids = sliceUnitWordIds(list, tier, unitIndex, p.unitSize || UNIT_SIZE_DEFAULT);
@@ -234,11 +241,15 @@ class LearningPathService {
                 completedAt: null,
                 progress: 0
             };
-            p.currentUnitId = unitId;
+            created = true;
+        }
+        var makeCurrent = opts.makeCurrent === true ||
+            (opts.makeCurrent !== false && !p.currentUnitId);
+        if (makeCurrent) p.currentUnitId = unitId;
+        if (created || makeCurrent) {
             this.saveLocal();
             this.flush();
         }
-        if (!p.currentUnitId) p.currentUnitId = unitId;
         return p.units[unitId];
     }
 
@@ -428,8 +439,8 @@ class LearningPathService {
     }
 
     /** Unit mastery progress 0–100 from memory when available. */
-    unitProgressPercent() {
-        var unit = this.getActiveUnit();
+    unitProgressPercent(unitOpt) {
+        var unit = unitOpt || this.getActiveUnit();
         if (!unit || !unit.wordIds || !unit.wordIds.length) return 0;
         if (unit.progress != null && unit.progress > 0) return Math.min(100, Math.round(unit.progress));
         var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
@@ -440,6 +451,57 @@ class LearningPathService {
             if (c && (c.reps > 0 || c.state === 'review' || c.state === 'relearning')) known++;
         }
         return Math.min(100, Math.round((known / unit.wordIds.length) * 100));
+    }
+
+    /**
+     * Units for Learning map UI (current tier). Unlocks first N units; next after prior progress.
+     */
+    listUnitsForMap() {
+        var p = this.getProfile();
+        var tier = p.currentTier;
+        var list = (typeof app !== 'undefined' && app && app.data && app.data.list) ? app.data.list : [];
+        var filtered = filterListByTagsStrict(list, [tier]);
+        var unitSize = p.unitSize || UNIT_SIZE_DEFAULT;
+        var totalUnits = Math.max(1, Math.ceil(filtered.length / unitSize) || 1);
+        // Cap display at 12 units for UI
+        if (totalUnits > 12) totalUnits = 12;
+        var savedCurrent = p.currentUnitId;
+        var out = [];
+        for (var i = 0; i < totalUnits; i++) {
+            var unit = this.ensureUnit(i, { makeCurrent: false });
+            var pct = this.unitProgressPercent(unit);
+            unit.progress = pct;
+            var locked = false;
+            if (i > 0) {
+                var curIdx = 0;
+                if (savedCurrent && p.units[savedCurrent]) curIdx = p.units[savedCurrent].index || 0;
+                // Soft unlock: current unit, previous units, and next unit
+                locked = i > curIdx + 1;
+            }
+            out.push({
+                unitId: unit.unitId,
+                index: i,
+                tier: tier,
+                themeTitle: unit.themeTitle || '',
+                theme: unit.theme || '',
+                wordCount: (unit.wordIds && unit.wordIds.length) || 0,
+                progress: pct,
+                locked: locked
+            });
+        }
+        p.currentUnitId = savedCurrent || (out[0] && out[0].unitId) || null;
+        this.saveLocal();
+        return out;
+    }
+
+    /** Select unit by index within current tier. */
+    selectUnit(unitIndex) {
+        var unit = this.ensureUnit(unitIndex, { makeCurrent: true });
+        var p = this.getProfile();
+        p.pathMode = 'guided';
+        this.saveLocal();
+        this.flush();
+        return unit;
     }
 }
 

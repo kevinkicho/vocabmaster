@@ -550,6 +550,10 @@ class DailySessionService {
         this._showingSummary = false;
         this._summaryDismissed = false;
 
+        try {
+            if (window.EngagementService) EngagementService.increment('sessionStarted', 1);
+        } catch (_) {}
+
         await this._persistPlan();
         L('[DailySession] start', this.plan.steps.length, 'steps', 'intensity=', this.intensity);
 
@@ -1292,6 +1296,10 @@ class DailySessionService {
         await this._persistPlan();
 
         L('[DailySession] completed', this.stats);
+
+        try {
+            if (window.EngagementService) EngagementService.increment('sessionCompleted', 1);
+        } catch (_) {}
 
         // User already left via Home during finalize/persist — do not repaint summary
         if (this._summaryDismissed) {

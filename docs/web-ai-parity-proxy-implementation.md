@@ -1,7 +1,7 @@
 # Web AI Parity via Firebase Proxy (Ollama Cloud)
 
-**Date**: 2026-06 (work completed in this session)
-**Status**: Core implementation complete. Deployment requires user action due to project service account issue. Documentation for future agents.
+**Date**: 2026-06 (work completed in this session)  
+**Status**: Core implementation complete. **2026-07 update:** production entrypoint is **Cloud Run** (`functions/src/server.ts` → `lib/server.js`), not only the legacy Cloud Function `ollamaProxy` in `index.ts`. Hardening: path allowlist (`/api/tags`, `/api/generate`), body size cap, dual-mode Firebase Auth (`PROXY_AUTH_REQUIRED` default **true**), per-instance rate limit. Client never embeds `OLLAMA_API_KEY` (`scripts/sync-env.js` ban). See `docs/architecture.md` §3.5 and `docs/tiered-learning-ai-engagement-fab-chat.md` Part C.
 
 ## Strategic Decision (User Confirmed)
 

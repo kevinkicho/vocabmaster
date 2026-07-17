@@ -100,10 +100,11 @@ Before making code changes, read the relevant docs (`docs/architecture.md`, `doc
 The web app uses a **Cloud Run proxy** (`https://ollama-proxy-1020976660084.us-central1.run.app`) to reach Ollama cloud models from the browser. This is **not dead code** — it is the primary AI backend for the deployed web app at `https://vocabmaster112225.web.app`.
 
 - `public/js/ollama_config.js` (gitignored) sets `window.OLLAMA_USE_CLOUD = true` for the web build. This is intentional — browsers cannot call `http://127.0.0.1:11434` (CORS) or the Ollama Cloud API directly.
-- The proxy lives in `functions/src/index.ts` and is deployed as a Firebase Cloud Function. The API key is stored server-side in Firebase config (not in the client).
+- Production proxy entrypoint is **Cloud Run** `functions/src/server.ts` (image → `lib/server.js`, URL `*.run.app`). Hardening: path allowlist `/api/tags` + `/api/generate`, body cap, rate limit, Firebase Admin auth with `PROXY_AUTH_REQUIRED` default **true** (set `"false"` only for local smoke).
+- The API key is **server-side only** (Cloud Run env / Firebase config). `scripts/sync-env.js` must never emit `OLLAMA_API_KEY` into `public/`. Client uses `window.OLLAMA_PROXY_URL` + ID token when auth is required.
 - `public/js/llm/llm_service.js` constructor reads `OLLAMA_USE_CLOUD` and routes to the proxy URL when true, or to `OLLAMA_ENDPOINT` (default `127.0.0.1:11434`) when false.
-- The Android APK uses the local path (`OLLAMA_USE_CLOUD = false`, `OLLAMA_ENDPOINT = 127.0.0.1:11434`) to talk to `ollama4android` on the same device.
-- **Do NOT delete or "clean up" the proxy URL, the `useCloud` branch, `_isBrowserWeb()`, or the Cloud Function.** Both paths (cloud proxy for web, local for APK) are essential and actively used. See `docs/web-ai-parity-proxy-implementation.md` for full details.
+- The Android APK uses the local path (`OLLAMA_USE_CLOUD = false`, `OLLAMA_ENDPOINT = 127.0.0.1:11434`) to talk to `ollama4android` on the same device, with local→proxy fallback on transport failure.
+- **Do NOT delete or "clean up" the proxy URL, the `useCloud` branch, `_isBrowserWeb()`, or the Cloud Run proxy.** Both paths (cloud proxy for web, local for APK) are essential and actively used. See `docs/web-ai-parity-proxy-implementation.md` and `docs/architecture.md` §3.5.
 
 ## Critical: Native TTS — Cross-Engine Voice Selection Is Intentional
 

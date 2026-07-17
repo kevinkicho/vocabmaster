@@ -98,6 +98,12 @@ var ChatFAB = (function () {
         }
         _busy = true;
         appendMsg('user', text.trim());
+        try {
+            if (window.EngagementService) {
+                EngagementService.increment('chatTurns', 1);
+                EngagementService.increment('chatTurnsFromFab', 1);
+            }
+        } catch (_) {}
         renderSheetBody();
         var ctx = collectContext();
         var built = (window.ChatPanel && ChatPanel.buildTutorPrompt)
@@ -150,6 +156,9 @@ var ChatFAB = (function () {
     function openSheet() {
         if (_sheetOpen) return;
         _sheetOpen = true;
+        try {
+            if (window.EngagementService) EngagementService.increment('fabOpens', 1);
+        } catch (_) {}
         try { if (window.app && app.audio) app.audio.cancel(); } catch (_) {}
         hostKeyguard(true);
         var root = ensureSheetRoot();

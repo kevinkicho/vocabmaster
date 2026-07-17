@@ -135,7 +135,8 @@ class App {
             // learningPath
             'load', 'flush', 'getProfile', 'setPathMode', 'setFreePlayScope', 'setTier',
             'getActiveUnit', 'ensureUnit', 'getComposePool', 'getPracticeList',
-            'selectTodayItems', 'pathProgressLabel',
+            'selectTodayItems', 'pathProgressLabel', 'startPlacement', 'skipPlacement',
+            'getUnitTheme', 'unitProgressPercent',
             // presets
             'apply',
             // store
@@ -151,6 +152,7 @@ class App {
             'approveAIAdjustment', 'dismissAIAdjustment', 'resetAITemplates',
             'showTooltip', 'hideTooltip', 'copyLogs', 'dumpVoices',
             'validateSettingsBindings', '_syncRadioVisual', 'modal',
+            '_syncPathSettings', '_updateSessionIntensityHint',
         ];
         for (const m of methods) stub[m] = noop;
 
@@ -602,9 +604,29 @@ class App {
                     <div id="tag-filter-section" class="mt-2 px-2"></div>
                 </div>`;
 
-            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); }).catch(()=>{ view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); });
-            else { view.classList.add('visible'); if(this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); } if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' }); }
+            var afterHome = () => {
+                if (this.ui) { this.ui.renderTagFilter(); this.ui._updateAIStatus(); }
+                if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'home' });
+                this._loadCoachTip();
+            };
+            if(this.fitter) this.fitter.fitAll().then(() => { view.classList.add('visible'); afterHome(); }).catch(()=>{ view.classList.add('visible'); afterHome(); });
+            else { view.classList.add('visible'); afterHome(); }
         });
+    }
+
+    /** Non-blocking coach tip of the day into #home-coach-tip. */
+    _loadCoachTip() {
+        try {
+            if (!window.TutorMoments || typeof TutorMoments.coachTipOfDay !== 'function') return;
+            var el = document.getElementById('home-coach-tip');
+            if (!el) return;
+            TutorMoments.coachTipOfDay().then(function (text) {
+                var node = document.getElementById('home-coach-tip');
+                if (!node || !text) return;
+                node.textContent = text;
+                node.classList.remove('hidden');
+            }).catch(function () {});
+        } catch (_) {}
     }
 
     /** Today CTA + path card HTML for home. */
@@ -616,17 +638,32 @@ class App {
                 if (prof) {
                     var label = this.learningPath.pathProgressLabel ? this.learningPath.pathProgressLabel() : (prof.currentTier || '');
                     var modeLabel = prof.pathMode === 'guided' ? 'Guided path' : 'Free practice';
+                    var unitPct = 0;
+                    try {
+                        if (this.learningPath.unitProgressPercent) unitPct = this.learningPath.unitProgressPercent() || 0;
+                    } catch (_) {}
+                    var scopeLabel = (prof.freePlayScope === 'filtered') ? 'Practice all filtered' : 'Unit only';
                     pathHtml = '<div class="px-1">'
                         + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
                         + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
-                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
+                        + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '')
+                        + (prof.pathMode === 'guided' ? ' · free play: ' + scopeLabel : '') + '</p>'
+                        + (prof.pathMode === 'guided'
+                            ? '<div class="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden" aria-hidden="true">'
+                              + '<div class="h-full rounded-full bg-indigo-500" style="width:' + Math.min(100, unitPct) + '%"></div></div>'
+                              + '<p class="text-[10px] text-slate-400 mt-1">' + unitPct + '% unit words seen</p>'
+                            : '')
+                        + '<div id="home-coach-tip" class="hidden mt-2 text-[11px] text-slate-600 dark:text-neutral-300 leading-relaxed"></div>'
                         + '<div class="flex flex-wrap gap-2 mt-3">'
                         + (prof.pathMode === 'guided'
                             ? '<button type="button" onclick="app.learningPath.setPathMode(\'free\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">Switch to free</button>'
+                              + '<button type="button" onclick="app.learningPath.setFreePlayScope(app.learningPath.getProfile().freePlayScope===\'filtered\'?\'unit\':\'filtered\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">'
+                              + (prof.freePlayScope === 'filtered' ? 'Limit free play to unit' : 'Practice all filtered') + '</button>'
                             : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Start guided path</button>')
-                        + ((prof.placementStatus === 'pending' || prof.placementStatus === 'skipped' || prof.pathMode === 'free')
-                            ? '<button type="button" onclick="app.learningPath.startPlacement()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-amber-500 text-white">Take placement</button>'
+                        + ((prof.placementStatus === 'pending' || prof.placementStatus === 'skipped' || prof.pathMode === 'free' || prof.placementStatus === 'done')
+                            ? '<button type="button" onclick="app.learningPath.startPlacement()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-amber-500 text-white">'
+                              + (prof.placementStatus === 'done' ? 'Redo placement' : 'Take placement') + '</button>'
                             : '')
                         + '</div></div></div>';
                 }

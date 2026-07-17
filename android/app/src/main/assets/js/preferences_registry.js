@@ -18,6 +18,9 @@ const PREFERENCE_SCHEMA = [
   // 'casual' ≈ 15 total / 5 new / 12 due · 'cram' ≈ 25 / 8 new / 20 due
   { key: 'sessionIntensity',  type: 'radio',  default: 'casual',domId: 'session-intensity',        section: 'global', label: 'Session Pace' },
 
+  // ===== LEARNING PATH / TUTOR (home + settings) =====
+  { key: 'tutorMomentsEnabled', type: 'bool', default: true,    domId: 'toggle-tutor-moments',     section: 'path', label: 'AI coach tips' },
+
   // ===== FLASHCARDS =====
   { key: 'flashSpeed',        type: 'select', default: '700',   domId: 'flash-speed',              section: 'flash', label: 'Flip Speed' },
   { key: 'flashAuto',         type: 'bool',   default: true,    domId: 'flash-auto',               section: 'flash', label: 'Auto Advance', presetBehavior: 'always' },
@@ -96,8 +99,8 @@ const PREFERENCE_SCHEMA = [
   { key: 'chatLevel',         type: 'select', default: 'B1',     domId: null,                       section: 'chat', label: 'Chat Level' },
   { key: 'chatAutoPlay',      type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Chat Auto-play TTS' },
   { key: 'chatLang',          type: 'select', default: 'ja',     domId: null,                       section: 'chat', label: 'Chat Language' },
-  { key: 'chatFabEnabled',    type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'Show AI tutor FAB' },
-  { key: 'chatFabBilingual',  type: 'bool',   default: true,     domId: null,                       section: 'chat', label: 'FAB tutor bilingual' },
+  { key: 'chatFabEnabled',    type: 'bool',   default: true,     domId: 'toggle-chat-fab',          section: 'chat', label: 'Show AI tutor FAB' },
+  { key: 'chatFabBilingual',  type: 'bool',   default: true,     domId: 'toggle-chat-fab-bilingual', section: 'chat', label: 'FAB tutor bilingual' },
 
   // ===== LEVEL FILTER (no DOM binding) =====
   { key: 'levelFilter',       type: 'array',  default: ['all'], domId: null,                       section: 'level', label: 'Level Filter' },

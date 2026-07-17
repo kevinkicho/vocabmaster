@@ -9,9 +9,34 @@ function assignGameList(game) {
         game.list = app.data._reviewList;
         return;
     }
-    game.list = app.data.getFilteredList();
+    // Guided path free-play prefers unit / practice list when available
+    if (app.learningPath && typeof app.learningPath.getPracticeList === 'function' && !app.learningPath._isStub) {
+        try {
+            var practice = app.learningPath.getPracticeList();
+            if (practice && practice.length) {
+                game.list = practice;
+                game._listSource = 'path';
+                return;
+            }
+            // Intentional empty unit: do not expand to full corpus
+            var prof = app.learningPath.getProfile && app.learningPath.getProfile();
+            if (prof && prof.pathMode === 'guided' && prof.freePlayScope !== 'filtered') {
+                game.list = [];
+                game._listSource = 'path-empty';
+                return;
+            }
+        } catch (_) { /* fall through */ }
+    }
+    if (typeof app.data.getFilteredListStrict === 'function') {
+        game.list = app.data.getFilteredListStrict();
+    } else {
+        game.list = app.data.getFilteredList();
+    }
     if (!game.list || game.list.length === 0) {
-        game.list = app.data.activeList || [];
+        // Only expand when not intentionally path-empty
+        if (game._listSource !== 'path-empty') {
+            game.list = app.data.activeList || [];
+        }
     }
 }
 window.assignGameList = assignGameList;
@@ -33,9 +58,9 @@ class GameMode {
         // Caching DOM elements to avoid querySelector re-runs
         this.dom = {}; 
 
-        // Safety: if a collection (e.g. Spanish A1) filtered the list to empty for the current data set,
-        // fall back to the full list so the game can at least start (prevents "item.id undefined" crashes).
-        if (!this.list || this.list.length === 0) {
+        // Safety: if a collection filtered the list to empty, fall back to full list —
+        // except intentional path-empty units (guided free-play scope).
+        if ((!this.list || this.list.length === 0) && this._listSource !== 'path-empty') {
             L(`[GameMode] Filtered list empty for ${key} (collection=${app.data && app.data.currentCollection}); falling back to full list`);
             this.list = (app.data && app.data.activeList) ? app.data.activeList : [];
         }

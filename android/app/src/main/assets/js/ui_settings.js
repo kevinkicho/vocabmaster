@@ -57,7 +57,48 @@ Object.assign(UIManager.prototype, {
             if (typeof this._updateSessionIntensityHint === 'function') {
                 this._updateSessionIntensityHint();
             }
+            if (typeof this._syncPathSettings === 'function') {
+                this._syncPathSettings();
+            }
         } catch(e) { L("Error loading settings UI:", e); }
+    },
+
+    /**
+     * Sync Learning Path radios + status line from LearningPathService profile.
+     * Path mode/scope live on the path profile (not prefs schema), so DOM is driven here.
+     */
+    _syncPathSettings() {
+        try {
+            var status = document.getElementById('path-settings-status');
+            var prof = null;
+            if (app.learningPath && !app.learningPath._isStub && app.learningPath.getProfile) {
+                prof = app.learningPath.getProfile();
+            }
+            if (status) {
+                if (prof && app.learningPath.pathProgressLabel) {
+                    status.textContent = app.learningPath.pathProgressLabel() +
+                        (prof.pathMode === 'guided' ? ' · guided' : ' · free');
+                } else {
+                    status.textContent = 'Free practice';
+                }
+            }
+            var mode = (prof && prof.pathMode) || 'free';
+            var scope = (prof && prof.freePlayScope) || 'unit';
+            var modeRadios = document.querySelectorAll('input[name="path-mode"]');
+            for (var i = 0; i < modeRadios.length; i++) {
+                modeRadios[i].checked = modeRadios[i].value === mode;
+            }
+            var scopeRadios = document.querySelectorAll('input[name="free-play-scope"]');
+            for (var j = 0; j < scopeRadios.length; j++) {
+                scopeRadios[j].checked = scopeRadios[j].value === scope;
+            }
+            if (typeof this._syncRadioVisual === 'function') {
+                this._syncRadioVisual('path-mode');
+                this._syncRadioVisual('free-play-scope');
+            }
+        } catch (e) {
+            L('[Settings] _syncPathSettings', e);
+        }
     },
 
     /**

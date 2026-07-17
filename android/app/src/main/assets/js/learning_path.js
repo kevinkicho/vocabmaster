@@ -407,6 +407,40 @@ class LearningPathService {
             app.launch(function () { return new Placement(); });
         }
     }
+
+    /** Skip placement without writing FSRS; stay guided at current/floor tier. */
+    skipPlacement() {
+        var p = this.getProfile();
+        p.placementStatus = 'skipped';
+        if (!p.pathMode) p.pathMode = 'guided';
+        this.ensureUnit(0);
+        this.saveLocal();
+        this.flush();
+        try {
+            if (window.EngagementService) EngagementService.increment('placementSkipped', 1);
+        } catch (_) {}
+        if (typeof app !== 'undefined' && app) {
+            if (app.ui && app.ui.showToast) {
+                app.ui.showToast('Placement skipped · starting at ' + (p.currentTier || 'your tier'), 'info');
+            }
+            if (typeof app.goHome === 'function') app.goHome(false);
+        }
+    }
+
+    /** Unit mastery progress 0–100 from memory when available. */
+    unitProgressPercent() {
+        var unit = this.getActiveUnit();
+        if (!unit || !unit.wordIds || !unit.wordIds.length) return 0;
+        if (unit.progress != null && unit.progress > 0) return Math.min(100, Math.round(unit.progress));
+        var mem = (typeof app !== 'undefined' && app) ? app.memory : null;
+        if (!mem || mem._isStub || typeof mem.getCard !== 'function') return 0;
+        var known = 0;
+        for (var i = 0; i < unit.wordIds.length; i++) {
+            var c = mem.getCard(unit.wordIds[i]);
+            if (c && (c.reps > 0 || c.state === 'review' || c.state === 'relearning')) known++;
+        }
+        return Math.min(100, Math.round((known / unit.wordIds.length) * 100));
+    }
 }
 
 window.UNIT_THEME_CATALOG = UNIT_THEME_CATALOG;

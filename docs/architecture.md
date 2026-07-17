@@ -133,7 +133,25 @@ VocabMaster schedules reviews with a client-side **FSRS-4.5** memory engine (not
 
 User-facing copy uses plain language (“Today”, due/new, spaced repetition). FSRS internals and admin debug belong behind the existing admin/Developer gate (see design doc).
 
-### 3.5 Why no mock data
+### 3.5 Learning path, AI tutor, engagement (tiered curriculum)
+
+| Piece | Path | Role |
+|-------|------|------|
+| LearningPathService | `public/js/learning_path.js` | Profile, units (theme catalog), dual-universe `selectTodayItems`, soft migrate → `pathMode: 'free'` |
+| Placement | `public/js/game_placement.js` | Mode key `'placement'`; always `applyMemory: false`; per-tier scoring → recommended tier |
+| TutorMoments | `public/js/tutor_moments.js` | Coach tip of day (home), post-miss toast, session wrap-up (AI or offline template) |
+| ChatPanel | `public/js/chat_panel.js` | Shared prompt builders for full Chat + FAB sheet |
+| ChatFAB | `public/js/chat_fab.js` | Global tutor sheet on `#fab-container`; keyguard; `syncVisibility` |
+| EngagementService | `public/js/engagement.js` | RTDB increments under `users/{uid}/engagement/daily/{date}` (+ offline queue) |
+| Design | `docs/tiered-learning-ai-engagement-fab-chat.md` | **Implemented on main** (rev 2 + follow-ups) |
+
+**Dual-universe Today (guided):** *new* words from the active unit only; *due* multi-pass unit → tier → wide filter universe (never drops outside-unit overdue).
+
+**Free play:** `assignGameList` → `LearningPathService.getPracticeList()` when guided + unit scope; empty unit does **not** expand to full corpus.
+
+**AI transport (web):** Cloud Run proxy `functions/src/server.ts` → allowlist `/api/tags` + `/api/generate`, body cap, rate limit, `PROXY_AUTH_REQUIRED` default **true**. Client reads `window.OLLAMA_PROXY_URL`; **never** ships `OLLAMA_API_KEY` to `public/` (see `scripts/sync-env.js`).
+
+### 3.6 Why no mock data
 
 Per AGENTS.md: "Never use mock data. Never create mock data. Always use real AI." Mock data would silently mask RTDB connection failures, leading to confusing behavior (stories generated from "Test 0" / "Test 1" etc.).
 

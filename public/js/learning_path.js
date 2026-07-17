@@ -1,7 +1,8 @@
 /* js/learning_path.js
  * LearningPathService — tiered curriculum spine (units within JLPT/HSK/TOPIK/CEFR).
  * Dual-universe helpers for Today compose: unit pool (new) + wide due universe.
- * Soft migration: existing users → pathMode 'free' unless they opt into guided.
+ * Default pathMode is 'guided' (Continue with guided). Users can toggle free
+ * practice via the home path chip (two-state: Guided ↔ Free).
  *
  * Cross-script: window.LearningPathService, window.getComposePool, etc.
  */
@@ -93,7 +94,7 @@ function defaultPathProfile(prefs) {
     }
     return {
         schemaVersion: 1,
-        pathMode: 'free', // soft default for everyone until opt-in
+        pathMode: 'guided', // default: daily learning on guided path
         framework: framework,
         currentTier: tier,
         currentUnitId: null,
@@ -142,7 +143,7 @@ class LearningPathService {
             this.saveLocal();
         }
         // Soft migrate: never force guided on existing installs
-        if (!this.profile.pathMode) this.profile.pathMode = 'free';
+        if (!this.profile.pathMode) this.profile.pathMode = 'guided';
         if (!this.profile.freePlayScope) this.profile.freePlayScope = 'unit';
 
         try {
@@ -188,11 +189,25 @@ class LearningPathService {
     setPathMode(mode) {
         var p = this.getProfile();
         p.pathMode = mode === 'guided' ? 'guided' : 'free';
-        if (p.pathMode === 'guided' && p.placementStatus === 'skipped') {
-            p.placementStatus = 'pending';
+        if (p.pathMode === 'guided') {
+            if (p.placementStatus === 'skipped') {
+                p.placementStatus = 'pending';
+            }
+            this.ensureUnit(0, { makeCurrent: !p.currentUnitId });
         }
         this.saveLocal();
         this.flush();
+    }
+
+    /**
+     * Two-state home chip: free → guided, guided → free.
+     * @returns {'guided'|'free'} new mode
+     */
+    togglePathMode() {
+        var p = this.getProfile();
+        var next = p.pathMode === 'guided' ? 'free' : 'guided';
+        this.setPathMode(next);
+        return next;
     }
 
     setFreePlayScope(scope) {

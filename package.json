@@ -29,6 +29,7 @@
     "@playwright/test": "^1.60.0",
     "husky": "^9.1.7",
     "tailwindcss": "^3",
+    "vite": "^8.0.16",
     "vitest": "^4.1.4"
   },
   "dependencies": {

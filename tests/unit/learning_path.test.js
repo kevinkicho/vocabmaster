@@ -58,9 +58,9 @@ describe('sliceUnitWordIds', () => {
 });
 
 describe('defaultPathProfile', () => {
-  it('soft-migrates to free path', () => {
+  it('defaults to guided path for daily learning', () => {
     const p = defaultPathProfile({ presetTarget: 'ja', presetSource: 'en' });
-    expect(p.pathMode).toBe('free');
+    expect(p.pathMode).toBe('guided');
     expect(p.framework).toBe('jlpt');
     expect(p.placementStatus).toBe('skipped');
   });

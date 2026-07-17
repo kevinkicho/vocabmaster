@@ -133,7 +133,7 @@ class App {
             'updateProgressChrome', 'hideProgressChrome', 'showCompleteSummary',
             'dismissSummary', 'dismissSummaryUi',
             // learningPath
-            'load', 'flush', 'getProfile', 'setPathMode', 'setFreePlayScope', 'setTier',
+            'load', 'flush', 'getProfile', 'setPathMode', 'togglePathMode', 'setFreePlayScope', 'setTier',
             'getActiveUnit', 'ensureUnit', 'getComposePool', 'getPracticeList',
             'selectTodayItems', 'pathProgressLabel', 'startPlacement', 'skipPlacement',
             'getUnitTheme', 'unitProgressPercent', 'listUnitsForMap', 'selectUnit',
@@ -638,7 +638,8 @@ class App {
                 var prof = this.learningPath.getProfile ? this.learningPath.getProfile() : null;
                 if (prof) {
                     var label = this.learningPath.pathProgressLabel ? this.learningPath.pathProgressLabel() : (prof.currentTier || '');
-                    var modeLabel = prof.pathMode === 'guided' ? 'Guided path' : 'Free practice';
+                    var isGuided = prof.pathMode === 'guided';
+                    var modeLabel = isGuided ? 'Guided path' : 'Free practice';
                     var unitPct = 0;
                     try {
                         if (this.learningPath.unitProgressPercent) unitPct = this.learningPath.unitProgressPercent() || 0;
@@ -648,12 +649,20 @@ class App {
                         resumableToday = this.dailySession && this.dailySession.hasResumableSession &&
                             this.dailySession.hasResumableSession();
                     } catch (_) {}
+                    // Two-state mode chip: recycle guided/free as one toggle
+                    var modeChipLabel = isGuided ? 'Free learning' : 'Guided learning';
+                    var modeChipClass = isGuided
+                        ? 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200'
+                        : 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-600 text-white';
+                    var modeChipTitle = isGuided
+                        ? 'Switch to free practice (all filtered words)'
+                        : 'Switch to guided path (units + Today spine)';
                     pathHtml = '<div class="px-1">'
                         + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
                         + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
                         + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
-                        + (prof.pathMode === 'guided'
+                        + (isGuided
                             ? '<div class="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden" aria-hidden="true">'
                               + '<div class="h-full rounded-full bg-indigo-500" style="width:' + Math.min(100, unitPct) + '%"></div></div>'
                               + '<p class="text-[10px] text-slate-400 mt-1">' + unitPct + '% unit words seen</p>'
@@ -663,9 +672,10 @@ class App {
                         + '<button type="button" onclick="app.openLearningMap && app.openLearningMap()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Learning map</button>'
                         + (resumableToday
                             ? '<button type="button" onclick="app.dailySession.continue()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500 text-white">Continue</button>'
-                            : (prof.pathMode === 'guided'
-                                ? '<button type="button" onclick="app.dailySession && app.dailySession.start()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500 text-white">Continue path</button>'
-                                : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-600 text-white">Continue with guided</button>'))
+                            : '<button type="button" onclick="app.dailySession && app.dailySession.start()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-500 text-white">'
+                              + (isGuided ? 'Continue with guided' : 'Start Today') + '</button>')
+                        + '<button type="button" onclick="app.learningPath.togglePathMode();app.goHome(false)" class="' + modeChipClass + '" title="' + modeChipTitle + '" aria-pressed="' + (isGuided ? 'true' : 'false') + '">'
+                        + modeChipLabel + '</button>'
                         + '</div></div></div>';
                 }
             }

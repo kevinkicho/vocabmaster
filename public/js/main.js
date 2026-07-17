@@ -649,14 +649,14 @@ class App {
                         resumableToday = this.dailySession && this.dailySession.hasResumableSession &&
                             this.dailySession.hasResumableSession();
                     } catch (_) {}
-                    // Two-state mode chip: recycle guided/free as one toggle
-                    var modeChipLabel = isGuided ? 'Free learning' : 'Guided learning';
+                    // Two-state mode chip: label = current mode; tooltip = what click does
+                    var modeChipLabel = isGuided ? 'Guided learning' : 'Free learning';
                     var modeChipClass = isGuided
-                        ? 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200'
-                        : 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-600 text-white';
+                        ? 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-600 text-white'
+                        : 'text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800 text-slate-700 dark:text-neutral-200';
                     var modeChipTitle = isGuided
-                        ? 'Switch to free practice (all filtered words)'
-                        : 'Switch to guided path (units + Today spine)';
+                        ? 'Currently guided. Click to switch to free practice (all filtered words)'
+                        : 'Currently free practice. Click to switch to guided path (units + Today spine)';
                     pathHtml = '<div class="px-1">'
                         + '<div class="rounded-2xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">'
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'

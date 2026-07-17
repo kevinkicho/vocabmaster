@@ -224,12 +224,12 @@ class MemoryService {
     async load() {
         var uid = this._resolveUid();
         if (!uid) {
-            this._recoverLocalCache(null);
+            await this._recoverLocalCache(null);
             this._loaded = true;
             return;
         }
         this._uid = uid;
-        this._recoverLocalCache(uid);
+        await this._recoverLocalCache(uid);
 
         if (typeof db === 'undefined' || !db || !this._isOnline()) {
             // Offline / no db: keep local cache; still try orphan recovery offline
@@ -864,8 +864,14 @@ class MemoryService {
             this.cards.forEach(function (card, id) {
                 obj.cards[id] = card;
             });
-            localStorage.setItem(MEMORY_CACHE_KEY, JSON.stringify(obj));
-        } catch (e) { /* quota / private mode */ }
+            try {
+                localStorage.setItem(MEMORY_CACHE_KEY, JSON.stringify(obj));
+            } catch (e) { /* quota — IndexedDB is primary durable store */ }
+            try {
+                var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+                if (idb && idb.KEYS) idb.setAsync(idb.KEYS.MEMORY_CACHE, obj);
+            } catch (_) {}
+        } catch (e) { /* private mode */ }
     }
 
     _persistDirtySet() {
@@ -874,56 +880,99 @@ class MemoryService {
                 uid: this._resolveUid() || null,
                 ids: Array.from(this.dirty)
             };
-            localStorage.setItem(MEMORY_DIRTY_KEY, JSON.stringify(payload));
+            try {
+                localStorage.setItem(MEMORY_DIRTY_KEY, JSON.stringify(payload));
+            } catch (e) { /* ignore */ }
+            try {
+                var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+                if (idb && idb.KEYS) idb.setAsync(idb.KEYS.MEMORY_DIRTY, payload);
+            } catch (_) {}
         } catch (e) { /* ignore */ }
     }
 
-    _recoverLocalCache(uid) {
+    _applyMemoryCacheObject(parsed, uid) {
+        if (!parsed || typeof parsed !== 'object') return false;
+        if (uid && parsed.uid && parsed.uid !== uid) {
+            this.cards.clear();
+            this.dirty.clear();
+            try {
+                localStorage.removeItem(MEMORY_CACHE_KEY);
+                localStorage.removeItem(MEMORY_DIRTY_KEY);
+            } catch (_) { /* ignore */ }
+            try {
+                var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+                if (idb && idb.KEYS) {
+                    idb.del(idb.KEYS.MEMORY_CACHE);
+                    idb.del(idb.KEYS.MEMORY_DIRTY);
+                }
+            } catch (_) {}
+            return false;
+        }
+        if (parsed.meta) this.meta = Object.assign({}, this.meta, parsed.meta);
+        if (parsed.cards && typeof parsed.cards === 'object') {
+            var keys = Object.keys(parsed.cards);
+            for (var i = 0; i < keys.length; i++) {
+                var card = this._normalizeCard(parsed.cards[keys[i]], keys[i]);
+                if (card) this.cards.set(card.wordId, card);
+            }
+        }
+        return true;
+    }
+
+    _applyDirtyPayload(dirtyParsed, uid) {
+        var dirtyIds = null;
+        if (Array.isArray(dirtyParsed)) {
+            dirtyIds = dirtyParsed;
+        } else if (dirtyParsed && typeof dirtyParsed === 'object') {
+            if (uid && dirtyParsed.uid && dirtyParsed.uid !== uid) {
+                try { localStorage.removeItem(MEMORY_DIRTY_KEY); } catch (_) { /* ignore */ }
+                dirtyIds = null;
+            } else {
+                dirtyIds = Array.isArray(dirtyParsed.ids) ? dirtyParsed.ids : null;
+            }
+        }
+        if (dirtyIds) {
+            for (var j = 0; j < dirtyIds.length; j++) {
+                var did = Number(dirtyIds[j]);
+                if (Number.isFinite(did)) this.dirty.add(did);
+            }
+        }
+    }
+
+    /**
+     * Recover cards from IndexedDB (preferred) then localStorage.
+     * Async so load() can await durable store.
+     */
+    async _recoverLocalCache(uid) {
         try {
-            var raw = localStorage.getItem(MEMORY_CACHE_KEY);
-            if (raw) {
-                var parsed = JSON.parse(raw);
-                if (parsed && typeof parsed === 'object') {
-                    if (uid && parsed.uid && parsed.uid !== uid) {
-                        // Different user — drop cache + dirty for previous owner
-                        this.cards.clear();
-                        this.dirty.clear();
-                        try {
-                            localStorage.removeItem(MEMORY_CACHE_KEY);
-                            localStorage.removeItem(MEMORY_DIRTY_KEY);
-                        } catch (_) { /* ignore */ }
-                        return;
+            var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+            var fromIdb = false;
+            if (idb && idb.KEYS) {
+                try {
+                    var idbCache = await idb.get(idb.KEYS.MEMORY_CACHE);
+                    if (idbCache && this._applyMemoryCacheObject(idbCache, uid)) {
+                        fromIdb = true;
                     }
-                    if (parsed.meta) this.meta = Object.assign({}, this.meta, parsed.meta);
-                    if (parsed.cards && typeof parsed.cards === 'object') {
-                        var keys = Object.keys(parsed.cards);
-                        for (var i = 0; i < keys.length; i++) {
-                            var card = this._normalizeCard(parsed.cards[keys[i]], keys[i]);
-                            if (card) this.cards.set(card.wordId, card);
-                        }
-                    }
+                    var idbDirty = await idb.get(idb.KEYS.MEMORY_DIRTY);
+                    if (idbDirty) this._applyDirtyPayload(idbDirty, uid);
+                } catch (_) {}
+            }
+            // LS fill / migrate if IDB empty
+            if (!fromIdb || this.cards.size === 0) {
+                var raw = localStorage.getItem(MEMORY_CACHE_KEY);
+                if (raw) {
+                    var parsed = JSON.parse(raw);
+                    this._applyMemoryCacheObject(parsed, uid);
+                    // Promote large cache to IDB
+                    if (idb && idb.KEYS && parsed) idb.setAsync(idb.KEYS.MEMORY_CACHE, parsed);
                 }
             }
-            var dirtyRaw = localStorage.getItem(MEMORY_DIRTY_KEY);
-            if (dirtyRaw) {
-                var dirtyParsed = JSON.parse(dirtyRaw);
-                var dirtyIds = null;
-                if (Array.isArray(dirtyParsed)) {
-                    // Legacy bare array
-                    dirtyIds = dirtyParsed;
-                } else if (dirtyParsed && typeof dirtyParsed === 'object') {
-                    if (uid && dirtyParsed.uid && dirtyParsed.uid !== uid) {
-                        try { localStorage.removeItem(MEMORY_DIRTY_KEY); } catch (_) { /* ignore */ }
-                        dirtyIds = null;
-                    } else {
-                        dirtyIds = Array.isArray(dirtyParsed.ids) ? dirtyParsed.ids : null;
-                    }
-                }
-                if (dirtyIds) {
-                    for (var j = 0; j < dirtyIds.length; j++) {
-                        var did = Number(dirtyIds[j]);
-                        if (Number.isFinite(did)) this.dirty.add(did);
-                    }
+            if (this.dirty.size === 0) {
+                var dirtyRaw = localStorage.getItem(MEMORY_DIRTY_KEY);
+                if (dirtyRaw) {
+                    var dirtyParsed = JSON.parse(dirtyRaw);
+                    this._applyDirtyPayload(dirtyParsed, uid);
+                    if (idb && idb.KEYS && dirtyParsed) idb.setAsync(idb.KEYS.MEMORY_DIRTY, dirtyParsed);
                 }
             }
         } catch (e) { /* ignore parse errors */ }

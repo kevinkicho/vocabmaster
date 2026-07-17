@@ -190,6 +190,7 @@ class App {
             'dismissSummary', 'dismissSummaryUi',
             // learningPath
             'load', 'flush', 'getProfile', 'setPathMode', 'togglePathMode', 'setFreePlayScope', 'setTier',
+            'setFrameworkAndTier', 'getFrameworkGroup', 'listFrameworksForTarget',
             'getActiveUnit', 'ensureUnit', 'getComposePool', 'getPracticeList',
             'selectTodayItems', 'pathProgressLabel', 'startPlacement', 'skipPlacement',
             'getUnitTheme', 'unitProgressPercent', 'listUnitsForMap', 'selectUnit',
@@ -431,11 +432,27 @@ class App {
                 // the race — the home-screen indicator updates when it resolves.
             }
 
-            statusBar.innerText = count > 0 ? `${count} Words Ready` : 'No vocabulary loaded — check RTDB connection';
+            var srcNote = (this.data && this.data.vocabSource === 'cache') ? ' (cached)' : '';
+            statusBar.innerText = count > 0
+                ? `${count} Words Ready${srcNote}`
+                : 'No vocabulary loaded — check RTDB connection';
             if (count === 0) {
                 statusBar.classList.add('text-rose-500');
                 btn.innerText = 'Retry';
-                btn.onclick = () => window.location.reload();
+                btn.onclick = () => {
+                    var selfInit = this;
+                    (async function () {
+                        try {
+                            if (typeof sessionStorage !== 'undefined') {
+                                sessionStorage.setItem('vm_vocab_force_refresh', '1');
+                            }
+                            if (selfInit.data && selfInit.data.clearVocabCache) {
+                                await selfInit.data.clearVocabCache();
+                            }
+                        } catch (_) {}
+                        window.location.reload();
+                    })();
+                };
                 return;
             }
             statusBar.classList.remove('text-rose-500');
@@ -868,7 +885,7 @@ class App {
 
     /**
      * Learning map sheet: units in current tier + continue / placement actions.
-     * Replaces awkward free-scope chips on the path card.
+     * Header: [language endonym] [EXAM chip] [level chip] — exam/level switchable.
      */
     openLearningMap() {
         try {
@@ -888,37 +905,108 @@ class App {
             var existing = document.getElementById('learning-map-root');
             if (existing) existing.remove();
 
+            var fwGroup = (typeof this.learningPath.getFrameworkGroup === 'function')
+                ? this.learningPath.getFrameworkGroup(prof.framework)
+                : null;
+            var examLabel = (fwGroup && fwGroup.label)
+                ? String(fwGroup.label).toUpperCase()
+                : String(prof.framework || 'PATH').toUpperCase();
+            var tierLabel = prof.currentTier || (fwGroup && fwGroup.levels && fwGroup.levels[0]) || '?';
+            var langName = (typeof langNativeName === 'function')
+                ? langNativeName(prof.targetLang)
+                : (prof.targetLang || '');
+            var tierColor = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors && LEVEL_CONFIG.colors[tierLabel])
+                ? LEVEL_CONFIG.colors[tierLabel]
+                : '#6366f1';
+
+            var frameworks = (typeof this.learningPath.listFrameworksForTarget === 'function')
+                ? this.learningPath.listFrameworksForTarget(prof.targetLang)
+                : ((typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.groups) ? LEVEL_CONFIG.groups : []);
+            var examPickerHtml = frameworks.map(function (g) {
+                var active = g.key === prof.framework;
+                var lab = String(g.label || g.key || '').toUpperCase();
+                return '<button type="button" data-map-framework="' + escapeHtml(g.key) + '" class="px-2.5 py-1 rounded-full text-[10px] font-black border transition-all active:scale-95 ' +
+                    (active
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-700') +
+                    '">' + escapeHtml(lab) + '</button>';
+            }).join('');
+            var levels = (fwGroup && fwGroup.levels) ? fwGroup.levels : [];
+            var levelPickerHtml = levels.map(function (lvl) {
+                var active = lvl === prof.currentTier;
+                var color = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors && LEVEL_CONFIG.colors[lvl])
+                    ? LEVEL_CONFIG.colors[lvl]
+                    : '#6366f1';
+                var style = active ? 'background:' + color + ';border-color:' + color : '';
+                return '<button type="button" data-map-tier="' + escapeHtml(lvl) + '" class="px-2.5 py-1 rounded-full text-[10px] font-black border transition-all active:scale-95 ' +
+                    (active
+                        ? 'text-white border-transparent shadow-sm'
+                        : 'bg-white dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 border-slate-200 dark:border-neutral-700') +
+                    '" style="' + style + '">' + escapeHtml(lvl) + '</button>';
+            }).join('');
+
             var root = document.createElement('div');
             root.id = 'learning-map-root';
+            var corpusTotal = 0;
             var unitRows = units.map(function (u) {
+                if (u.type === 'section') {
+                    if (u.frameworkWordCount) corpusTotal = u.frameworkWordCount;
+                    var secColor = (typeof LEVEL_CONFIG !== 'undefined' && LEVEL_CONFIG.colors && LEVEL_CONFIG.colors[u.tier])
+                        ? LEVEL_CONFIG.colors[u.tier]
+                        : '#6366f1';
+                    return '<div class="flex items-center justify-between mt-3 mb-1.5 first:mt-0 px-0.5" role="presentation">' +
+                        '<div class="flex items-center gap-2">' +
+                        '<span class="text-[11px] font-black tracking-wide px-2 py-0.5 rounded-full text-white" style="background:' + secColor + '">' +
+                        escapeHtml(u.tier || '') + '</span>' +
+                        '<span class="text-[10px] font-bold text-slate-400">' +
+                        (u.unitCount || 0) + ' units · ' + (u.wordCount || 0) + ' words</span></div></div>';
+                }
                 var active = u.unitId === prof.currentUnitId;
                 var locked = !!u.locked;
                 var pct = u.progress != null ? u.progress : 0;
                 var cls = locked
                     ? 'opacity-50'
                     : (active ? 'ring-2 ring-indigo-400' : '');
-                return '<button type="button" data-unit-index="' + u.index + '" ' +
+                return '<button type="button" data-unit-index="' + u.index + '" data-unit-tier="' + escapeHtml(u.tier || '') + '" ' +
                     (locked ? 'disabled' : '') +
                     ' class="w-full text-left rounded-2xl border border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-3 mb-2 ' + cls + '">' +
                     '<div class="flex justify-between items-center">' +
-                    '<span class="text-sm font-black text-slate-800 dark:text-white">Unit ' + (u.index + 1) +
-                    (u.themeTitle ? ' · ' + escapeHtml(u.themeTitle) : '') + '</span>' +
+                    '<span class="text-sm font-black text-slate-800 dark:text-white">' +
+                    (u.themeTitle ? escapeHtml(u.themeTitle) : ('Unit ' + (u.index + 1))) + '</span>' +
                     '<span class="text-[10px] font-bold text-slate-400">' +
                     (locked ? 'Locked' : (active ? 'Current' : pct + '%')) + '</span></div>' +
-                    '<p class="text-[11px] text-slate-500 mt-1">' + (u.wordCount || 0) + ' words · ' + escapeHtml(u.tier || '') + '</p>' +
+                    '<p class="text-[11px] text-slate-500 mt-1">' + (u.wordCount || 0) + ' words · ' + escapeHtml(u.tier || '') +
+                    ' · Unit ' + (u.index + 1) + '</p>' +
                     (!locked ? '<div class="mt-2 h-1 rounded-full bg-slate-100 dark:bg-neutral-800 overflow-hidden"><div class="h-full bg-indigo-500" style="width:' + Math.min(100, pct) + '%"></div></div>' : '') +
                     '</button>';
             }).join('');
+            var corpusNote = corpusTotal
+                ? '<p class="text-[10px] text-slate-400 mb-2">' + corpusTotal + ' words across ' + escapeHtml(examLabel) + ' path · themes from your vocab</p>'
+                : '';
 
             root.innerHTML =
                 '<div class="fixed inset-0 bg-black/40 z-[70] flex items-end sm:items-center justify-center" id="learning-map-backdrop">' +
                 '<div class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-neutral-800 max-h-[85vh] flex flex-col" role="dialog" aria-label="Learning map">' +
-                '<div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-neutral-800">' +
-                '<div><p class="text-sm font-black text-slate-800 dark:text-white">Learning map</p>' +
-                '<p class="text-[10px] text-slate-400">' + escapeHtml(prof.currentTier || '') + ' · ' + escapeHtml(prof.framework || '') + '</p></div>' +
-                '<button type="button" id="learning-map-close" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-neutral-800 flex items-center justify-center" aria-label="Close"><i class="ph-bold ph-x"></i></button>' +
+                '<div class="flex items-start justify-between gap-2 px-4 py-3 border-b border-slate-100 dark:border-neutral-800">' +
+                '<div class="min-w-0 flex-1">' +
+                '<p class="text-sm font-black text-slate-800 dark:text-white">Learning map</p>' +
+                '<div class="flex flex-wrap items-center gap-1.5 mt-2" role="group" aria-label="Path language, exam, and level">' +
+                '<span class="text-[11px] font-black text-slate-700 dark:text-neutral-100 px-2 py-1 rounded-full bg-slate-100 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 max-w-[7rem] truncate" title="Learning language">' +
+                escapeHtml(langName || '—') + '</span>' +
+                '<button type="button" id="learning-map-exam-chip" class="text-[10px] font-black tracking-wide px-2.5 py-1 rounded-full bg-indigo-600 text-white active:scale-95" aria-expanded="false" aria-controls="learning-map-exam-picker" title="Change exam">' +
+                escapeHtml(examLabel) + ' <i class="ph-bold ph-caret-down text-[9px]"></i></button>' +
+                '<button type="button" id="learning-map-tier-chip" class="text-[10px] font-black px-2.5 py-1 rounded-full text-white active:scale-95 border border-transparent" style="background:' + tierColor + '" aria-expanded="false" aria-controls="learning-map-tier-picker" title="Change level">' +
+                escapeHtml(tierLabel) + ' <i class="ph-bold ph-caret-down text-[9px]"></i></button>' +
+                '</div>' +
+                '<div id="learning-map-exam-picker" class="hidden mt-2 flex flex-wrap gap-1.5" role="listbox" aria-label="Exam framework">' +
+                examPickerHtml + '</div>' +
+                '<div id="learning-map-tier-picker" class="hidden mt-2 flex flex-wrap gap-1.5" role="listbox" aria-label="Difficulty level">' +
+                levelPickerHtml + '</div>' +
+                '</div>' +
+                '<button type="button" id="learning-map-close" class="w-9 h-9 shrink-0 rounded-full bg-slate-100 dark:bg-neutral-800 flex items-center justify-center" aria-label="Close"><i class="ph-bold ph-x"></i></button>' +
                 '</div>' +
                 '<div class="flex-1 overflow-y-auto px-4 py-3">' +
+                corpusNote +
                 (unitRows || '<p class="text-sm text-slate-500">No units yet — start guided path first.</p>') +
                 '</div>' +
                 '<div class="px-4 py-3 border-t border-slate-100 dark:border-neutral-800 flex flex-wrap gap-2">' +
@@ -928,10 +1016,6 @@ class App {
 
             document.body.appendChild(root);
             var self = this;
-            function close() {
-                var el = document.getElementById('learning-map-root');
-                if (el) el.remove();
-            }
             function onEsc(e) {
                 if (e.key === 'Escape') {
                     e.preventDefault();
@@ -944,10 +1028,68 @@ class App {
                 var el = document.getElementById('learning-map-root');
                 if (el) el.remove();
             }
+            function refreshMapKeepOpen() {
+                document.removeEventListener('keydown', onEsc, true);
+                self.openLearningMap();
+                try { self.goHome(false); } catch (_) {}
+            }
+            function togglePicker(pickerId, chipId) {
+                var picker = root.querySelector('#' + pickerId);
+                var chip = root.querySelector('#' + chipId);
+                if (!picker || !chip) return;
+                var otherId = pickerId === 'learning-map-exam-picker'
+                    ? 'learning-map-tier-picker' : 'learning-map-exam-picker';
+                var otherChipId = chipId === 'learning-map-exam-chip'
+                    ? 'learning-map-tier-chip' : 'learning-map-exam-chip';
+                var other = root.querySelector('#' + otherId);
+                var otherChip = root.querySelector('#' + otherChipId);
+                if (other) other.classList.add('hidden');
+                if (otherChip) otherChip.setAttribute('aria-expanded', 'false');
+                var open = picker.classList.contains('hidden');
+                if (open) picker.classList.remove('hidden');
+                else picker.classList.add('hidden');
+                chip.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
             document.addEventListener('keydown', onEsc, true);
             root.querySelector('#learning-map-close').onclick = doClose;
             root.querySelector('#learning-map-backdrop').addEventListener('click', function (e) {
                 if (e.target && e.target.id === 'learning-map-backdrop') doClose();
+            });
+            root.querySelector('#learning-map-exam-chip').onclick = function (e) {
+                e.stopPropagation();
+                togglePicker('learning-map-exam-picker', 'learning-map-exam-chip');
+            };
+            root.querySelector('#learning-map-tier-chip').onclick = function (e) {
+                e.stopPropagation();
+                togglePicker('learning-map-tier-picker', 'learning-map-tier-chip');
+            };
+            root.querySelectorAll('[data-map-framework]').forEach(function (btn) {
+                btn.onclick = function () {
+                    var key = btn.getAttribute('data-map-framework');
+                    if (self.learningPath.setFrameworkAndTier) {
+                        self.learningPath.setFrameworkAndTier(key);
+                    } else if (self.learningPath.setTier && typeof LEVEL_CONFIG !== 'undefined') {
+                        var g = null;
+                        for (var i = 0; i < LEVEL_CONFIG.groups.length; i++) {
+                            if (LEVEL_CONFIG.groups[i].key === key) { g = LEVEL_CONFIG.groups[i]; break; }
+                        }
+                        if (g && g.levels && g.levels[0]) self.learningPath.setTier(g.levels[0]);
+                    }
+                    if (self.learningPath.ensureUnit) self.learningPath.ensureUnit(0, { makeCurrent: true });
+                    refreshMapKeepOpen();
+                };
+            });
+            root.querySelectorAll('[data-map-tier]').forEach(function (btn) {
+                btn.onclick = function () {
+                    var tier = btn.getAttribute('data-map-tier');
+                    if (self.learningPath.setFrameworkAndTier) {
+                        self.learningPath.setFrameworkAndTier(prof.framework, tier);
+                    } else if (self.learningPath.setTier) {
+                        self.learningPath.setTier(tier);
+                    }
+                    if (self.learningPath.ensureUnit) self.learningPath.ensureUnit(0, { makeCurrent: true });
+                    refreshMapKeepOpen();
+                };
             });
             root.querySelector('#learning-map-continue').onclick = function () {
                 doClose();
@@ -965,14 +1107,16 @@ class App {
                 btn.setAttribute('aria-current', btn.className.indexOf('ring-2') !== -1 ? 'true' : 'false');
                 btn.onclick = function () {
                     var idx = parseInt(btn.getAttribute('data-unit-index'), 10);
-                    if (self.learningPath.selectUnit) self.learningPath.selectUnit(idx);
+                    var tier = btn.getAttribute('data-unit-tier') || undefined;
+                    if (self.learningPath.selectUnit) self.learningPath.selectUnit(idx, tier);
                     doClose();
                     self.goHome(false);
                 };
             });
             // Focus first interactive control (a11y F5)
             setTimeout(function () {
-                var first = root.querySelector('[data-unit-index]:not([disabled])') ||
+                var first = root.querySelector('#learning-map-exam-chip') ||
+                    root.querySelector('[data-unit-index]:not([disabled])') ||
                     root.querySelector('#learning-map-continue');
                 if (first) first.focus();
             }, 30);

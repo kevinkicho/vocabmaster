@@ -157,10 +157,54 @@ LLMService.prototype.getGrammarExercise = async function(word, context, langCode
     return data;
 };
 
+/** Normalize RTDB/IDB grammar entry → UI payload (with deterministic labels). */
+LLMService.prototype._grammarEntryToPayload = function(entry) {
+    if (!entry || !entry.exercises || !entry.exercises.length) return null;
+    var exercises = entry.exercises.map(function(ex) {
+        var labels = LLMService.resolveLabels(ex.type, ex.answer);
+        return Object.assign({}, ex, { labelA: labels.labelA, labelB: labels.labelB });
+    });
+    return {
+        grammar: entry.grammar,
+        usage: entry.usage,
+        example: entry.example,
+        exercises: exercises,
+        raw: JSON.stringify(entry),
+        critiqueScore: null,
+        fromCache: true
+    };
+};
+
+LLMService.prototype._grammarIdbKey = function(vocabId, langCode, explainLang) {
+    var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+    if (idb && idb.KEYS && idb.KEYS.grammar) {
+        return idb.KEYS.grammar(vocabId, langCode, explainLang || 'en');
+    }
+    return 'grammar:' + vocabId + ':' + langCode + ':' + (explainLang || 'en');
+};
+
+LLMService.prototype._writeGrammarIdb = async function(vocabId, langCode, explainLang, entry) {
+    var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+    if (!idb || !entry) return;
+    try {
+        var key = this._grammarIdbKey(vocabId, langCode, explainLang);
+        var toStore = {
+            grammar: entry.grammar,
+            usage: entry.usage,
+            example: entry.example,
+            exercises: entry.exercises,
+            explainLang: explainLang || 'en',
+            model: entry.model || null,
+            localTs: Date.now()
+        };
+        await idb.set(key, toStore, { vocabId: vocabId, langCode: langCode, explainLang: explainLang });
+        L('[Grammar] Saved to IndexedDB:', vocabId, langCode, explainLang);
+    } catch (e) {
+        L('[Grammar] IDB save failed:', e && e.message);
+    }
+};
+
 LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, data) {
-    if (!db) { L('[Grammar] Save skipped: no db'); return; }
-    if (!auth) { L('[Grammar] Save skipped: no auth'); return; }
-    if (!auth.currentUser) { L('[Grammar] Save skipped: no currentUser'); return; }
     if (!data || !data.exercises || data.exercises.length === 0) {
         L('[Grammar] Save skipped: no valid exercises');
         return;
@@ -180,10 +224,19 @@ LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, dat
         example: data.example,
         exercises: validExercises,
         model: (typeof LLMService !== 'undefined') ? LLMService.MODEL : 'gemma4:31b-cloud',
-        ts: firebase.database.ServerValue.TIMESTAMP
+        explainLang: explainLang
     };
+    // Always write device cache (works offline / without auth)
+    await this._writeGrammarIdb(vocabId, langCode, explainLang, entry);
+
+    if (!db) { L('[Grammar] RTDB save skipped: no db'); return; }
+    if (!auth) { L('[Grammar] RTDB save skipped: no auth'); return; }
+    if (!auth.currentUser) { L('[Grammar] RTDB save skipped: no currentUser'); return; }
     try {
-        await db.ref('grammar_exercises/' + vocabId + '/' + langCode + '/' + explainLang + '/' + token).set(entry);
+        var rtdbEntry = Object.assign({}, entry, {
+            ts: firebase.database.ServerValue.TIMESTAMP
+        });
+        await db.ref('grammar_exercises/' + vocabId + '/' + langCode + '/' + explainLang + '/' + token).set(rtdbEntry);
         L('[Grammar] Saved to RTDB:', vocabId, langCode, explainLang, token);
     } catch(e) {
         L('[Grammar] RTDB save error:', e.message, 'code:', e.code);
@@ -191,65 +244,62 @@ LLMService.prototype.saveGrammarExercise = async function(vocabId, langCode, dat
 };
 
 LLMService.prototype.loadCachedGrammarExercise = async function(vocabId, langCode) {
+    var prefLang = _getExplainLang();
+    var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+
+    // 1) IndexedDB first — zero RTDB download when present
+    if (idb) {
+        try {
+            var idbKey = this._grammarIdbKey(vocabId, langCode, prefLang);
+            var local = await idb.get(idbKey);
+            if (local && local.exercises && local.exercises.length > 0) {
+                var fromIdb = this._grammarEntryToPayload(local);
+                if (fromIdb) {
+                    L('[Grammar] Loaded from IndexedDB (explainLang=' + prefLang + '):', vocabId, langCode);
+                    return fromIdb;
+                }
+            }
+        } catch (eIdb) {
+            L('[Grammar] IDB load failed:', eIdb && eIdb.message);
+        }
+    }
+
     if (!db) return null;
     try {
-        var prefLang = _getExplainLang();
-        // New path: grammar_exercises/{vocabId}/{langCode}/{explainLang} — direct indexed lookup
+        // 2) RTDB new path
         var snap = await db.ref('grammar_exercises/' + vocabId + '/' + langCode + '/' + prefLang).limitToLast(1).once('value');
         if (snap.exists()) {
             var entry = null;
             snap.forEach(function(child) { entry = child.val(); });
             if (entry && entry.exercises && entry.exercises.length > 0) {
-                var exercises = entry.exercises.map(function(ex) {
-                    var labels = LLMService.resolveLabels(ex.type, ex.answer);
-                    return Object.assign({}, ex, { labelA: labels.labelA, labelB: labels.labelB });
-                });
+                await this._writeGrammarIdb(vocabId, langCode, prefLang, entry);
                 L('[Grammar] Loaded cached from RTDB (explainLang=' + prefLang + '):', vocabId, langCode);
-                return {
-                    grammar: entry.grammar,
-                    usage: entry.usage,
-                    example: entry.example,
-                    exercises: exercises,
-                    raw: JSON.stringify(entry),
-                    critiqueScore: null,
-                    fromCache: true
-                };
+                return this._grammarEntryToPayload(entry);
             }
         }
-        // Fallback: old path grammar_exercises/{vocabId}/{langCode} (pre-migration entries)
+        // 3) Fallback: old path grammar_exercises/{vocabId}/{langCode}
         var oldSnap = await db.ref('grammar_exercises/' + vocabId + '/' + langCode).limitToLast(5).once('value');
         if (!oldSnap.exists() || !oldSnap.val()) return null;
         var candidates = [];
         oldSnap.forEach(function(child) {
-            // Only include leaf entries (have exercises array, not sub-paths)
             if (child.val() && Array.isArray(child.val().exercises)) {
                 candidates.push(child.val());
             }
         });
         if (candidates.length === 0) return null;
-        var entry = null;
+        var entry2 = null;
         for (var i = 0; i < candidates.length; i++) {
             if (candidates[i].explainLang === prefLang) {
-                entry = candidates[i];
+                entry2 = candidates[i];
                 break;
             }
         }
-        if (!entry) entry = candidates[candidates.length - 1] || candidates[0];
-        if (!entry || !entry.exercises || entry.exercises.length === 0) return null;
-        var exercises = entry.exercises.map(function(ex) {
-            var labels = LLMService.resolveLabels(ex.type, ex.answer);
-            return Object.assign({}, ex, { labelA: labels.labelA, labelB: labels.labelB });
-        });
-        L('[Grammar] Loaded cached from RTDB (old path, explainLang=' + (entry.explainLang || 'en') + '):', vocabId, langCode);
-        return {
-            grammar: entry.grammar,
-            usage: entry.usage,
-            example: entry.example,
-            exercises: exercises,
-            raw: JSON.stringify(entry),
-            critiqueScore: null,
-            fromCache: true
-        };
+        if (!entry2) entry2 = candidates[candidates.length - 1] || candidates[0];
+        if (!entry2 || !entry2.exercises || entry2.exercises.length === 0) return null;
+        var useExplain = entry2.explainLang || prefLang || 'en';
+        await this._writeGrammarIdb(vocabId, langCode, useExplain, entry2);
+        L('[Grammar] Loaded cached from RTDB (old path, explainLang=' + useExplain + '):', vocabId, langCode);
+        return this._grammarEntryToPayload(entry2);
     } catch(e) {
         L('[Grammar] Cache load failed:', e.message);
         return null;

@@ -1,11 +1,33 @@
-/* js/data.js */
+/* js/data.js
+ * Vocab: IndexedDB (VmIdb) first — long-lived on-device cache; RTDB on miss / revalidate.
+ * Dictionary/kanji: memory + VmIdb write-through.
+ */
+var VOCAB_FORCE_SS_KEY = 'vm_vocab_force_refresh';
+
+function _vocabFingerprint(list) {
+    if (!list || !list.length) return '0';
+    var n = list.length;
+    var a = list[0] && list[0].id;
+    var b = list[n - 1] && list[n - 1].id;
+    var mid = list[Math.floor(n / 2)] && list[Math.floor(n / 2)].id;
+    var tagBits = 0;
+    for (var i = 0; i < Math.min(32, n); i++) {
+        tagBits += (list[i].tags && list[i].tags.length) || 0;
+        tagBits += (list[i].en && String(list[i].en).length) || 0;
+    }
+    return n + ':' + a + ':' + b + ':' + mid + ':' + tagBits;
+}
+
 class DataService {
     constructor() { 
         this.list = []; 
         this.localDailyScore = 0; 
         this.dailyScoreLoaded = false;
         this.kanjiCache = {}; 
-        this.pendingFetches = {}; 
+        this.pendingFetches = {};
+        /** @type {'network'|'cache'|'none'|null} */
+        this.vocabSource = null;
+        this._vocabBgRefresh = null;
     }
 
     get activeList() {
@@ -200,20 +222,148 @@ class DataService {
         return (new Date(d - offset)).toISOString().slice(0, 10);
     }
 
-    async load() {
-        if (typeof db !== 'undefined' && db) {
+    /**
+     * Load vocabulary — IndexedDB first (long-lived), RTDB when missing / forced / revalidate.
+     * @param {{ force?: boolean }} [opts]
+     */
+    async load(opts) {
+        opts = opts || {};
+        var force = opts.force === true;
+        try {
+            if (!force && typeof sessionStorage !== 'undefined' &&
+                sessionStorage.getItem(VOCAB_FORCE_SS_KEY) === '1') {
+                force = true;
+                sessionStorage.removeItem(VOCAB_FORCE_SS_KEY);
+            }
+        } catch (_) {}
+
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        var vocabKey = idb && idb.KEYS ? idb.KEYS.VOCAB_FULL : 'vocab:full';
+
+        // 1) Durable local cache
+        if (!force && idb && typeof idb.getRecord === 'function') {
             try {
-                L("[Data] Fetching vocab...");
-                const snap = await db.ref('vocab').once('value');
-                if (snap.exists()) {
-                    const val = snap.val();
-                    this.list = Array.isArray(val) ? val : Object.values(val);
-                    this.list = this.list.filter(item => item !== null).sort((a,b) => a.id - b.id);
+                var rec = await idb.getRecord(vocabKey);
+                if (rec && Array.isArray(rec.v) && rec.v.length > 0) {
+                    this.list = rec.v.filter(function (item) { return item != null; })
+                        .sort(function (a, b) { return (a.id || 0) - (b.id || 0); });
+                    this.vocabSource = 'cache';
+                    var age = idb.ageMs(rec);
+                    if (typeof L === 'function') {
+                        L('[Data] Vocab from IndexedDB', this.list.length,
+                            'ageH', Math.round(age / 3600000),
+                            '(no auto full re-download)');
+                    }
+                    // Large-tree policy: do NOT background-fetch full `vocab` after first load.
+                    // Force refresh only: Retry / clearVocabCache / load({ force: true }).
+                    if (idb.ALLOW_LARGE_BG_REVALIDATE === true &&
+                        Number.isFinite(idb.REVALIDATE_AFTER_MS) &&
+                        age > idb.REVALIDATE_AFTER_MS) {
+                        this._revalidateVocabInBackground();
+                    }
+                    return this.list.length;
                 }
-            } catch (e) { L("[Data] RTDB fetch failed", e); }
+            } catch (e) {
+                if (typeof L === 'function') L('[Data] Vocab IDB read failed', e);
+            }
         }
 
+        // 2) Network
+        var n = await this._fetchVocabFromRtdb();
+        if (n > 0) {
+            this.vocabSource = 'network';
+            await this._writeVocabIdb(this.list);
+            return this.list.length;
+        }
+
+        // 3) Offline fallback (even after force)
+        if (!this.list.length && idb) {
+            try {
+                var fb = await idb.get(vocabKey);
+                if (Array.isArray(fb) && fb.length) {
+                    this.list = fb.filter(function (item) { return item != null; })
+                        .sort(function (a, b) { return (a.id || 0) - (b.id || 0); });
+                    this.vocabSource = 'cache';
+                    if (typeof L === 'function') L('[Data] Vocab offline IDB fallback', this.list.length);
+                }
+            } catch (_) {}
+        }
+        if (!this.list.length) this.vocabSource = 'none';
         return this.list.length;
+    }
+
+    async _fetchVocabFromRtdb() {
+        if (typeof db === 'undefined' || !db) return 0;
+        try {
+            if (typeof L === 'function') L('[Data] Fetching vocab from RTDB...');
+            var snap = await db.ref('vocab').once('value');
+            if (snap.exists()) {
+                var val = snap.val();
+                this.list = Array.isArray(val) ? val : Object.values(val);
+                this.list = this.list.filter(function (item) { return item !== null; })
+                    .sort(function (a, b) { return a.id - b.id; });
+                return this.list.length;
+            }
+        } catch (e) {
+            if (typeof L === 'function') L('[Data] RTDB fetch failed', e);
+        }
+        return 0;
+    }
+
+    _revalidateVocabInBackground() {
+        if (this._vocabBgRefresh) return;
+        var self = this;
+        this._vocabBgRefresh = (async function () {
+            try {
+                var prevFp = _vocabFingerprint(self.list);
+                var n = await self._fetchVocabFromRtdb();
+                if (n > 0) {
+                    var nextFp = _vocabFingerprint(self.list);
+                    self.vocabSource = 'network';
+                    await self._writeVocabIdb(self.list);
+                    if (typeof L === 'function') {
+                        L('[Data] Vocab revalidated', n, prevFp === nextFp ? 'unchanged' : 'updated');
+                    }
+                }
+            } catch (e) {
+                if (typeof L === 'function') L('[Data] Vocab revalidate failed', e);
+            } finally {
+                self._vocabBgRefresh = null;
+            }
+        })();
+    }
+
+    async _writeVocabIdb(list) {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (!idb || !list || !list.length) return false;
+        var key = idb.KEYS ? idb.KEYS.VOCAB_FULL : 'vocab:full';
+        try {
+            await idb.set(key, list, {
+                count: list.length,
+                fingerprint: _vocabFingerprint(list)
+            });
+            if (typeof L === 'function') L('[Data] Vocab saved to IndexedDB', list.length);
+            return true;
+        } catch (e) {
+            if (typeof L === 'function') L('[Data] Vocab IDB write failed', e);
+            return false;
+        }
+    }
+
+    /** Clear vocab IDB + force next load from RTDB. */
+    async clearVocabCache() {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (idb) {
+            try {
+                var key = idb.KEYS ? idb.KEYS.VOCAB_FULL : 'vocab:full';
+                await idb.del(key);
+            } catch (_) {}
+        }
+        try {
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem(VOCAB_FORCE_SS_KEY, '1');
+            }
+        } catch (_) {}
     }
 
     async getKanji(char) {
@@ -221,7 +371,22 @@ class DataService {
         if (this.kanjiCache[char]) return this.kanjiCache[char];
         if (this.pendingFetches[char]) return this.pendingFetches[char];
 
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        var dictKey = idb && idb.KEYS ? idb.KEYS.dict(char) : ('dict:' + char);
+
+        // Durable dictionary cache
+        if (idb) {
+            try {
+                var cached = await idb.get(dictKey);
+                if (cached) {
+                    this.kanjiCache[char] = cached;
+                    return cached;
+                }
+            } catch (_) {}
+        }
+
         if (typeof db !== 'undefined' && db) {
+            var self = this;
             const promise = new Promise((resolve, reject) => {
                 db.ref('dictionary').orderByChild('s').equalTo(char).limitToFirst(1).once('value')
                 .then(snap => {
@@ -236,9 +401,14 @@ class DataService {
                     else resolve(null);
                 })
                 .catch(reject);
-            }).then(data => {
-                if (data) this.kanjiCache[char] = data;
-                delete this.pendingFetches[char];
+            }).then(async function (data) {
+                if (data) {
+                    self.kanjiCache[char] = data;
+                    if (idb) {
+                        try { await idb.set(dictKey, data); } catch (_) {}
+                    }
+                }
+                delete self.pendingFetches[char];
                 return data;
             });
             
@@ -256,6 +426,13 @@ class DataService {
             await db.ref('dictionary/' + entry.id).update(entry);
             if(entry.s) this.kanjiCache[entry.s] = entry;
             if(entry.t) this.kanjiCache[entry.t] = entry;
+            var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+            if (idb) {
+                try {
+                    if (entry.s) await idb.set(idb.KEYS.dict(entry.s), entry);
+                    if (entry.t) await idb.set(idb.KEYS.dict(entry.t), entry);
+                } catch (_) {}
+            }
         }
     }
 
@@ -265,6 +442,9 @@ class DataService {
         if (typeof db !== 'undefined' && db) {
             await db.ref('vocab/' + updatedItem.id).set(updatedItem);
         }
+        try {
+            if (this.list && this.list.length) await this._writeVocabIdb(this.list);
+        } catch (_) {}
     }
 
     async recordScore(points, mode) {

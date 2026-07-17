@@ -1,13 +1,13 @@
 // Extracted Cache methods for Story mode
+// IndexedDB pack (VmIdb stories:pack:{lang}) first; RTDB full tree only on miss / revalidate.
 Object.assign(Story.prototype, {
 
-// --- RTDB cache loading ---
+// --- Cache loading (IDB → RTDB) ---
 async _loadCacheThenStart() {
         if (window.location.search.includes('disable_cache=1')) {
             return this.startStory();
         }
         
-        // Try to load cached stories from RTDB for this language
         if (!this._cacheLoaded) {
             await this._loadCachedStories();
             this._cacheLoaded = true;
@@ -15,33 +15,163 @@ async _loadCacheThenStart() {
         this.startStory();
     },
 
+    _storiesIdbKey(lang) {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (idb && idb.KEYS && idb.KEYS.storiesPack) return idb.KEYS.storiesPack(lang);
+        return 'stories:pack:' + (lang || 'en');
+    },
+
+    _shuffleStories(all) {
+        for (var i = all.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = all[i]; all[i] = all[j]; all[j] = tmp;
+        }
+        return all;
+    },
+
+    async _writeStoriesIdb(lang, list) {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (!idb || !list) return;
+        try {
+            // Strip non-cloneable bits; keep fields needed for playback
+            var pack = list.map(function (s) {
+                return {
+                    story: s.story,
+                    translation: s.translation || '',
+                    questions: s.questions,
+                    vocabIds: s.vocabIds || [],
+                    _key: s._key,
+                    _lang: s._lang || lang,
+                    ts: s.ts || s.localTs || Date.now()
+                };
+            });
+            await idb.set(this._storiesIdbKey(lang), pack, { count: pack.length, lang: lang });
+            L('[Story] Saved', pack.length, 'stories to IndexedDB for', lang);
+        } catch (e) {
+            L('[Story] IDB pack save failed:', e && e.message);
+        }
+    },
+
+    async _upsertStoryInIdb(entry, lang, compositeKey) {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (!idb || !entry) return;
+        try {
+            var key = this._storiesIdbKey(lang);
+            var list = (await idb.get(key)) || [];
+            if (!Array.isArray(list)) list = [];
+            var fullKey = compositeKey + '/' + lang;
+            list = list.filter(function (s) { return s && s._key !== fullKey; });
+            list.push({
+                story: entry.story,
+                translation: entry.translation || '',
+                questions: entry.questions,
+                vocabIds: entry.vocabIds || [],
+                _key: fullKey,
+                _lang: lang,
+                localTs: Date.now()
+            });
+            await idb.set(key, list, { count: list.length, lang: lang });
+        } catch (e) {
+            L('[Story] IDB upsert failed:', e && e.message);
+        }
+    },
+
+    async _removeStoryFromIdb(compositeKey, lang) {
+        var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+        if (!idb) return;
+        try {
+            var key = this._storiesIdbKey(lang);
+            var list = (await idb.get(key)) || [];
+            if (!Array.isArray(list)) return;
+            var fullKey = compositeKey + '/' + lang;
+            var next = list.filter(function (s) { return s && s._key !== fullKey; });
+            await idb.set(key, next, { count: next.length, lang: lang });
+        } catch (_) {}
+    },
+
+    _revalidateStoriesInBackground(targetLang) {
+        if (this._storiesBgRefresh) return;
+        var self = this;
+        this._storiesBgRefresh = (async function () {
+            try {
+                await self._fetchStoriesFromRtdb(targetLang, { writeIdb: true, applyToSession: false });
+                L('[Story] Background revalidated stories for', targetLang);
+            } catch (e) {
+                L('[Story] Background revalidate failed:', e && e.message);
+            } finally {
+                self._storiesBgRefresh = null;
+            }
+        })();
+    },
+
+    /**
+     * @param {string} targetLang
+     * @param {{ writeIdb?: boolean, applyToSession?: boolean }} [opts]
+     * @returns {Promise<Array>}
+     */
+    async _fetchStoriesFromRtdb(targetLang, opts) {
+        opts = opts || {};
+        if (typeof db === 'undefined' || !db) return [];
+        if (!auth || !auth.currentUser) return [];
+        const snap = await db.ref('stories').once('value');
+        if (!snap.exists()) return [];
+
+        const all = [];
+        snap.forEach(function(compositeChild) {
+            var langNode = compositeChild.val();
+            var story = langNode && langNode[targetLang];
+            if (story && story.story && story.questions && story.questions.length > 0) {
+                story._key = compositeChild.key + '/' + targetLang;
+                story._lang = targetLang;
+                all.push(story);
+            }
+        });
+        if (opts.writeIdb !== false) {
+            await this._writeStoriesIdb(targetLang, all);
+        }
+        if (opts.applyToSession) {
+            this._cachedStories = this._shuffleStories(all.slice());
+            this._cachedIndex = 0;
+        }
+        return all;
+    },
+
     async _loadCachedStories() {
         try {
-            const user = auth.currentUser;
-            if (!user) return;
             const targetLang = this._getTargetLang();
-            const snap = await db.ref('stories').once('value');
-            if (!snap.exists()) return;
+            var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
 
-            const all = [];
-            snap.forEach(function(compositeChild) {
-                var langNode = compositeChild.val();
-                // Each child key is a language code
-                var story = langNode[targetLang];
-                if (story && story.story && story.questions && story.questions.length > 0) {
-                    story._key = compositeChild.key + '/' + targetLang;
-                    story._lang = targetLang;
-                    all.push(story);
+            // 1) IndexedDB pack — avoid full RTDB stories tree download
+            if (idb) {
+                try {
+                    var rec = await idb.getRecord(this._storiesIdbKey(targetLang));
+                    if (rec && Array.isArray(rec.v) && rec.v.length > 0) {
+                        this._cachedStories = this._shuffleStories(rec.v.slice());
+                        this._cachedIndex = 0;
+                        L('[Story] Loaded', this._cachedStories.length, 'cached stories from IndexedDB (no auto full re-download)');
+                        // Large-tree policy: never re-pull full `stories` after first pack load.
+                        // New stories are upserted into the IDB pack on save; force via empty pack / clear.
+                        if (idb.ALLOW_LARGE_BG_REVALIDATE === true &&
+                            Number.isFinite(idb.REVALIDATE_AFTER_MS) &&
+                            idb.ageMs(rec) > idb.REVALIDATE_AFTER_MS) {
+                            this._revalidateStoriesInBackground(targetLang);
+                        }
+                        return;
+                    }
+                } catch (eIdb) {
+                    L('[Story] IDB pack load failed:', eIdb && eIdb.message);
                 }
-            });
-
-            for (var i = all.length - 1; i > 0; i--) {
-                var j = Math.floor(Math.random() * (i + 1));
-                var tmp = all[i]; all[i] = all[j]; all[j] = tmp;
             }
-            this._cachedStories = all;
-            this._cachedIndex = 0;
-            L('[Story] Loaded', all.length, 'cached stories from RTDB');
+
+            // 2) RTDB (first run / empty IDB)
+            if (!auth || !auth.currentUser) {
+                L('[Story] RTDB load skipped: no auth (and no IDB pack)');
+                return;
+            }
+            var all = await this._fetchStoriesFromRtdb(targetLang, { writeIdb: true, applyToSession: true });
+            if (all.length) {
+                L('[Story] Loaded', all.length, 'cached stories from RTDB');
+            }
         } catch (e) {
             L('[Story] Cache load failed:', e.message);
         }
@@ -117,7 +247,7 @@ async _prefetchNext() {
             const cached = this._nextCachedStory();
             if (cached) {
                 this._prefetched = cached;
-                L('[Story] Prefetch served from RTDB cache');
+                L('[Story] Prefetch served from local/RTDB cache');
                 this._updateNextButton();
                 return;
             }
@@ -183,6 +313,19 @@ async _saveStoryToRTDB(storyText, questions, words, lang) {
 
             await db.ref('stories/' + compositeKey + '/' + lang).update(entry);
             L('[Story] Saved story to RTDB: /stories/' + compositeKey + '/' + lang);
+            // Keep device pack in sync
+            await this._upsertStoryInIdb(entry, lang, compositeKey);
+            // Also refresh in-memory list so next story can use it
+            if (Array.isArray(this._cachedStories)) {
+                var fullKey = compositeKey + '/' + lang;
+                this._cachedStories = this._cachedStories.filter(function (s) {
+                    return s && s._key !== fullKey;
+                });
+                this._cachedStories.push(Object.assign({}, entry, {
+                    _key: fullKey,
+                    _lang: lang
+                }));
+            }
         } catch (e) {
             L('[Story] RTDB save failed:', e.message);
         }
@@ -202,16 +345,27 @@ async _saveStoryToRTDB(storyText, questions, words, lang) {
                 key = vocabIds.slice().sort().join('-');
                 lang = this._getTargetLang();
             }
+            // Always drop from IndexedDB pack (even if RTDB delete needs auth)
+            await this._removeStoryFromIdb(key, lang);
             if (!auth || !auth.currentUser) {
-                if (app.ui) app.ui.showToast('Must be logged in to delete', 'error');
+                if (app.ui) app.ui.showToast('Must be logged in to delete from cloud', 'error');
+                // Still remove from session memory
+                var cacheKeyOffline = key + '/' + lang;
+                this._cachedStories = (this._cachedStories || []).filter(function(s) {
+                    return s._key !== cacheKeyOffline;
+                });
+                if (this._cachedIndex >= this._cachedStories.length) {
+                    this._cachedIndex = Math.max(0, this._cachedStories.length - 1);
+                }
+                this._loadNext();
                 return;
             }
             await db.ref('stories/' + key + '/' + lang).remove();
             L('[Story] Deleted story from RTDB: /stories/' + key + '/' + lang);
             if (app.ui) app.ui.showToast('Story deleted', 'success');
-            // Remove from local cache
+            // Remove from session cache
             var cacheKey = key + '/' + lang;
-            this._cachedStories = this._cachedStories.filter(function(s) { return s._key !== cacheKey; });
+            this._cachedStories = (this._cachedStories || []).filter(function(s) { return s._key !== cacheKey; });
             // Re-sort pointer
             if (this._cachedIndex >= this._cachedStories.length) {
                 this._cachedIndex = Math.max(0, this._cachedStories.length - 1);

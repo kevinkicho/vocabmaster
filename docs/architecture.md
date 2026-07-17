@@ -93,16 +93,46 @@ If the critic's response fails to parse or validate, it **auto-approves with sco
 
 ## 3. Data Loading
 
-### 3.1 RTDB-only (no local fallback)
+### 3.1 IndexedDB-first vocab + shared VmIdb
 
-`DataService.load()` (data.js) fetches from Firebase RTDB `vocab` node only:
+Shared helper: `public/js/vm_idb.js` → `window.VmIdb` (DB `vocabmaster_app`, store `kv`).
 
-1. Check `typeof db !== 'undefined'`
-2. `db.ref('vocab').once('value')`
-3. If snapshot exists, parse as array or object values
-4. Sort by `id`
-5. No CSV fallback. No `createMockData()`. If RTDB has no data, `this.list` stays empty.
-6. Returns `this.list.length` — 0 means "no data available"
+| Key | Content |
+|-----|---------|
+| `vocab:full` | Full vocab list (long-lived; revalidate after 24h in background) |
+| `dict:{char}` | Dictionary / kanji entries |
+| `memory:cache` / `memory:dirty` | FSRS cards (+ localStorage mirror) |
+| `path:profile` | Learning path profile |
+| `daily:session` | Today plan payload |
+| `grammar:{vid}:{lang}:{explainLang}` | Grammar Gym exercise set (device first; RTDB shared) |
+| `stories:pack:{lang}` | Story Mode pack for target language |
+
+**Grammar Gym** (`llm_roles.js`): `loadCachedGrammarExercise` reads **IndexedDB first**; on miss, RTDB `grammar_exercises/…` then write-through IDB. `saveGrammarExercise` always writes IDB; RTDB when authed. Path is **narrow** (one vocab) — never the full `grammar_exercises` tree.
+
+**Story Mode** (`game_story_cache.js`): `_loadCachedStories` reads **`stories:pack:{lang}`** first. Full RTDB `stories` only on **first pack miss**. No automatic full-tree revalidate (`VmIdb.ALLOW_LARGE_BG_REVALIDATE` default false). New/deleted stories **upsert into the IDB pack** only.
+
+### 3.1.1 Preventing large RTDB downloads (policy)
+
+| Blob | First load | Later sessions | When network again |
+|------|------------|----------------|--------------------|
+| `vocab` | Full once → IDB | IDB only | Retry / `load({force:true})` only |
+| `stories` | Full once → pack | IDB pack only | Empty pack / clear |
+| `grammar_exercises` | Never full tree | Per-word path or IDB | Single vocab path on miss |
+| `dictionary` | Per-character | IDB then narrow query | Per char |
+| User `memory` / path | User subtree | Local + small sync | User paths only |
+
+**Do not** attach `.on('value')` to large roots. **Do not** background-revalidate multi-MB trees. Prefer write-through IDB on each AI save.
+
+`DataService.load()`:
+
+1. Unless force / `sessionStorage vm_vocab_force_refresh`, read **`vocab:full` from IndexedDB**.
+2. On hit: serve immediately (`vocabSource = 'cache'`). If age &gt; 24h, **background** RTDB revalidate + rewrite IDB.
+3. On miss: `db.ref('vocab').once('value')`, sort by `id`, write IDB (`vocabSource = 'network'`).
+4. Network fail: fall back to any IDB copy. No CSV / mock.
+5. Empty **Retry** clears IDB vocab + forces RTDB.
+6. Returns `this.list.length`. Status may show `(cached)`.
+
+Also still: `vocabmaster_llm` (AI cloze cache) and `vocabmaster_learning_loop` (own DBs).
 
 ### 3.2 Empty list handling (main.js)
 

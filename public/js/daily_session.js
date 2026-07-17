@@ -2046,11 +2046,18 @@ class DailySessionService {
 
     async _persistPlan() {
         var payload = this._planPayload();
-        // localStorage mirror always
+        // localStorage mirror
         try {
             localStorage.setItem(DAILY_SESSION_LS_KEY, JSON.stringify(payload));
         } catch (e) {
             L('[DailySession] localStorage persist failed', e);
+        }
+        // IndexedDB durable mirror (quota-safe for larger plans)
+        try {
+            var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+            if (idb && idb.KEYS) await idb.set(idb.KEYS.DAILY_SESSION, payload);
+        } catch (e2) {
+            if (typeof L === 'function') L('[DailySession] IDB persist failed', e2);
         }
 
         var uid = _resolveUidForSession();
@@ -2093,6 +2100,18 @@ class DailySessionService {
         try {
             var raw = localStorage.getItem(DAILY_SESSION_LS_KEY);
             if (raw) local = JSON.parse(raw);
+        } catch (_) { /* ignore */ }
+        // Prefer IndexedDB if newer or LS missing
+        try {
+            var idb = (typeof window !== 'undefined') ? window.VmIdb : null;
+            if (idb && idb.KEYS) {
+                var idbLocal = await idb.get(idb.KEYS.DAILY_SESSION);
+                if (idbLocal && typeof idbLocal === 'object') {
+                    if (!local || (idbLocal.updatedAt || 0) >= (local.updatedAt || 0)) {
+                        local = idbLocal;
+                    }
+                }
+            }
         } catch (_) { /* ignore */ }
 
         if (uid && typeof db !== 'undefined' && db) {

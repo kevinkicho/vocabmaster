@@ -147,6 +147,10 @@ scripts/
 /data/backup
 credentials.json
 data/backup
+
+# Local data dumps (RTDB exports, enrichment intermediates — large / sensitive)
+data/
+
 android/app/src/main/assets/js/ollama_config.js
 screenshots/
 screenshots/discardable/

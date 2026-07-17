@@ -16,6 +16,23 @@ var PATH_DEFAULT_FRAMEWORK = Object.freeze({
 });
 
 /**
+ * Hand-curated unit themes (cycles by unit index). Used for Chat scenario + coach flavor.
+ * themeTags optional for future content filtering.
+ */
+var UNIT_THEME_CATALOG = Object.freeze([
+    { theme: 'daily', title: 'Daily life', themeTags: ['home', 'routine'] },
+    { theme: 'food', title: 'Food & dining', themeTags: ['food', 'restaurant'] },
+    { theme: 'travel', title: 'Travel', themeTags: ['travel', 'directions'] },
+    { theme: 'shopping', title: 'Shopping', themeTags: ['shopping', 'money'] },
+    { theme: 'school', title: 'School & study', themeTags: ['school', 'study'] },
+    { theme: 'work', title: 'Work', themeTags: ['work', 'business'] },
+    { theme: 'hobby', title: 'Hobbies', themeTags: ['hobby', 'free_time'] },
+    { theme: 'health', title: 'Health', themeTags: ['health', 'body'] },
+    { theme: 'culture', title: 'Culture & media', themeTags: ['culture', 'media'] },
+    { theme: 'home', title: 'Home & family', themeTags: ['family', 'home'] }
+]);
+
+/**
  * Strict filter by tags — never expands empty result to full list.
  * @param {Array} list
  * @param {string[]} tags
@@ -204,11 +221,15 @@ class LearningPathService {
         if (!p.units[unitId]) {
             var list = (typeof app !== 'undefined' && app && app.data && app.data.list) ? app.data.list : [];
             var ids = sliceUnitWordIds(list, tier, unitIndex, p.unitSize || UNIT_SIZE_DEFAULT);
+            var themeMeta = UNIT_THEME_CATALOG[unitIndex % UNIT_THEME_CATALOG.length];
             p.units[unitId] = {
                 unitId: unitId,
                 tier: tier,
                 index: unitIndex,
                 wordIds: ids,
+                theme: themeMeta.theme,
+                themeTitle: themeMeta.title,
+                themeTags: themeMeta.themeTags.slice(),
                 unlockedAt: Date.now(),
                 completedAt: null,
                 progress: 0
@@ -365,9 +386,30 @@ class LearningPathService {
         if (p.pathMode !== 'guided') return 'Free practice';
         var unit = this.getActiveUnit();
         var n = unit && unit.wordIds ? unit.wordIds.length : 0;
-        return (p.currentTier || '') + (unit ? ' · Unit ' + ((unit.index || 0) + 1) : '') + (n ? ' · ' + n + ' words' : '');
+        var theme = unit && unit.themeTitle ? ' · ' + unit.themeTitle : '';
+        return (p.currentTier || '') + (unit ? ' · Unit ' + ((unit.index || 0) + 1) : '') + theme + (n ? ' · ' + n + ' words' : '');
+    }
+
+    /** Chat / coach theme for active unit (or null). */
+    getUnitTheme() {
+        var unit = this.getActiveUnit();
+        return unit && unit.theme ? unit.theme : null;
+    }
+
+    /** Start formal placement (FSRS-safe). */
+    startPlacement() {
+        var p = this.getProfile();
+        p.placementStatus = 'in_progress';
+        p.pathMode = 'guided';
+        this.saveLocal();
+        this.flush();
+        if (typeof app !== 'undefined' && app && typeof app.launch === 'function' && typeof Placement !== 'undefined') {
+            app.launch(function () { return new Placement(); });
+        }
     }
 }
+
+window.UNIT_THEME_CATALOG = UNIT_THEME_CATALOG;
 
 // --- DataService helpers (strict filter) ---
 if (typeof DataService !== 'undefined') {

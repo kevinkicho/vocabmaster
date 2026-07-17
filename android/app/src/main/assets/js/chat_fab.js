@@ -90,21 +90,6 @@ var ChatFAB = (function () {
         return _sheetRoot;
     }
 
-    function buildTutorSystem(ctx) {
-        var known = ctx.knownLang || 'en';
-        var target = ctx.targetLang || 'ja';
-        var parts = [
-            'You are a friendly bilingual language tutor.',
-            'Learner knows: ' + known + '. Target language: ' + target + '.',
-            'Respond primarily in ' + target + ' with brief explanations in ' + known + ' when helpful.',
-            'Keep replies short (2-5 sentences). Be encouraging and concrete.'
-        ];
-        if (ctx.tier) parts.push('Learner level/tier: ' + ctx.tier + '.');
-        if (ctx.word) parts.push('Current study word: ' + ctx.word + '.');
-        if (ctx.gameMode) parts.push('They are mid-activity: ' + ctx.gameMode + '.');
-        return parts.join(' ');
-    }
-
     async function sendMessage(text) {
         if (_busy || !text || !text.trim()) return;
         if (!window.app || !app.llm) {
@@ -115,26 +100,26 @@ var ChatFAB = (function () {
         appendMsg('user', text.trim());
         renderSheetBody();
         var ctx = collectContext();
-        var history = _messages.slice(-8).map(function (m) {
-            return (m.role === 'user' ? 'User: ' : 'Tutor: ') + m.text;
-        }).join('\n');
-        var prompt = history + '\nUser: ' + text.trim() + '\nTutor:';
+        var built = (window.ChatPanel && ChatPanel.buildTutorPrompt)
+            ? ChatPanel.buildTutorPrompt({
+                knownLang: ctx.knownLang,
+                targetLang: ctx.targetLang,
+                userMessage: text.trim(),
+                messages: _messages.slice(0, -1),
+                context: ctx
+            })
+            : { system: 'You are a tutor.', prompt: 'User: ' + text.trim() + '\nTutor:' };
         try {
             _abort = new AbortController();
             var raw = await app.llm.generate({
-                prompt: prompt,
-                system: buildTutorSystem(ctx),
+                prompt: built.prompt,
+                system: built.system,
                 options: { temperature: 0.6, num_predict: 256 },
                 timeout: 45000,
                 signal: _abort.signal
             });
             var reply = (raw || '').trim() || '…';
             appendMsg('assistant', reply);
-            try {
-                if (app.audio && prefs().chatFabBilingual !== false) {
-                    // light TTS of reply in target lang
-                }
-            } catch (_) {}
         } catch (e) {
             appendMsg('assistant', 'Sorry — ' + ((e && e.message) || 'AI busy. Try again.'));
         }

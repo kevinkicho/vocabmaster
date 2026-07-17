@@ -250,71 +250,34 @@ class Chat extends GameMode {
     }
 
     _buildPrompt(userMessage) {
-        var lang = this._getTargetLang();
-        var p = app.store.prefs;
-        var level = p.chatLevel || 'B1';
-        var scenario = p.chatScenario || 'daily';
-        var tagFilter = p.tagFilter || ['all'];
-
-        var scenarioDesc = {
-            daily: 'Daily life conversations (greetings, weather, family, routines)',
-            restaurant: 'Ordering food at a restaurant, interacting with waitstaff',
-            travel: 'Travel situations (hotel, directions, transportation)',
-            business: 'Business meetings, emails, professional interactions',
-            hobby: 'Discussing hobbies, interests, and free time activities',
-            custom: 'Free conversation on any topic'
-        }[scenario] || 'Daily life conversations';
-
-        var memoriesSection = '';
-        if (this.memories.length > 0) {
-            memoriesSection = 'Previous session context:\n' + this.memories.map(function(m) { return '- ' + (m.summary || ''); }).join('\n');
+        if (window.ChatPanel && ChatPanel.buildImmersivePrompt) {
+            return ChatPanel.buildImmersivePrompt({
+                targetLang: this._getTargetLang(),
+                userMessage: userMessage,
+                messages: this.messages,
+                memories: this.memories,
+                maxHistory: this.maxHistory
+            });
         }
-
-        var tagInfo = tagFilter.includes('all') ? 'all levels' : tagFilter.join(', ');
-
-        var langName = app.llm._getLangName(lang);
-        var system = 'You are a ' + langName + ' conversation partner.\n'
-            + 'RULE: Every response you write MUST be entirely in ' + langName + '.\n'
-            + 'No matter what language the user writes in, you reply only in ' + langName + '.\n'
-            + 'If the user writes in a language other than ' + langName + ', respond in ' + langName + ' and naturally include the ' + langName + ' words they were looking for.\n\n'
-            + 'Scenario: ' + scenarioDesc + '\n'
-            + 'Learner level: ' + level + '\n'
-            + 'Vocabulary range: ' + tagInfo + '\n'
-            + (memoriesSection ? memoriesSection + '\n' : '')
-            + '\nGuidelines:\n'
-            + '- Reply in ' + langName + ' only, 2-3 sentences\n'
-            + '- Use ' + level + '-appropriate vocabulary\n'
-            + '- Gently correct mistakes in ' + langName + '\n'
-            + '- End with a follow-up question in ' + langName + '\n'
-            + '\nAt the end of your response, you may optionally append [MEMORY: ...] with a JSON object to save a compact summary. Example:\n'
-            + '[MEMORY: {"summary": "Practiced restaurant vocabulary, struggled with ordering", "topics": ["food", "ordering"], "level": "B1"}]\n'
-            + 'Never include full transcripts. Only save meaningful summaries.';
-
-        var history = this.messages.slice(-this.maxHistory * 2).map(function(m) {
-            return '[' + lang + '] ' + (m.role === 'user' ? 'User' : 'Assistant') + ': ' + m.text;
-        }).join('\n');
-
-        return { system: system, prompt: history + '\n[' + lang + '] User: ' + userMessage + '\n[' + lang + '] Assistant:' };
-    }
-
-    _buildOpeningPrompt() {
+        // Fallback if ChatPanel not loaded
         var lang = this._getTargetLang();
-        var langName = app.llm._getLangName(lang);
-        var scenario = app.store.prefs.chatScenario || 'daily';
         return {
-            system: 'You are a ' + langName + ' conversation partner. Write everything in ' + langName + ' only.\n'
-                + 'Greet the user in ' + langName + ' and ask an opening question about ' + scenario + '.\n'
-                + '1-2 sentences, all in ' + langName + '.',
-            prompt: '[' + langName + '] Start the conversation. Greet the user and ask a question about ' + scenario + '.'
+            system: 'You are a conversation partner. Reply briefly.',
+            prompt: 'User: ' + userMessage + '\nAssistant:'
         };
     }
 
+    _buildOpeningPrompt() {
+        if (window.ChatPanel && ChatPanel.buildOpeningPrompt) {
+            return ChatPanel.buildOpeningPrompt({ targetLang: this._getTargetLang() });
+        }
+        var lang = this._getTargetLang();
+        return { system: 'Greet the user.', prompt: 'Start.' };
+    }
+
     _parseMemoryMarker(text) {
-        var match = text.match(/\[MEMORY:\s*(\{.*?\})\]/);
-        if (match) {
-            try {
-                return { json: JSON.parse(match[1]), cleaned: text.replace(match[0], '').trim() };
-            } catch(e) { return null; }
+        if (window.ChatPanel && ChatPanel.parseMemoryMarker) {
+            return ChatPanel.parseMemoryMarker(text);
         }
         return null;
     }

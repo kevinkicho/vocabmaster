@@ -621,10 +621,13 @@ class App {
                         + '<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Learning path</p>'
                         + '<p class="text-sm font-bold text-slate-800 dark:text-white">' + (label || 'Set your path') + '</p>'
                         + '<p class="text-[11px] text-slate-500 mt-1">' + modeLabel + ' · ' + (prof.targetLang || '') + '</p>'
-                        + '<div class="flex gap-2 mt-3">'
+                        + '<div class="flex flex-wrap gap-2 mt-3">'
                         + (prof.pathMode === 'guided'
                             ? '<button type="button" onclick="app.learningPath.setPathMode(\'free\');app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-100 dark:bg-neutral-800">Switch to free</button>'
                             : '<button type="button" onclick="app.learningPath.setPathMode(\'guided\');app.learningPath.ensureUnit(0);app.goHome(false)" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-indigo-600 text-white">Start guided path</button>')
+                        + ((prof.placementStatus === 'pending' || prof.placementStatus === 'skipped' || prof.pathMode === 'free')
+                            ? '<button type="button" onclick="app.learningPath.startPlacement()" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-amber-500 text-white">Take placement</button>'
+                            : '')
                         + '</div></div></div>';
                 }
             }

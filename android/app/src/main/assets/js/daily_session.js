@@ -1849,6 +1849,7 @@ class DailySessionService {
         }
 
         view.classList.remove('visible');
+        var wrapId = 'session-wrapup-text';
         view.innerHTML =
             '<div class="flex flex-col items-center justify-center w-full h-full pb-8 overflow-y-auto pt-4 px-3">' +
                 '<div class="w-full max-w-md bg-white dark:bg-neutral-900 rounded-[2rem] p-6 sm:p-8 shadow-sm border border-slate-200 dark:border-neutral-800">' +
@@ -1856,6 +1857,7 @@ class DailySessionService {
                         '<div class="text-5xl mb-3" aria-hidden="true">✓</div>' +
                         '<h2 class="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Session complete</h2>' +
                         '<p class="text-xs font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-widest mt-2">Today\'s practice</p>' +
+                        '<p id="' + wrapId + '" class="text-sm text-slate-600 dark:text-neutral-300 mt-3 leading-relaxed min-h-[2.5rem]"></p>' +
                     '</div>' +
                     '<div class="grid grid-cols-2 gap-3 mb-4">' +
                         '<div class="rounded-2xl bg-emerald-50 dark:bg-emerald-950 p-4 text-center border border-emerald-100 dark:border-emerald-900">' +
@@ -1901,6 +1903,26 @@ class DailySessionService {
                 bar.innerText = 'Session complete';
             }
         } catch (_) { /* ignore */ }
+
+        // AI coach wrap-up (non-blocking)
+        try {
+            if (window.TutorMoments && typeof TutorMoments.sessionWrapUp === 'function') {
+                var wrapEl = document.getElementById(wrapId);
+                if (wrapEl) wrapEl.textContent = '…';
+                TutorMoments.sessionWrapUp(summary).then(function (text) {
+                    var el = document.getElementById(wrapId);
+                    if (!el) return;
+                    el.textContent = text || 'Great work — come back tomorrow for more reviews.';
+                }).catch(function () {
+                    var el2 = document.getElementById(wrapId);
+                    if (el2) el2.textContent = 'Great work — come back tomorrow for more reviews.';
+                });
+            }
+        } catch (_) { /* ignore */ }
+
+        try {
+            if (window.ChatFAB) window.ChatFAB.syncVisibility({ view: 'session-complete' });
+        } catch (_) {}
     }
 
     /**

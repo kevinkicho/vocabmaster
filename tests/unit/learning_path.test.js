@@ -65,3 +65,12 @@ describe('defaultPathProfile', () => {
     expect(p.placementStatus).toBe('skipped');
   });
 });
+
+describe('UNIT_THEME_CATALOG', () => {
+  it('has curated themes for chat scenarios', () => {
+    const cat = globalThis.UNIT_THEME_CATALOG;
+    expect(Array.isArray(cat)).toBe(true);
+    expect(cat.length).toBeGreaterThanOrEqual(5);
+    expect(cat[0].theme).toBeTruthy();
+  });
+});

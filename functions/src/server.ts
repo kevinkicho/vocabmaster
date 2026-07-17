@@ -4,8 +4,8 @@
  *
  * Env:
  *   OLLAMA_API_KEY (required)
- *   PROXY_AUTH_REQUIRED=true|false (default false for staged rollout)
- *   CORS_ORIGINS=comma-separated (optional; default * until auth on)
+ *   PROXY_AUTH_REQUIRED=true|false (default true — set false only for local smoke without Firebase)
+ *   CORS_ORIGINS=comma-separated (default: Hosting + localhost)
  *   RATE_LIMIT_PER_MIN=60 (default)
  */
 import express from "express";
@@ -21,9 +21,12 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-const AUTH_REQUIRED = String(process.env.PROXY_AUTH_REQUIRED || "false").toLowerCase() === "true";
+// Default ON for production safety; explicit "false" disables for local smoke tests.
+const AUTH_REQUIRED = String(process.env.PROXY_AUTH_REQUIRED ?? "true").toLowerCase() !== "false";
 const RATE_LIMIT_PER_MIN = Math.max(1, parseInt(process.env.RATE_LIMIT_PER_MIN || "60", 10));
-const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*")
+const DEFAULT_CORS =
+  "https://vocabmaster112225.web.app,https://vocabmaster112225.firebaseapp.com,http://localhost:5000,http://127.0.0.1:5000,http://localhost:5173";
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || DEFAULT_CORS)
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);

@@ -67,8 +67,28 @@ class LLMService {
 
     async _firebaseIdToken(forceRefresh) {
         try {
-            if (typeof auth === 'undefined' || !auth || !auth.currentUser) return null;
-            return await auth.currentUser.getIdToken(!!forceRefresh);
+            if (typeof auth === 'undefined' || !auth) return null;
+            // Wait briefly for anon/sign-in so proxy auth can succeed
+            var user = auth.currentUser;
+            if (!user && typeof auth.onAuthStateChanged === 'function') {
+                user = await new Promise(function (resolve) {
+                    var done = false;
+                    var t = setTimeout(function () {
+                        if (!done) { done = true; resolve(auth.currentUser); }
+                    }, 2000);
+                    var unsub = auth.onAuthStateChanged(function (u) {
+                        if (done) return;
+                        if (u) {
+                            done = true;
+                            clearTimeout(t);
+                            try { unsub(); } catch (_) {}
+                            resolve(u);
+                        }
+                    });
+                });
+            }
+            if (!user) return null;
+            return await user.getIdToken(!!forceRefresh);
         } catch (e) {
             L('[LLM] getIdToken failed:', e && e.message);
             return null;
